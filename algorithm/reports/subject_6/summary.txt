@@ -1,0 +1,10 @@
+Subject Index     : 6
+Subject Name      : case10
+Total Sensors     : 30
+Total Wells       : 30
+Exact Overlaps    : 9
+Wells w/o Sensors : 21
+Nearby (≤1.5, euclidean): 6
+Fully Uncovered   : 15
+Coverage (%)      : 30.00
+--------------------------------------------------

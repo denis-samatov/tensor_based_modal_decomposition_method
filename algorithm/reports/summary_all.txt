@@ -1,0 +1,3 @@
+Index  Name            Sensors  Wells    Overlap  NoSens.  Nearby   Uncov.   Coverage
+================================================================================
+0      case10          300      30       12       18       15       3        40.00

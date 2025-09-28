@@ -1,0 +1,49 @@
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# Data and outputs
+data/
+report/
+output_plots/
+*.npy
+*.npz
+*.csv
+*.h5
+
+# Theory and drafts
+theory/
+theory/article.pdf
+theory/*.aux
+theory/*.log
+theory/*.out
+theory/*.toc
+
+# Algorithm data and outputs
+algorithm/data/
+algorithm/__pycache__/
+algorithm/*.pyc
+
+# Notebooks and checkpoints
+*.ipynb_checkpoints/
+algorithm/main.ipynb
+algorithm/pipline.ipynb
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Miscellaneous
+*.swp
+*.swo
+
+# Ignore all files in .idea (PyCharm) and .vscode (VSCode) settings
+.idea/
+.vscode/
+
+
+algorithm/all_cores.joblib
+algorithm/all_factors.joblib
+algorithm/models
+article/

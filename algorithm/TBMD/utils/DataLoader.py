@@ -1,0 +1,225 @@
+import pandas as pd
+import numpy as np
+
+from collections import defaultdict
+from pathlib import Path
+from PIL import Image
+from tqdm import tqdm
+from typing import Dict, Tuple, Union, List, Optional, Any
+
+from TBMD.utils.utils import extract_step_number
+
+
+class DataLoader:
+    """Unified data loader class for tensor-based datasets."""
+    
+    @staticmethod
+    def _read_tabular_file(file_path: Path) -> pd.DataFrame:
+        """Helper method to read CSV or Excel files."""
+        if not file_path.is_file():
+            raise ValueError(f"The provided path '{file_path}' is not a valid file.")
+
+        file_suffix = file_path.suffix.lower()
+        if file_suffix == ".csv":
+            return pd.read_csv(file_path)
+        elif file_suffix in (".xls", ".xlsx"):
+            return pd.read_excel(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {file_suffix}. Please provide a CSV or Excel file.")
+
+    def load_static_tensor(self, data_path: Union[str, Path], shape: tuple) -> Dict[str, np.ndarray]:
+        """Load static tensor data from CSV or Excel files in a directory."""
+        data_path = Path(data_path)
+        if not data_path.is_dir():
+            raise ValueError(f"The provided path '{data_path}' is not a valid directory.")
+
+        files = list(data_path.glob("*.csv")) + list(data_path.glob("*.xls")) + list(data_path.glob("*.xlsx"))
+        if not files:
+            raise ValueError(f"No CSV or Excel files found in directory: {data_path}")
+
+        files = sorted(files, key=lambda f: extract_step_number(f.name))
+        tensors_dict = defaultdict(lambda: None)
+
+        for file in tqdm(files, desc="Loading static tensor files"):
+            try:
+                data = self._read_tabular_file(file).fillna(0)
+                tensors_dict[file.stem] = data.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(shape)
+            except Exception as e:
+                print(f"Error loading file {file}: {e}")
+
+        return tensors_dict
+    
+    def load_images_tensor(self, dataset_path: Union[str, Path]) -> Tuple[Dict[str, np.ndarray], List[str]]:
+        """Load images from subject directories into tensors."""
+        dataset_path = Path(dataset_path)
+        subject_images = defaultdict(lambda: None)
+        subject_dir_list = []
+
+        for subject_dir in tqdm(list(dataset_path.iterdir()), desc="Load images as tensors"):
+            if not subject_dir.is_dir():
+                continue
+
+            image_files = list(subject_dir.glob("*.png"))
+            if not image_files:
+                print(f"Warning: Subject directory '{subject_dir.name}' contains no PNG files.")
+                continue
+
+            subject_id = subject_dir.name
+            subject_dir_list.append(subject_id)
+
+            image_files_sorted = sorted(image_files, key=lambda f: extract_step_number(f.name))
+            image_list = []
+
+            for image_file in tqdm(image_files_sorted, desc=f"Loading {subject_id}", leave=False):
+                with Image.open(image_file).convert("RGB") as img:
+                    img_array = np.array(img, dtype=np.float32) / 255.0
+                image_list.append(img_array)
+
+            subject_images[subject_id] = np.stack(image_list, axis=-1)
+
+        if not subject_dir_list:
+            raise ValueError(f"No subjects with PNG images found in the directory: {dataset_path}")
+
+        return subject_images, subject_dir_list
+    
+    def load_dynamic_tensor(self, directory: Union[str, Path], target_shape: tuple) -> Dict[str, np.ndarray]:
+        """Load dynamic tensor data from CSV or Excel files in a directory and post-process them.
+
+        This function reads each file, reshapes the data into the specified target_shape, and then checks 
+        if the resulting tensor is 4D with the third dimension equal to 25. If so, it splits the tensor 
+        into multiple 3D tensors by slicing along the third dimension.
+
+        Parameters:
+            directory (Union[str, Path]): Directory containing CSV or Excel files.
+            target_shape (tuple): The shape to which each tensor should be reshaped.
+
+        Returns:
+            Dict[str, np.ndarray]: A dictionary where keys are file stems (or file stem with slice index)
+                                and values are the corresponding tensors.
+        """
+        directory = Path(directory)
+        if not directory.is_dir():
+            raise ValueError(f"The provided path '{directory}' is not a valid directory.")
+
+        # Collect CSV and Excel files
+        file_paths = list(directory.glob("*.csv")) + list(directory.glob("*.xls*"))
+        if not file_paths:
+            raise ValueError(f"No CSV or Excel files found in directory: {directory}")
+
+        # Sort files based on the step number extracted from the filename
+        file_paths = sorted(file_paths, key=lambda f: extract_step_number(f.name))
+        loaded_tensors = defaultdict(lambda: None)
+
+        for file_path in tqdm(file_paths, desc="Loading dynamic tensor files"):
+            try:
+                df = self._read_tabular_file(file_path).fillna(0)
+                tensor = df.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(target_shape)
+                loaded_tensors[file_path.stem] = tensor
+            except Exception as err:
+                print(f"Error loading file {file_path}: {err}")
+
+        # Post-process: split 4D tensors with shape[2] == 25 into multiple 3D tensors
+        processed_tensors = defaultdict(lambda: None)
+        for key, tensor in loaded_tensors.items():
+            if tensor is not None and tensor.ndim == 4 and tensor.shape[2] != 0:
+                # Iterate over the 3rd dimension and extract 3D slices.
+                for i in range(tensor.shape[2]):
+                    processed_tensors[f"{key}_slice_{i}"] = tensor[:, :, i, :]
+            else:
+                processed_tensors[key] = tensor
+
+        return processed_tensors
+    
+    def load_data(self, path: Union[str, Path], data_type: str, shape: Optional[tuple] = None, tensor_type: str = "np") -> Any:
+        """
+        Unified interface to load data of different types.
+        
+        Parameters:
+            path: Path to the data file or directory
+            data_type: Type of data to load ('static', 'images', or 'dynamic')
+            shape: Shape for reshaping tensor data (required for static and dynamic)
+            tensor_type: Either 'np' or 'pt'. If 'pt', the returned data will be converted to PyTorch tensors.
+            
+        Returns:
+            Loaded data in the appropriate format for the data type, as either numpy arrays or PyTorch tensors.
+        """
+        path = Path(path)
+        
+        if data_type == 'static':
+            if shape is None:
+                raise ValueError("Shape must be provided for static tensor data")
+            data = self.load_static_tensor(path, shape)
+            
+        elif data_type == 'images':
+            data = self.load_images_tensor(path)
+            
+        elif data_type == 'dynamic':
+            if shape is None:
+                raise ValueError("Shape must be provided for dynamic tensor data")
+            data = self.load_dynamic_tensor(path, shape)
+            
+        else:
+            raise ValueError(f"Unsupported data type: {data_type}")
+        
+        # Convert numpy arrays to PyTorch tensors if requested
+        if tensor_type == "pt":
+            try:
+                import torch
+            except ImportError:
+                raise ImportError("PyTorch is not installed. Please install it to convert numpy arrays to PyTorch tensors.")
+            
+            if data_type in ("static", "dynamic"):
+                for key, value in data.items():
+                    if value is not None:
+                        data[key] = torch.from_numpy(value).to(torch.float32)
+            elif data_type == "images":
+                subject_images, subject_list = data
+                for key, value in subject_images.items():
+                    if value is not None:
+                        subject_images[key] = torch.from_numpy(value).to(torch.float32)
+                data = (subject_images, subject_list)
+        
+        return data
+
+    @staticmethod
+    def load_h5_tensors(h5_path: Union[str, Path]) -> dict:
+        """
+        Load tensors from an HDF5 file (pressure, soil, names) and return dictionaries as in the notebook example.
+        Returns:
+            temp_tensors_all, temp_tensors_pressure, temp_tensors_soil (dicts)
+        """
+        import h5py
+        import numpy as np
+        
+        h5_path = str(h5_path)  # h5py.File expects string path
+        temp_tensors_all = {}
+        temp_tensors_pressure = {}
+        temp_tensors_soil = {}
+        with h5py.File(h5_path, "r") as f:
+            pressure_loaded = f["pressure"][:]
+            soil_loaded = f["soil"][:]
+            names_loaded = [n.decode() for n in f["names"][:]]
+        for i, name in enumerate(names_loaded):
+            temp_tensors_all[name] = np.transpose(
+                np.concatenate([
+                    pressure_loaded[i][..., None],
+                    soil_loaded[i][..., None]
+                ], axis=-1), (0, 1, 3, 2)
+            )
+            temp_tensors_pressure[name] = pressure_loaded[i]
+            temp_tensors_soil[name] = soil_loaded[i]
+        return {
+            'all': temp_tensors_all,
+            'pressure': temp_tensors_pressure,
+            'soil': temp_tensors_soil
+        }
+
+    @staticmethod
+    def load_wells_from_json(json_path: Union[str, Path]) -> dict:
+        """
+        Load wells data from a JSON file (as in load_all_wells_from_json).
+        """
+        import json
+        json_path = str(json_path)  # json.load expects string path when using open()
+        with open(json_path, 'r') as f:
+            return json.load(f)
