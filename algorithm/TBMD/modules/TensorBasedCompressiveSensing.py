@@ -1,12 +1,12 @@
-# """
+"""
 # Tensor-based Compressive Sensing (TBMD‑CS) — *revised implementation*
 # ====================================================================
 # Version : 2.1  (2025‑06‑26)
-
+#
 # This version integrates the existing utility helpers `get_torch_device` and
 # `to_torch_tensor` from *TBMD.utils.utils* instead of redefining similar
 # functions locally.
-
+#
 # Key points vs. v2.0
 # -------------------
 # 1. **Removed duplicate helpers** `_torch_device`, `_to_tensor` ➜ now using the
@@ -15,328 +15,38 @@
 #    chosen by `to_torch_tensor` (float32).
 # 3. **Imports cleaned**; module header, doc‑strings, and copyright
 #    notice retained.
-
+#
 # —————————————————————————————————————————————————————————————————————————
-# """
-
-# import logging
-# import time
-# import warnings
-# from dataclasses import dataclass
-# from typing import Any, Dict, List, Optional, Tuple, Union
-
-# import numpy as np
-# import torch
-
-# # ---------------------------------------------------------------------
-# # TBMD utility helpers (canonical versions)
-# # ---------------------------------------------------------------------
-# from TBMD.utils.utils import get_torch_device, to_torch_tensor
-
-# __all__ = [
-#     "CompressiveSensingConfig",
-#     "SolverMetrics",
-#     "TensorCompressiveSensing",
-# ]
-
-# # ---------------------------------------------------------------------
-# # CONFIGURATION DATA CLASSES
-# # ---------------------------------------------------------------------
-
-# @dataclass
-# class CompressiveSensingConfig:
-#     """ADMM hyper‑parameters for TBMD‑CS.
-
-#     See the *README* or algorithm notes for detailed explanation of each
-#     parameter.
-#     """
-
-#     max_iter: int = 1_000
-#     epsilon_l1: float = 1e-2
-#     relaxation_lambda: float = 0.95
-#     delta_init: float = 1.0
-#     delta_max: float = 1.0
-#     convergence_tol: float = 1e-4
-#     divergence_tol: float = 1e3
-#     device: str = "cpu"
-#     dtype: torch.dtype = torch.float32
-#     regularization: float = 1e-8
-#     solver_method: str = "triangular"  # triangular | direct | robust
-#     robust_mode: bool = False
-#     auto_tune: bool = True
-#     svd_rank_threshold: float = 0.0
-
-#     # -----------------------------------------------------------------
-#     def __post_init__(self) -> None:
-#         if not 0 < self.relaxation_lambda < 1:
-#             raise ValueError("relaxation_lambda must be in (0,1)")
-#         if self.epsilon_l1 <= 0:
-#             raise ValueError("epsilon_l1 must be > 0")
-#         if self.max_iter <= 0:
-#             raise ValueError("max_iter must be > 0")
-#         if self.delta_init <= 0 or self.delta_max <= 0:
-#             raise ValueError("delta values must be > 0")
-#         if self.solver_method not in {"triangular", "direct", "robust"}:
-#             raise ValueError("Unknown solver_method")
-#         if self.svd_rank_threshold < 0:
-#             raise ValueError("svd_rank_threshold must be ≥ 0")
-
-
-# @dataclass
-# class SolverMetrics:
-#     iterations: int
-#     converged: bool
-#     primal_residual: float
-#     dual_residual: float
-#     condition_number: float
-#     solver_time: float
-#     objective: float
-#     convergence_history: List[float]
-
-
-# # ---------------------------------------------------------------------
-# # MAIN SOLVER IMPLEMENTATION
-# # ---------------------------------------------------------------------
-
-# class TensorCompressiveSensing:
-#     """ADMM solver for tensor‑based compressive sensing (Algorithm 3)."""
-
-#     # ---------------------------------------------------------------
-#     def __init__(
-#         self,
-#         A: Union[np.ndarray, torch.Tensor],
-#         P: Union[np.ndarray, torch.Tensor],
-#         Y: Union[np.ndarray, torch.Tensor],
-#         config: Optional[CompressiveSensingConfig] = None,
-#     ) -> None:
-#         self.cfg = config or CompressiveSensingConfig()
-#         self.device = get_torch_device(self.cfg.device)
-#         self.dtype = self.cfg.dtype
-
-#         # logging
-#         self._log = logging.getLogger(self.__class__.__name__)
-#         if not self._log.handlers:
-#             self._log.addHandler(logging.NullHandler())
-
-#         # prepare inputs and precompute static matrices
-#         self._prepare_inputs(A, P, Y)
-#         self._precompute_matrices()
-#         self._init_admm_state()
-
-#     # ---------------------------------------------------------------
-#     # PREPARATION STEPS
-#     # ---------------------------------------------------------------
-
-#     def _prepare_inputs(self, A: Any, P: Any, Y: Any) -> None:
-#         A_t = to_torch_tensor(A, device=self.device, dtype=self.dtype)
-#         P_t = to_torch_tensor(P, device=self.device, dtype=torch.bool)
-#         Y_t = to_torch_tensor(Y, device=self.device, dtype=self.dtype)
-
-#         if A_t.ndim < 2:
-#             raise ValueError("A must have ≥2 dimensions (spatial…, W)")
-#         if P_t.shape != A_t.shape[:-1]:
-#             raise ValueError("P spatial dims must match A")
-#         if Y_t.shape != A_t.shape[:-1]:
-#             raise ValueError("Y spatial dims must match A")
-
-#         self.spatial_shape = A_t.shape[:-1]
-#         self.W = A_t.shape[-1]
-#         n_pixels = int(np.prod(self.spatial_shape))
-
-#         mask = P_t.bool().view(-1)
-#         if not mask.any():
-#             raise ValueError("Sensor mask P is empty")
-#         if mask.sum() < self.W:
-#             warnings.warn(
-#                 f"Only {mask.sum().item()} sensors for {self.W} unknowns (under‑determined)",
-#                 RuntimeWarning,
-#             )
-
-#         A_flat = A_t.view(n_pixels, self.W)
-#         Y_flat = Y_t.view(n_pixels, 1)
-
-#         self.A_sensors = A_flat[mask]  # (Ns, W)
-#         self.Y_sensors = Y_flat[mask]
-
-#         try:
-#             self.condition_number = torch.linalg.cond(self.A_sensors.T @ self.A_sensors).item()
-#         except Exception:
-#             self.condition_number = float("inf")
-
-#     # ---------------------------------------------------------------
-#     def _precompute_matrices(self) -> None:
-#         self.A_T_A = self.A_sensors.T @ self.A_sensors
-#         self.A_T_Y = self.A_sensors.T @ self.Y_sensors
-#         self.I_W = torch.eye(self.W, dtype=self.dtype, device=self.device)
-
-#     # ---------------------------------------------------------------
-#     def _init_admm_state(self) -> None:
-#         cfg = self.cfg
-#         self.delta = cfg.delta_init
-#         try:
-#             self.x = torch.linalg.lstsq(self.A_sensors, self.Y_sensors).solution
-#         except Exception:
-#             self.x = torch.zeros((self.W, 1), dtype=self.dtype, device=self.device)
-#         self.d = torch.zeros_like(self.x)
-#         self.p = torch.zeros_like(self.x)
-
-#     # ---------------------------------------------------------------
-#     # LOW‑LEVEL LINEAR SOLVER
-#     # ---------------------------------------------------------------
-
-#     def _solve_linear(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:  # noqa: D401
-#         lhs_reg = lhs + self.cfg.regularization * self.I_W
-#         method = self.cfg.solver_method if not self.cfg.robust_mode else "robust"
-
-#         if method == "triangular":
-#             try:
-#                 L = torch.linalg.cholesky(lhs_reg)
-#                 y = torch.linalg.solve_triangular(L, rhs, upper=False)
-#                 return torch.linalg.solve_triangular(L.T, y, upper=True)
-#             except torch.linalg.LinAlgError:
-#                 method = "robust"
-
-#         if method == "direct":
-#             try:
-#                 return torch.linalg.solve(lhs_reg, rhs)
-#             except torch.linalg.LinAlgError:
-#                 method = "robust"
-
-#         # robust (SVD) fallback
-#         U, S, Vh = torch.linalg.svd(lhs_reg, full_matrices=False)
-#         if self.cfg.svd_rank_threshold == 0:
-#             eps = torch.finfo(S.dtype).eps
-#             thresh = eps * max(lhs_reg.shape) * S.max()
-#         else:
-#             thresh = self.cfg.svd_rank_threshold
-#         S_inv = torch.where(S > thresh, 1.0 / S, torch.zeros_like(S))
-#         return Vh.T @ (S_inv.unsqueeze(1) * (U.T @ rhs))
-
-#     # ---------------------------------------------------------------
-#     # SHRINKAGE (eq. 33)
-#     # ---------------------------------------------------------------
-
-#     @staticmethod
-#     def _shrink(z: torch.Tensor, kappa: float) -> torch.Tensor:
-#         pos = torch.clamp(z - kappa, min=0.0)
-#         neg = torch.clamp(-z - kappa, min=0.0)
-#         return pos - neg
-
-#     # ---------------------------------------------------------------
-#     # ONE ADMM STEP
-#     # ---------------------------------------------------------------
-
-#     def _step(self) -> Tuple[float, float, float]:
-#         cfg = self.cfg
-#         rhs = self.A_T_Y + self.delta * (self.d - self.p)
-#         lhs = self.A_T_A + self.delta * self.I_W
-#         self.x = self._solve_linear(lhs, rhs)
-
-#         x_hat = cfg.relaxation_lambda * self.x + (1.0 - cfg.relaxation_lambda) * self.d
-#         thresh = cfg.epsilon_l1 / self.delta
-#         d_prev = self.d
-#         self.d = self._shrink(x_hat + self.p, thresh)
-#         self.p = self.p + (x_hat - self.d)
-
-#         primal = torch.norm(self.x - self.d).item()
-#         dual = torch.norm(self.delta * (self.d - d_prev)).item()
-
-#         res = self.A_sensors @ self.x - self.Y_sensors
-#         obj = 0.5 * torch.norm(res).pow(2).item() + cfg.epsilon_l1 * torch.norm(self.d, p=1).item()
-
-#         # Boyd adaptive delta
-#         if cfg.auto_tune:
-#             if primal > 10 * dual:
-#                 self.delta = min(self.delta * 2, cfg.delta_max)
-#                 self.p /= 2
-#             elif dual > 10 * primal:
-#                 self.delta = max(self.delta / 2, 1e-12)
-#                 self.p *= 2
-
-#         return obj, primal, dual
-
-#     # ---------------------------------------------------------------
-#     # PUBLIC SOLVE
-#     # ---------------------------------------------------------------
-
-#     def solve_with_metrics(self) -> Tuple[torch.Tensor, SolverMetrics]:
-#         cfg = self.cfg
-#         start = time.perf_counter()
-#         history: List[float] = []
-
-#         converged = False
-#         for itr in range(1, cfg.max_iter + 1):
-#             obj, primal, dual = self._step()
-#             history.append(max(primal, dual))
-
-#             if max(primal, dual) < cfg.convergence_tol:
-#                 converged = True
-#                 break
-#             if itr > 2 and history[-1] / history[-2] > cfg.divergence_tol:
-#                 self._log.warning("Divergence detected at iter %d (ratio %.2e)", itr, history[-1] / history[-2])
-#                 break
-
-#         elapsed = time.perf_counter() - start
-#         metrics = SolverMetrics(
-#             iterations=itr,
-#             converged=converged,
-#             primal_residual=primal,
-#             dual_residual=dual,
-#             condition_number=self.condition_number,
-#             solver_time=elapsed,
-#             objective=obj,
-#             convergence_history=history,
-#         )
-#         return self.x.view(-1).detach().cpu(), metrics
-
-#     # ---------------------------------------------------------------
-#     def solve(self) -> torch.Tensor:
-#         """Shorthand returning only the solution vector."""
-#         return self.solve_with_metrics()[0]
-
-#     # ---------------------------------------------------------------
-#     def reconstruction_error(self, x: Union[np.ndarray, torch.Tensor]) -> float:
-#         x_t = to_torch_tensor(x, device=self.device, dtype=self.dtype).view(-1, 1)
-#         res = self.A_sensors @ x_t - self.Y_sensors
-#         return (torch.norm(res) / torch.norm(self.Y_sensors)).item()
-
-
-
 """
-TBMD‑CS (Algorithm 3) — Core + Extensions
-=========================================
 
-Idea
-----
-The **core** strictly follows formulas (32–36); everything else is pushed into pluggable
-strategies: linear solver choice, δ update policy, stopping policy, and optional logging/metrics.
-
-Module Layout
--------------
-- ``CoreCompressiveSensingConfig``  — minimal hyperparameters for the algorithm core.
-- ``ExtensionCompressiveSensingConfig`` — convenient toggles for "extensions" (not part of the strict algorithm).
-- ``LinearSolver`` API  — abstraction over solving (Aᵀ A + δI) x = rhs.
-- ``DeltaPolicy`` API   — strategy for updating δ.
-- ``StopPolicy`` API    — strategy for termination (tol, relative drop, etc.).
-- ``MetricsHook``       — optional metric collection / logging callback.
-- ``TensorCompressiveSensingCore`` — class implementing ADMM based only on the provided strategies.
-
-Dependencies: ``torch``, ``numpy``, ``TBMD.utils.utils`` (``get_torch_device``, ``to_torch_tensor``).
-"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union, Protocol
+import logging
 import time
-import torch
-import numpy as np
+import warnings
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
 
+import numpy as np
+import torch
 from TBMD.utils.utils import get_torch_device, to_torch_tensor
+
+__all__ = [
+    "CompressiveSensingConfig",
+    "ExtensionCompressiveSensingConfig",
+    "CompressiveSensingMetrics",
+    "TensorCompressiveSensing",
+    "LinearSolver",
+    "DeltaPolicy",
+    "StopPolicy",
+    "MetricsHook",
+]
 
 
 # ------------------------------------------------------------------
 # 1. Configs
 # ------------------------------------------------------------------
+
 
 @dataclass
 class CompressiveSensingConfig:
@@ -363,11 +73,11 @@ class CompressiveSensingConfig:
     """
 
     max_iter: int = 1000
-    tol: float = 1e-4                 # stop criterion on max(primal, dual)
-    epsilon_l1: float = 1e-2          # ε in (28)
-    delta_init: float = 1.0           # δ₀
-    delta_max: float = 1.0            # δ_max (36)
-    relax_lambda: float = 0.95        # mixing x and d
+    tol: float = 1e-4  # stop criterion on max(primal, dual)
+    epsilon_l1: float = 1e-2  # ε in (28)
+    delta_init: float = 1.0  # δ₀
+    delta_max: float = 1.0  # δ_max (36)
+    relax_lambda: float = 0.95  # mixing x and d
     device: str = "cpu"
     dtype: torch.dtype = torch.float32
 
@@ -406,14 +116,14 @@ class ExtensionCompressiveSensingConfig:
     """
 
     # Linear solver
-    solver: str = "cholesky"          # cholesky | direct | svd
-    reg: float = 1e-8                  # diagonal regularization
+    solver: str = "cholesky"  # cholesky | direct | svd
+    reg: float = 1e-8  # diagonal regularization
     # δ policy
-    delta_policy: str = "boyd"        # boyd | cap_only
+    delta_policy: str = "boyd"  # boyd | cap_only
     # Stop conditions
-    stop_policy: str = "residual"     # residual | relative | both
-    relative_window: int = 5           # window for relative criterion
-    relative_drop: float = 1e-3        # required relative drop
+    stop_policy: str = "residual"  # residual | relative | both
+    relative_window: int = 5  # window for relative criterion
+    relative_drop: float = 1e-3  # required relative drop
     # Metrics/logging
     collect_history: bool = True
 
@@ -422,13 +132,15 @@ class ExtensionCompressiveSensingConfig:
 # 2. Strategy Protocols (interfaces)
 # ------------------------------------------------------------------
 
+
 class LinearSolver(Protocol):
     """Callable signature for linear solvers.
 
     Should solve (lhs) x = rhs and return x.
     """
 
-    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor: ...
+    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+        ...
 
 
 class DeltaPolicy(Protocol):
@@ -442,15 +154,24 @@ class DeltaPolicy(Protocol):
         Scaling factor applied to the dual variable p when δ changes.
     """
 
-    def __call__(self, delta: float, primal: float, dual: float, delta_max: float) -> Tuple[float, float]: ...
+    def __call__(
+        self, delta: float, primal: float, dual: float, delta_max: float
+    ) -> Tuple[float, float]:
+        ...
 
 
 class StopPolicy(Protocol):
     """Callable signature for stopping policies."""
 
-    def __call__(self, it: int, primal: float, dual: float,
-                 cfg: CompressiveSensingConfig,
-                 history: List[float]) -> bool: ...
+    def __call__(
+        self,
+        it: int,
+        primal: float,
+        dual: float,
+        cfg: CompressiveSensingConfig,
+        history: List[float],
+    ) -> bool:
+        ...
 
 
 class MetricsHook(Protocol):
@@ -470,12 +191,16 @@ class MetricsHook(Protocol):
         Current δ value.
     """
 
-    def __call__(self, it: int, primal: float, dual: float, obj: float, delta: float) -> None: ...
+    def __call__(
+        self, it: int, primal: float, dual: float, obj: float, delta: float
+    ) -> None:
+        ...
 
 
 # ------------------------------------------------------------------
 # 3. Default strategy implementations
 # ------------------------------------------------------------------
+
 
 def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
     """Factory for a ``LinearSolver`` based on ``cfg.solver``.
@@ -487,7 +212,9 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
 
     def cholesky(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Cholesky factorization with diagonal regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+        lhs_reg = lhs + reg * torch.eye(
+            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
+        )
         try:
             L = torch.linalg.cholesky(lhs_reg)
             return torch.cholesky_solve(rhs, L, upper=False)
@@ -496,7 +223,9 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
 
     def direct(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Direct linear solve (LU) with regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+        lhs_reg = lhs + reg * torch.eye(
+            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
+        )
         try:
             return torch.linalg.solve(lhs_reg, rhs)
         except torch.linalg.LinAlgError:
@@ -524,47 +253,78 @@ def make_delta_policy(name: str) -> DeltaPolicy:
         Keep δ unchanged (only cap is enforced externally).
     """
     if name == "boyd":
-        def boyd(delta: float, primal: float, dual: float, delta_max: float) -> Tuple[float, float]:
+
+        def boyd(
+            delta: float, primal: float, dual: float, delta_max: float
+        ) -> Tuple[float, float]:
             if primal > 10 * dual:
                 return min(delta * 2, delta_max), 0.5  # p /= 2
             if dual > 10 * primal:
-                return max(delta / 2, 1e-12), 2.0      # p *= 2
+                return max(delta / 2, 1e-12), 2.0  # p *= 2
             return min(delta, delta_max), 1.0
+
         return boyd
     else:  # cap_only
+
         def cap_only(delta: float, *_args) -> Tuple[float, float]:
             return delta, 1.0
+
         return cap_only
 
 
 def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
     """Factory for stopping rules based on ``ext_cfg.stop_policy``."""
     if ext_cfg.stop_policy == "residual":
-        def residual_stop(it: int, primal: float, dual: float,
-                          core_cfg: CompressiveSensingConfig,
-                          history: List[float]) -> bool:
+
+        def residual_stop(
+            it: int,
+            primal: float,
+            dual: float,
+            core_cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
             return max(primal, dual) < core_cfg.tol
+
         return residual_stop
     elif ext_cfg.stop_policy == "relative":
-        def relative_stop(it: int, _p: float, _d: float,
-                          _cfg: CompressiveSensingConfig,
-                          history: List[float]) -> bool:
+
+        def relative_stop(
+            it: int,
+            _p: float,
+            _d: float,
+            _cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
             if it <= ext_cfg.relative_window:
                 return False
             before = history[-ext_cfg.relative_window]
             now = history[-1]
             return (before - now) / max(before, 1e-12) < ext_cfg.relative_drop
+
         return relative_stop
     else:  # both
-        residual = make_stop_policy(ExtensionCompressiveSensingConfig(stop_policy="residual"))
-        relative = make_stop_policy(ExtensionCompressiveSensingConfig(stop_policy="relative",
-                                                                      relative_window=ext_cfg.relative_window,
-                                                                      relative_drop=ext_cfg.relative_drop))
+        residual = make_stop_policy(
+            ExtensionCompressiveSensingConfig(stop_policy="residual")
+        )
+        relative = make_stop_policy(
+            ExtensionCompressiveSensingConfig(
+                stop_policy="relative",
+                relative_window=ext_cfg.relative_window,
+                relative_drop=ext_cfg.relative_drop,
+            )
+        )
 
-        def both(it: int, p: float, d: float,
-                 cfg: CompressiveSensingConfig,
-                 history: List[float]) -> bool:
-            return residual(it, p, d, cfg, history) or relative(it, p, d, cfg, history)
+        def both(
+            it: int,
+            p: float,
+            d: float,
+            cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
+            return residual(it, p, d, cfg, history) or relative(
+                it, p, d, cfg, history
+            )
+
         return both
 
 
@@ -577,28 +337,29 @@ def noop_metrics_hook(*_args, **_kwargs) -> None:
 # 4. Metrics container
 # ------------------------------------------------------------------
 
+
 @dataclass
 class CompressiveSensingMetrics:
-    """Summary statistics returned after ``solve``.
+    """Summary statistics returned after `solve`.
 
     Attributes
     ----------
     iterations : int
-        Number of iterations actually performed.
+        The number of iterations actually performed.
     converged : bool
-        Whether a stopping policy triggered before ``max_iter``.
+        Whether a stopping policy was triggered before `max_iter`.
     primal_residual : float
-        Final primal residual norm.
+        The final primal residual norm.
     dual_residual : float
-        Final dual residual norm.
+        The final dual residual norm.
     objective : float
-        Final objective value.
+        The final objective value.
     delta_final : float
-        Final δ value.
+        The final value of delta.
     history : list[float]
-        Residual history if ``collect_history`` is True; empty otherwise.
+        The residual history if `collect_history` is True, otherwise an empty list.
     time_sec : float
-        Wall-clock time for ``solve`` in seconds.
+        The wall-clock time for `solve` in seconds.
     """
 
     iterations: int
@@ -614,6 +375,7 @@ class CompressiveSensingMetrics:
 # ------------------------------------------------------------------
 # 5. Algorithm Core
 # ------------------------------------------------------------------
+
 
 class TensorCompressiveSensing:
     """ADMM-based solver for tensor compressive sensing (TBMD‑CS core).
@@ -676,8 +438,8 @@ class TensorCompressiveSensing:
 
         A_flat = A_t.reshape(-1, W)
         Y_flat = Y_t.reshape(-1, 1)
-        self.As = A_flat[mask]       # Ns×W
-        self.Ys = Y_flat[mask]       # Ns×1
+        self.As = A_flat[mask]  # Ns×W
+        self.Ys = Y_flat[mask]  # Ns×1
 
         # --- precomputations ---
         self.W = W
@@ -727,7 +489,9 @@ class TensorCompressiveSensing:
         Objective: 0.5‖Ax−y‖² + ε‖d‖₁
         """
         res = self.As @ self.x - self.Ys
-        return 0.5 * torch.norm(res).pow(2).item() + self.cfg.epsilon_l1 * torch.norm(self.d, p=1).item()
+        return 0.5 * torch.norm(res).pow(2).item() + self.cfg.epsilon_l1 * torch.norm(
+            self.d, p=1
+        ).item()
 
     def _admm_step(self) -> Tuple[float, float, float]:
         """Perform one ADMM iteration and return residuals & objective.
@@ -762,7 +526,9 @@ class TensorCompressiveSensing:
         dual = torch.norm(self.delta * (self.d - self._d_prev)).item()
 
         # δ‑update
-        new_delta, p_scale = self.delta_policy(self.delta, primal, dual, self.cfg.delta_max)
+        new_delta, p_scale = self.delta_policy(
+            self.delta, primal, dual, self.cfg.delta_max
+        )
         if new_delta != self.delta:
             self.delta = new_delta
             if p_scale != 1.0:

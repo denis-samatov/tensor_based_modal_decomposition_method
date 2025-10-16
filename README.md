@@ -1,101 +1,162 @@
-# 2D Navier-Stokes Dataset Analysis
+# Tensor-Based Modal Decomposition for Fluid Dynamics
 
-This repository contains tools for analyzing and visualizing the 2D Navier-Stokes dataset with colorful representations and comprehensive analytics.
+This repository contains a Python implementation of the Tensor-Based Modal Decomposition (TBMD) algorithm, designed for analyzing and forecasting fluid dynamics data. The project provides a complete workflow from data generation and processing to modal decomposition, analysis, and forecasting. It is particularly well-suited for handling high-dimensional spatio-temporal data, such as simulations from 2D Navier-Stokes equations.
 
-## Dataset Structure
+The core of this repository is the TBMD algorithm, which leverages tensor decompositions (specifically Higher-Order Singular Value Decomposition - HOSVD) to identify dominant spatial and temporal modes in the data. This allows for effective dimensionality reduction and the extraction of physically meaningful features. The project also includes tools for compressive sensing, enabling the reconstruction of high-resolution data from a limited number of sensors.
 
-The dataset is located in the `data/2D Navier-Stokes Datasets` directory with the following structure:
+## Table of Contents
 
-```
-data/2D Navier-Stokes Datasets/
-├── test/
-│   ├── inputs.npy
-│   └── label.npy
-└── train/
-    ├── inputs.npy
-    └── label.npy
-```
+- [Features](#features)
+- [Repository Structure](#repository-structure)
+- [Setup and Installation](#setup-and-installation)
+- [Usage](#usage)
+  - [Data Generation](#data-generation)
+  - [Running Experiments](#running-experiments)
+  - [Interactive Analysis](#interactive-analysis)
+- [Analysis Methodology](#analysis-methodology)
+- [Output](#output)
+- [Examples](#examples)
 
 ## Features
 
-The analysis includes:
+- **Colorful visualizations** of fluid dynamics data.
+- **Statistical analysis** of input and label datasets.
+- **Distribution analysis** and comparisons.
+- **Principal Component Analysis (PCA)** for dimensionality reduction.
+- **Tensor-Based Modal Decomposition (TBMD)** for identifying dominant modes.
+- **Interactive visualizations** in Jupyter Notebooks.
+- **Animation support** for temporal data.
 
-- Colorful visualizations of the fluid dynamics data
-- Statistical analysis of input and label datasets
-- Distribution analysis and comparisons
-- PCA (Principal Component Analysis) for dimensionality reduction
-- Interactive visualizations in Jupyter Notebook
-- Animation support for temporal data (if applicable)
+## Repository Structure
+
+The repository is organized as follows:
+
+```
+.
+├── algorithm/
+│   ├── TBMD/
+│   │   ├── models/
+│   │   ├── modules/
+│   │   └── utils/
+│   ├── experiments/
+│   └── notebooks/
+├── data/
+│   └── 2D Navier-Stokes Datasets/
+│       ├── test/
+│       └── train/
+├── output_plots/
+├── output_animations/
+├── README.md
+└── requirements.txt
+```
+
+- **`algorithm/`**: Contains the core TBMD algorithm, experiments, and notebooks.
+  - **`TBMD/`**: The main TBMD module.
+    - **`models/`**: Forecasting models (LSTM, MLP, Linear).
+    - **`modules/`**: Core TBMD components (HOSVD, QR factorization, Compressive Sensing).
+    - **`utils/`**: Utility functions for data loading, processing, and plotting.
+  - **`experiments/`**: Scripts to run TBMD experiments.
+  - **`notebooks/`**: Jupyter notebooks for interactive analysis and visualization.
+- **`data/`**: The location for the dataset.
+- **`output_plots/`**: Directory where generated plots are saved.
+- **`output_animations/`**: Directory where generated animations are saved.
+
+## Setup and Installation
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone https://github.com/your-username/your-repository.git
+    cd your-repository
+    ```
+
+2.  **Install the required packages:**
+
+    The code requires the following Python packages:
+    - `numpy`
+    - `matplotlib`
+    - `seaborn`
+    - `pandas`
+    - `scikit-learn`
+    - `torch`
+    - `tensorly`
+    - `tqdm`
+    - `jupyter`
+
+    You can install them using pip and the provided `requirements.txt` file:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Usage
 
-### Running the Analysis Script
+### Data Generation
+
+If you need to generate the Navier-Stokes dataset, you can use the `data_generation.py` script:
 
 ```bash
-python navier_stokes_analysis.py
+python algorithm/TBMD/utils/data_generation.py
+```
+
+This will generate a `ns_data.mat` file containing the dataset.
+
+### Running Experiments
+
+To run the TBMD experiments, you can execute the main script:
+
+```bash
+python algorithm/main_tbmd.py
 ```
 
 This will:
-1. Load the training and test datasets
-2. Compute and print basic statistics
-3. Create colorful visualizations of samples
-4. Perform PCA analysis
-5. Save all visualizations to an `output_plots` directory
-6. Generate animations if the data has a time dimension
+1.  Load the training and test datasets.
+2.  Perform TBMD on the data.
+3.  Generate and save visualizations to the `output_plots` directory.
+4.  Generate and save animations to the `output_animations` directory.
 
-### Interactive Analysis with Jupyter Notebook
+### Interactive Analysis
 
-For interactive analysis, you can use the Jupyter Notebook:
+For interactive analysis, you can use the Jupyter Notebooks in the `algorithm/notebooks` directory. For example:
 
 ```bash
-jupyter notebook navier_stokes_visualization.ipynb
+jupyter notebook algorithm/notebooks/data_visualize.ipynb
 ```
 
-The notebook provides:
-- Interactive sample visualization with sliders
-- Customizable colormap exploration
-- Distribution analysis
-- PCA visualization
-- Animations (if data has temporal dimension)
-
-## Requirements
-
-The code requires the following Python packages:
-- numpy
-- matplotlib
-- seaborn
-- pandas
-- scikit-learn
-- Jupyter (for notebook)
-
-You can install them using:
-
-```bash
-pip install numpy matplotlib seaborn pandas scikit-learn jupyter
-```
-
-## Output
-
-The script will generate:
-- Statistical summaries in the console
-- Visualization plots saved to `output_plots/`
-- A CSV summary file with dataset statistics
-- Sample animations (if applicable) in `output_animations/`
-
-## Examples
-
-Here are some examples of the visualizations:
-
-- Input samples with custom colormap
-- Comparison between inputs and labels
-- Distribution analysis
-- PCA visualization
-- Temporal data animation (if applicable)
+The notebooks provide:
+- Interactive sample visualization with sliders.
+- Customizable colormap exploration.
+- Distribution analysis.
+- PCA visualization.
+- TBMD analysis.
+- Animations.
 
 ## Analysis Methodology
 
-1. **Data Loading**: Load train and test datasets from NumPy files
-2. **Statistical Analysis**: Compute mean, std, min, max, etc.
-3. **Visualization**: Create colorful plots with custom colormaps
-4. **PCA Analysis**: Reduce dimensionality and visualize principal components
-5. **Animation**: Generate temporal animations if time dimension is available
+1.  **Data Loading**: Load train and test datasets from NumPy files.
+2.  **Tensor-Based Modal Decomposition (TBMD)**:
+    - **HOSVD**: Apply Higher-Order Singular Value Decomposition to the data tensor.
+    - **QR Factorization**: Use QR factorization with tube pivoting for sensor placement.
+    - **Compressive Sensing**: Reconstruct the signal from a limited number of sensors.
+3.  **Statistical Analysis**: Compute mean, std, min, max, etc.
+4.  **Visualization**: Create colorful plots with custom colormaps.
+5.  **Forecasting**: Use LSTM, MLP, or Linear models to forecast future states.
+
+## Output
+
+The scripts will generate:
+- Statistical summaries in the console.
+- Visualization plots saved to `output_plots/`.
+- A CSV summary file with dataset statistics.
+- Sample animations saved to `output_animations/`.
+
+## Examples
+
+Here are some examples of the visualizations you can generate:
+
+- Input samples with a custom colormap.
+- Comparison between inputs and labels.
+- Distribution analysis plots.
+- PCA visualization.
+- TBMD mode visualization.
+- Temporal data animation.

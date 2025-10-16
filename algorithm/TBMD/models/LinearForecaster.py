@@ -7,12 +7,22 @@ from sklearn.metrics import r2_score
 
 
 class LinearForecaster:
-    """
-    Linear forecasting model using a transformation matrix learned via pseudoinverse.
-    
-    This model learns a linear transformation matrix M such that x(t+1) = M @ x(t).
-    The matrix is learned by solving for the pseudoinverse of the system:
-    X_output = X_input @ M^T where X_input and X_output are matrices of consecutive states.
+    """A linear forecasting model.
+
+    This model uses a transformation matrix learned via pseudoinverse. It learns
+    a linear transformation matrix M such that x(t+1) = M @ x(t). The matrix
+    is learned by solving for the pseudoinverse of the system:
+    X_output = X_input @ M^T, where X_input and X_output are matrices of
+    consecutive states.
+
+    Parameters
+    ----------
+    use_torch : bool, optional
+        Whether to use PyTorch for calculations, which is useful for GPU
+        acceleration, by default False.
+    device : str, optional
+        The device to use if using PyTorch ('cpu', 'cuda', 'mps'), by default
+        None.
     """
     
     def __init__(self, use_torch: bool = False, device: str = None):

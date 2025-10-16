@@ -26,10 +26,12 @@ from TBMD.utils.utils import to_torch_tensor, get_torch_device
 
 @dataclass
 class TensorQRConfig:
-    """
-    Configuration class for tensor QR decomposition with scientifically justified constants.
-    
-    References:
+    """Configuration class for tensor QR decomposition.
+
+    This class uses scientifically justified constants.
+
+    References
+    ----------
     - Golub, G. H., & Van Loan, C. F. (2013). Matrix computations (4th ed.)
     - Algorithm 2: Tensor-based tube fiber-pivot QR factorization
     """
@@ -59,23 +61,26 @@ class TensorQRConfig:
 
 
 class TensorValidator:
-    """
-    Comprehensive validation for tensor QR decomposition inputs.
-    
-    Ensures numerical stability and algorithm requirements are met.
+    """Comprehensive validation for tensor QR decomposition inputs.
+
+    This class ensures that numerical stability and algorithm requirements are met.
     """
     
     @staticmethod
     def validate_tensor(tensor: torch.Tensor, min_dims: int = 3) -> None:
-        """
-        Validate input tensor for QR decomposition.
+        """Validate the input tensor for QR decomposition.
         
-        Args:
-            tensor: Input tensor to validate
-            min_dims: Minimum required dimensions
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The input tensor to validate.
+        min_dims : int, optional
+            The minimum required dimensions, by default 3.
             
-        Raises:
-            ValueError: If tensor doesn't meet requirements
+        Raises
+        ------
+        ValueError
+            If the tensor does not meet the requirements.
         """
         if tensor.ndim < min_dims:
             raise ValueError(f"Tensor must have at least {min_dims} dimensions, got {tensor.ndim}")
@@ -102,7 +107,15 @@ class TensorValidator:
     
     @staticmethod
     def validate_sensor_count(N: int, k: int) -> None:
-        """Validate sensor count parameter."""
+        """Validate the sensor count parameter.
+
+        Parameters
+        ----------
+        N : int
+            The number of sensors.
+        k : int
+            The tube dimension.
+        """
         import numpy as np
         
         # Convert to Python int if it's a numpy integer type
@@ -122,7 +135,15 @@ class TensorValidator:
     
     @staticmethod
     def validate_rejection_domain(rejection_domain: torch.Tensor, spatial_shape: Tuple[int, ...]) -> None:
-        """Validate rejection domain mask."""
+        """Validate the rejection domain mask.
+
+        Parameters
+        ----------
+        rejection_domain : torch.Tensor
+            The rejection domain mask.
+        spatial_shape : Tuple[int, ...]
+            The spatial shape of the tensor.
+        """
         if rejection_domain.shape != spatial_shape:
             raise ValueError(f"Rejection domain shape {rejection_domain.shape} "
                            f"must match spatial shape {spatial_shape}")
@@ -131,31 +152,44 @@ class TensorValidator:
 
 
 class NumericallyStableOperations:
-    """
-    Numerically stable mathematical operations for tensor QR decomposition.
-    
-    Implements stable algorithms to avoid catastrophic cancellation and
-    maintain numerical precision throughout the computation.
+    """Numerically stable mathematical operations for tensor QR decomposition.
+
+    This class implements stable algorithms to avoid catastrophic cancellation
+    and maintain numerical precision throughout the computation.
     """
     
     def __init__(self, config: TensorQRConfig, device: torch.device, dtype: torch.dtype):
+        """Initializes the numerically stable operations helper.
+
+        Parameters
+        ----------
+        config : TensorQRConfig
+            Configuration object with numerical parameters.
+        device : torch.device
+            The PyTorch device to use for computations.
+        dtype : torch.dtype
+            The PyTorch data type to use for computations.
+        """
         self.config = config
         self.device = device
         self.dtype = dtype
     
     def compute_householder_vector(self, v: torch.Tensor) -> torch.Tensor:
-        """
-        Compute Householder reflection vector according to Algorithm 2.
+        """Compute the Householder reflection vector according to Algorithm 2.
         
-        Implements the exact formula from the paper:
-        σ ← ||t||₂ 
-        u ← (t + sign(t₁)σe^d) / √(2σ(σ + |t₁|))
+        This method implements the exact formula from the paper:
+        σ = ||t||₂
+        u = (t + sign(t₁) * σ * e₁) / sqrt(2 * σ * (σ + |t₁|))
         
-        Args:
-            v: Input vector (tube) for Householder transformation
+        Parameters
+        ----------
+        v : torch.Tensor
+            The input vector (tube) for the Householder transformation.
             
-        Returns:
-            Normalized Householder vector u
+        Returns
+        -------
+        torch.Tensor
+            The normalized Householder vector u.
         """
         if v.numel() == 0:
             return torch.zeros_like(v)
@@ -186,14 +220,18 @@ class NumericallyStableOperations:
         return u / denom
     
     def check_orthogonality(self, Q: torch.Tensor) -> Tuple[bool, float]:
-        """
-        Check orthogonality of matrix Q with numerical tolerance.
+        """Check the orthogonality of matrix Q with numerical tolerance.
         
-        Args:
-            Q: Matrix to check for orthogonality
+        Parameters
+        ----------
+        Q : torch.Tensor
+            The matrix to check for orthogonality.
             
-        Returns:
-            Tuple of (is_orthogonal, max_deviation)
+        Returns
+        -------
+        Tuple[bool, float]
+            A tuple containing a boolean indicating whether the matrix is
+            orthogonal and the maximum deviation from orthogonality.
         """
         if Q.numel() == 0:
             return True, 0.0
@@ -206,14 +244,17 @@ class NumericallyStableOperations:
         return is_orthogonal, deviation
     
     def estimate_condition_number(self, tensor: torch.Tensor) -> float:
-        """
-        Estimate condition number for numerical stability monitoring.
+        """Estimate the condition number for numerical stability monitoring.
         
-        Args:
-            tensor: Input tensor
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The input tensor.
             
-        Returns:
-            Estimated condition number
+        Returns
+        -------
+        float
+            The estimated condition number.
         """
         try:
             # Use SVD on a representative slice for efficiency
@@ -229,14 +270,24 @@ class NumericallyStableOperations:
 
 
 class OptimizedPivotSelector:
-    """
-    Optimized pivot selection with vectorized operations and efficient penalties.
-    
-    Implements Algorithm 2's pivot selection with performance optimizations
-    for large tensors and uniform distribution constraints.
+    """Optimized pivot selection with vectorized operations and efficient penalties.
+
+    This class implements the pivot selection from Algorithm 2 with performance
+    optimizations for large tensors and uniform distribution constraints.
     """
     
     def __init__(self, config: TensorQRConfig, device: torch.device, dtype: torch.dtype):
+        """Initializes the optimized pivot selector.
+
+        Parameters
+        ----------
+        config : TensorQRConfig
+            Configuration object with numerical parameters.
+        device : torch.device
+            The PyTorch device to use for computations.
+        dtype : torch.dtype
+            The PyTorch data type to use for computations.
+        """
         self.config = config
         self.device = device
         self.dtype = dtype
@@ -247,17 +298,23 @@ class OptimizedPivotSelector:
                     d: int, 
                     available: torch.Tensor,
                     distribution_state: Optional[Dict] = None) -> Tuple[int, ...]:
-        """
-        Select optimal pivot position with numerical stability and efficiency.
+        """Select the optimal pivot position with numerical stability and efficiency.
         
-        Args:
-            R: Current R matrix
-            d: Current decomposition step
-            available: Boolean mask of available positions
-            distribution_state: State for uniform distribution (optional)
+        Parameters
+        ----------
+        R : torch.Tensor
+            The current R matrix.
+        d : int
+            The current decomposition step.
+        available : torch.Tensor
+            A boolean mask of available positions.
+        distribution_state : Optional[Dict], optional
+            The state for uniform distribution, by default None.
             
-        Returns:
-            Tuple of pivot indices
+        Returns
+        -------
+        Tuple[int, ...]
+            A tuple of pivot indices.
         """
         # Compute residual norms efficiently
         norms = self._compute_residual_norms(R, d)
@@ -275,7 +332,20 @@ class OptimizedPivotSelector:
         return np.unravel_index(flat_idx, norms.shape)
     
     def _compute_residual_norms(self, R: torch.Tensor, d: int) -> torch.Tensor:
-        """Compute residual norms efficiently using vectorized operations."""
+        """Compute residual norms efficiently using vectorized operations.
+
+        Parameters
+        ----------
+        R : torch.Tensor
+            The current R matrix.
+        d : int
+            The current decomposition step.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed residual norms.
+        """
         cache_key = (R.data_ptr(), d)
         
         if cache_key not in self._cached_max_norms:
@@ -287,7 +357,20 @@ class OptimizedPivotSelector:
         return self._cached_max_norms[cache_key]
     
     def _apply_distribution_penalties(self, norms: torch.Tensor, state: Dict) -> torch.Tensor:
-        """Apply distribution penalties using vectorized operations."""
+        """Apply distribution penalties using vectorized operations.
+
+        Parameters
+        ----------
+        norms : torch.Tensor
+            The norms to apply penalties to.
+        state : Dict
+            The distribution state.
+
+        Returns
+        -------
+        torch.Tensor
+            The norms with applied penalties.
+        """
         penalties = torch.zeros_like(norms)
         
         # Cache maximum norm value for penalty scaling
@@ -304,7 +387,22 @@ class OptimizedPivotSelector:
         return norms - penalties
     
     def _compute_slice_penalties(self, norms: torch.Tensor, slice_counts: Dict[int, int], max_norm: torch.Tensor) -> torch.Tensor:
-        """Compute slice balance penalties efficiently."""
+        """Compute slice balance penalties efficiently.
+
+        Parameters
+        ----------
+        norms : torch.Tensor
+            The norms to compute penalties for.
+        slice_counts : Dict[int, int]
+            The number of sensors in each slice.
+        max_norm : torch.Tensor
+            The maximum norm value.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed slice penalties.
+        """
         if len(norms.shape) < 3:
             return torch.zeros_like(norms)
             
@@ -327,7 +425,22 @@ class OptimizedPivotSelector:
         return penalties
     
     def _compute_distribution_penalties(self, norms: torch.Tensor, sensor_placement: torch.Tensor, max_norm: torch.Tensor) -> torch.Tensor:
-        """Compute spatial distribution penalties efficiently."""
+        """Compute spatial distribution penalties efficiently.
+
+        Parameters
+        ----------
+        norms : torch.Tensor
+            The norms to compute penalties for.
+        sensor_placement : torch.Tensor
+            The sensor placement matrix.
+        max_norm : torch.Tensor
+            The maximum norm value.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed spatial distribution penalties.
+        """
         penalties = torch.zeros_like(norms)
         total_sensors = torch.sum(sensor_placement).item()
         
@@ -354,14 +467,24 @@ class OptimizedPivotSelector:
 
 
 class UniformDistributionManager:
-    """
-    Manages uniform sensor distribution with efficient region grouping.
-    
-    Implements spatial and temporal distribution constraints for optimal
-    sensor placement across the tensor domain.
+    """Manage uniform sensor distribution with efficient region grouping.
+
+    This class implements spatial and temporal distribution constraints for
+    optimal sensor placement across the tensor domain.
     """
     
     def __init__(self, config: TensorQRConfig, spatial_shape: Tuple[int, ...], device: torch.device):
+        """Initializes the uniform distribution manager.
+
+        Parameters
+        ----------
+        config : TensorQRConfig
+            Configuration object with numerical parameters.
+        spatial_shape : Tuple[int, ...]
+            The spatial shape of the tensor.
+        device : torch.device
+            The PyTorch device to use for computations.
+        """
         self.config = config
         self.spatial_shape = spatial_shape
         self.device = device
@@ -382,11 +505,12 @@ class UniformDistributionManager:
                 self.slice_counts[z] = 0
     
     def identify_similar_regions(self, tensor: torch.Tensor) -> None:
-        """
-        Efficiently identify similar regions for distribution constraints.
+        """Efficiently identify similar regions for distribution constraints.
         
-        Args:
-            tensor: Input tensor for region analysis
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The input tensor for region analysis.
         """
         if len(self.spatial_shape) < 3:
             return
@@ -405,7 +529,13 @@ class UniformDistributionManager:
                     self.region_lookup[(x, y)] = pattern
     
     def update_sensor_placement(self, pivot: Tuple[int, ...]) -> None:
-        """Update distribution tracking after sensor placement."""
+        """Update distribution tracking after sensor placement.
+
+        Parameters
+        ----------
+        pivot : Tuple[int, ...]
+            The pivot coordinates.
+        """
         # Update dimension counts
         for dim, idx in enumerate(pivot):
             self.dimension_counts[dim][idx] = self.dimension_counts[dim].get(idx, 0) + 1
@@ -416,7 +546,17 @@ class UniformDistributionManager:
             self.slice_counts[z] = self.slice_counts.get(z, 0) + 1
     
     def mark_similar_regions_unavailable(self, pivot: Tuple[int, ...], available: torch.Tensor) -> None:
-        """Исправленная версия - менее агрессивная блокировка."""
+        """Mark similar regions as unavailable.
+
+        This is a corrected version with less aggressive locking.
+
+        Parameters
+        ----------
+        pivot : Tuple[int, ...]
+            The pivot coordinates.
+        available : torch.Tensor
+            The availability mask.
+        """
         if len(self.spatial_shape) < 3 or len(pivot) < 2:
             return
         
@@ -439,7 +579,18 @@ class UniformDistributionManager:
                         blocked_count += 1
     
     def get_distribution_state(self, sensor_placement: torch.Tensor) -> Dict:
-        """Get current distribution state for penalty computation."""
+        """Get the current distribution state for penalty computation.
+
+        Parameters
+        ----------
+        sensor_placement : torch.Tensor
+            The sensor placement tensor.
+
+        Returns
+        -------
+        Dict
+            The distribution state.
+        """
         return {
             'slice_counts': self.slice_counts.copy(),
             'dimension_counts': {k: v.copy() for k, v in self.dimension_counts.items()},
@@ -448,26 +599,26 @@ class UniformDistributionManager:
 
 
 class TensorTubeQRDecomposition:
-    """
-    Improved Tensor-based QR factorization with tube pivoting.
-    
-    Implements Algorithm 2 from the tensor-based modal decomposition paper
-    with enhanced numerical stability, performance optimization, and 
+    """An improved tensor-based QR factorization with tube pivoting.
+
+    This class implements Algorithm 2 from the tensor-based modal decomposition
+    paper, with enhanced numerical stability, performance optimization, and
     comprehensive validation.
-    
-    Key improvements over original implementation:
+
+    Key improvements over the original implementation include:
     - Numerically stable Householder transformations
     - Vectorized penalty computations
     - Separated concerns following SOLID principles
     - Comprehensive input validation
     - Scientific constants instead of magic numbers
     - Detailed documentation with mathematical references
-    
-    Mathematical Background:
-    The algorithm performs QR factorization on tensor tubes (fibers along the last dimension)
-    using Householder reflections with pivot selection for optimal sensor placement.
-    
-    References:
+
+    The algorithm performs QR factorization on tensor tubes (fibers along the
+    last dimension) using Householder reflections with pivot selection for
+    optimal sensor placement.
+
+    References
+    ----------
     - Algorithm 2: Tensor-based tube fiber-pivot QR factorization
     - Golub, G. H., & Van Loan, C. F. (2013). Matrix computations (4th ed.)
     """
@@ -484,22 +635,37 @@ class TensorTubeQRDecomposition:
         uniform_distribution: bool = False,
         config: Optional[TensorQRConfig] = None,
     ) -> None:
-        """
-        Initialize tensor QR decomposition with enhanced validation and configuration.
+        """Initialize the tensor QR decomposition.
 
-        Args:
-            tensor: Input tensor of shape (..., k) where k is the tube dimension
-            N: Number of sensors (pivot tubes) to select
-            rejection_domain: Boolean mask of positions that cannot host a sensor
-            random_state: Seed for reproducible results
-            check_orthogonality: Whether to verify Q remains orthonormal
-            device: PyTorch device ("cpu", "cuda", "mps")
-            dtype: PyTorch data type
-            uniform_distribution: Whether to enforce spatial distribution constraints
-            config: Configuration object with algorithm parameters
-            
-        Raises:
-            ValueError: If inputs don't meet algorithm requirements
+        This constructor sets up the decomposition with enhanced validation and
+        configuration.
+
+        Parameters
+        ----------
+        tensor : Union[np.ndarray, torch.Tensor, tl.tensor]
+            The input tensor of shape (..., k), where k is the tube dimension.
+        N : int
+            The number of sensors (pivot tubes) to select.
+        rejection_domain : Optional[Union[np.ndarray, torch.Tensor]], optional
+            A boolean mask of positions that cannot host a sensor, by default
+            None.
+        random_state : Optional[int], optional
+            A seed for reproducible results, by default None.
+        check_orthogonality : bool, optional
+            Whether to verify that Q remains orthonormal, by default False.
+        device : str, optional
+            The PyTorch device ("cpu", "cuda", "mps"), by default "cpu".
+        dtype : torch.dtype, optional
+            The PyTorch data type, by default torch.float32.
+        uniform_distribution : bool, optional
+            Whether to enforce spatial distribution constraints, by default False.
+        config : Optional[TensorQRConfig], optional
+            A configuration object with algorithm parameters, by default None.
+
+        Raises
+        ------
+        ValueError
+            If the inputs do not meet the algorithm requirements.
         """
         # Configuration and reproducibility
         self.config = config or TensorQRConfig()
@@ -572,20 +738,22 @@ class TensorTubeQRDecomposition:
         self._orthogonality_history: List[float] = []
     
     def factorize(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Perform tensor QR factorization with tube pivoting.
-        
-        Implements Algorithm 2 with numerical stability improvements and
-        performance optimizations.
-        
-        Returns:
-            Tuple of (P, Q, R) where:
-            - P: Binary tensor indicating sensor positions
-            - Q: k×k orthogonal matrix
-            - R: Transformed tensor with upper-triangular structure
-            
-        Raises:
-            RuntimeError: If algorithm fails due to numerical issues
+        """Perform tensor QR factorization with tube pivoting.
+
+        This method implements Algorithm 2 with numerical stability improvements
+        and performance optimizations.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A tuple of (P, Q, R), where P is a binary tensor indicating sensor
+            positions, Q is a k-by-k orthogonal matrix, and R is the
+            transformed tensor with an upper-triangular structure.
+
+        Raises
+        ------
+        RuntimeError
+            If the algorithm fails due to numerical issues.
         """
         try:
             # Initialize algorithm state
@@ -639,15 +807,19 @@ class TensorTubeQRDecomposition:
             raise RuntimeError(f"Factorization failed: {e}")
     
     def _factorization_step(self, d: int, available: torch.Tensor) -> bool:
-        """
-        Perform a single step of the QR factorization algorithm.
+        """Perform a single step of the QR factorization algorithm.
         
-        Args:
-            d: Current step index
-            available: Availability mask for sensor placement
+        Parameters
+        ----------
+        d : int
+            The current step index.
+        available : torch.Tensor
+            The availability mask for sensor placement.
             
-        Returns:
-            True if step completed successfully, False otherwise
+        Returns
+        -------
+        bool
+            `True` if the step completed successfully, `False` otherwise.
         """
         # Get distribution state for pivot selection
         distribution_state = None
@@ -698,13 +870,21 @@ class TensorTubeQRDecomposition:
         return True
     
     def _apply_householder_to_R(self, u: torch.Tensor, d: int) -> None:
-        """Apply Householder transformation to R matrix efficiently.
-        
-        Applies H = I - 2uu^T to each tube (fiber) R[x,y,d:k].
-        According to Algorithm 2: R_{x,y,d:k} ← R_{x,y,d:k} - 2u^T R_{x,y,d:k}
-        
-        For each spatial position (x,y), the tube t = R[x,y,d:k] is transformed as:
-        t_new = t - 2 * (u^T @ t) * u
+        """Apply the Householder transformation to the R matrix efficiently.
+
+        This method applies H = I - 2uu^T to each tube (fiber) R[x, y, d:k].
+        According to Algorithm 2, R_{x,y,d:k} is updated as:
+        R_{x,y,d:k} - 2u^T * R_{x,y,d:k}.
+
+        For each spatial position (x, y), the tube t = R[x, y, d:k] is
+        transformed as: t_new = t - 2 * (u^T @ t) * u.
+
+        Parameters
+        ----------
+        u : torch.Tensor
+            The Householder vector.
+        d : int
+            The current decomposition step.
         """
         # Work with submatrix R[..., d:] for efficiency
         sub_R = self.R[..., d:]
@@ -725,10 +905,18 @@ class TensorTubeQRDecomposition:
         self.R[..., d:] = flat_R.reshape(original_shape)
     
     def _apply_householder_to_Q(self, u: torch.Tensor, d: int) -> None:
-        """Apply Householder transformation to Q matrix efficiently.
-        
-        Applies H = I - 2uu^T to Q from the right: Q := Q*H
-        According to Algorithm 2: Q_{:,d:k} ← Q_{:,d:k} - 2Q_{:,d:k}uu^T
+        """Apply the Householder transformation to the Q matrix efficiently.
+
+        This method applies H = I - 2uu^T to Q from the right, so Q becomes Q*H.
+        According to Algorithm 2, Q_{:,d:k} is updated as:
+        Q_{:,d:k} - 2 * Q_{:,d:k} * u * u^T.
+
+        Parameters
+        ----------
+        u : torch.Tensor
+            The Householder vector.
+        d : int
+            The current decomposition step.
         """
         # Work with submatrix Q[:, d:] for efficiency
         Q_block = self.Q[:, d:]
@@ -738,14 +926,18 @@ class TensorTubeQRDecomposition:
         Q_block -= 2 * Qu.unsqueeze(1) * u.unsqueeze(0)  # Q := Q - 2*(Q@u)@u^T
     
     def check_factorization(self, tol: float = 1e-6) -> Tuple[bool, float, Dict[str, float]]:
-        """
-        Comprehensive validation of factorization quality.
+        """Perform a comprehensive validation of the factorization quality.
         
-        Args:
-            tol: Tolerance for validation checks
+        Parameters
+        ----------
+        tol : float, optional
+            The tolerance for validation checks, by default 1e-6.
             
-        Returns:
-            Tuple of (is_valid, relative_error, metrics_dict)
+        Returns
+        -------
+        Tuple[bool, float, Dict[str, float]]
+            A tuple containing a boolean indicating whether the factorization is
+            valid, the relative error, and a dictionary of metrics.
         """
         if any(x is None for x in (self.P, self.Q, self.R)):
             raise ValueError("Run factorize() first")
@@ -774,7 +966,14 @@ class TensorTubeQRDecomposition:
         return is_valid, float(reconstruction_error.item()), metrics
     
     def get_algorithm_info(self) -> Dict[str, any]:
-        """Get comprehensive information about the algorithm state and performance."""
+        """Get comprehensive information about the algorithm's state and performance.
+
+        Returns
+        -------
+        Dict[str, any]
+            A dictionary containing information about the algorithm's state and
+            performance.
+        """
         info = {
             'tensor_shape': self.tensor.shape,
             'spatial_shape': self.spatial_shape,
@@ -796,11 +995,12 @@ class TensorTubeQRDecomposition:
         return info
     
     def visualize_sensor_placement(self, figsize: Optional[Tuple[int, int]] = None) -> None:
-        """
-        Visualize sensor placement with enhanced graphics and statistics.
+        """Visualize sensor placement with enhanced graphics and statistics.
         
-        Args:
-            figsize: Figure size (width, height) in inches
+        Parameters
+        ----------
+        figsize : Optional[Tuple[int, int]], optional
+            The figure size (width, height) in inches, by default None.
         """
         if self.P is None:
             raise ValueError("Run factorize() first")
@@ -816,7 +1016,15 @@ class TensorTubeQRDecomposition:
             print(f"Cannot visualize {p.ndim}D sensor placement")
     
     def _visualize_2d_placement(self, p: np.ndarray, figsize: Optional[Tuple[int, int]]) -> None:
-        """Visualize 2D sensor placement."""
+        """Visualize 2D sensor placement.
+
+        Parameters
+        ----------
+        p : np.ndarray
+            The sensor placement matrix.
+        figsize : Optional[Tuple[int, int]]
+            The figure size (width, height) in inches.
+        """
         if figsize is None:
             figsize = (max(8, p.shape[1] // 10), max(6, p.shape[0] // 10))
         
@@ -838,7 +1046,15 @@ class TensorTubeQRDecomposition:
         plt.show()
     
     def _visualize_3d_placement(self, p: np.ndarray, figsize: Optional[Tuple[int, int]]) -> None:
-        """Visualize 3D+ sensor placement with slice analysis."""
+        """Visualize 3D+ sensor placement with slice analysis.
+
+        Parameters
+        ----------
+        p : np.ndarray
+            The sensor placement matrix.
+        figsize : Optional[Tuple[int, int]]
+            The figure size (width, height) in inches.
+        """
         # Project to 2D for main visualization
         sensor_map = np.max(p, axis=tuple(range(2, p.ndim)))
         
@@ -883,3 +1099,38 @@ class TensorTubeQRDecomposition:
 
 # Backward compatibility alias
 TensorTubeQRDecomposition = TensorTubeQRDecomposition
+
+
+class TensorHOSVD:
+    """
+    A class to perform Higher-Order Singular Value Decomposition (HOSVD) on a tensor.
+    """
+
+    def __init__(self, tensor: torch.Tensor):
+        """
+        Initializes the TensorHOSVD class.
+
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The input tensor to decompose.
+        """
+        self.tensor = tensor
+
+    def decompose(self) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+        """
+        Performs HOSVD on the input tensor.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, List[torch.Tensor]]
+            A tuple containing the core tensor and a list of factor matrices.
+        """
+        core, factors = tl.decomposition.tucker(
+            self.tensor,
+            rank=self.tensor.shape,
+            init="svd",
+            svd="numpy_svd",
+            random_state=12345,
+        )
+        return core, factors

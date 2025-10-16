@@ -11,11 +11,43 @@ from TBMD.utils.utils import extract_step_number
 
 
 class DataLoader:
-    """Unified data loader class for tensor-based datasets."""
+    """Unified data loader for tensor-based datasets.
+
+    This class provides methods to load different types of data, including static
+    and dynamic tensors from CSV/Excel files, images, HDF5 files, and JSON files.
+    It offers a consistent interface for data loading and can convert data to
+    PyTorch tensors if needed.
+
+    Methods
+    -------
+    load_static_tensor(data_path, shape)
+        Load static tensor data from CSV or Excel files.
+    load_images_tensor(dataset_path)
+        Load images from subject directories into tensors.
+    load_dynamic_tensor(directory, target_shape)
+        Load and process dynamic tensor data from CSV or Excel files.
+    load_data(path, data_type, shape=None, tensor_type="np")
+        Unified interface to load various data types.
+    load_h5_tensors(h5_path)
+        Load tensors from an HDF5 file.
+    load_wells_from_json(json_path)
+        Load wells data from a JSON file.
+    """
     
     @staticmethod
     def _read_tabular_file(file_path: Path) -> pd.DataFrame:
-        """Helper method to read CSV or Excel files."""
+        """Read a CSV or Excel file into a pandas DataFrame.
+
+        Parameters
+        ----------
+        file_path : Path
+            The path to the file to read.
+
+        Returns
+        -------
+        pd.DataFrame
+            The data from the file as a pandas DataFrame.
+        """
         if not file_path.is_file():
             raise ValueError(f"The provided path '{file_path}' is not a valid file.")
 
@@ -28,7 +60,21 @@ class DataLoader:
             raise ValueError(f"Unsupported file format: {file_suffix}. Please provide a CSV or Excel file.")
 
     def load_static_tensor(self, data_path: Union[str, Path], shape: tuple) -> Dict[str, np.ndarray]:
-        """Load static tensor data from CSV or Excel files in a directory."""
+        """Load static tensor data from CSV or Excel files in a directory.
+
+        Parameters
+        ----------
+        data_path : Union[str, Path]
+            The path to the directory containing the data files.
+        shape : tuple
+            The shape to reshape the loaded data into.
+
+        Returns
+        -------
+        Dict[str, np.ndarray]
+            A dictionary of tensors, where keys are filenames and values are the
+            corresponding numpy arrays.
+        """
         data_path = Path(data_path)
         if not data_path.is_dir():
             raise ValueError(f"The provided path '{data_path}' is not a valid directory.")
@@ -50,7 +96,19 @@ class DataLoader:
         return tensors_dict
     
     def load_images_tensor(self, dataset_path: Union[str, Path]) -> Tuple[Dict[str, np.ndarray], List[str]]:
-        """Load images from subject directories into tensors."""
+        """Load images from subject directories into tensors.
+
+        Parameters
+        ----------
+        dataset_path : Union[str, Path]
+            The path to the dataset directory, which contains subject subdirectories.
+
+        Returns
+        -------
+        Tuple[Dict[str, np.ndarray], List[str]]
+            A tuple containing a dictionary of image tensors (where keys are
+            subject IDs) and a list of subject directory names.
+        """
         dataset_path = Path(dataset_path)
         subject_images = defaultdict(lambda: None)
         subject_dir_list = []
@@ -83,19 +141,25 @@ class DataLoader:
         return subject_images, subject_dir_list
     
     def load_dynamic_tensor(self, directory: Union[str, Path], target_shape: tuple) -> Dict[str, np.ndarray]:
-        """Load dynamic tensor data from CSV or Excel files in a directory and post-process them.
+        """Load and process dynamic tensor data from CSV or Excel files.
 
-        This function reads each file, reshapes the data into the specified target_shape, and then checks 
-        if the resulting tensor is 4D with the third dimension equal to 25. If so, it splits the tensor 
-        into multiple 3D tensors by slicing along the third dimension.
+        This function reads each file, reshapes the data into the specified
+        target shape, and then checks if the resulting tensor is 4D. If so, it
+        splits the tensor into multiple 3D tensors by slicing along the third
+        dimension.
 
-        Parameters:
-            directory (Union[str, Path]): Directory containing CSV or Excel files.
-            target_shape (tuple): The shape to which each tensor should be reshaped.
+        Parameters
+        ----------
+        directory : Union[str, Path]
+            The directory containing the CSV or Excel files.
+        target_shape : tuple
+            The shape to which each tensor should be reshaped.
 
-        Returns:
-            Dict[str, np.ndarray]: A dictionary where keys are file stems (or file stem with slice index)
-                                and values are the corresponding tensors.
+        Returns
+        -------
+        Dict[str, np.ndarray]
+            A dictionary where keys are file stems (or file stem with slice
+            index) and values are the corresponding tensors.
         """
         directory = Path(directory)
         if not directory.is_dir():
@@ -118,7 +182,7 @@ class DataLoader:
             except Exception as err:
                 print(f"Error loading file {file_path}: {err}")
 
-        # Post-process: split 4D tensors with shape[2] == 25 into multiple 3D tensors
+        # Post-process: split 4D tensors with shape[2] != 0 into multiple 3D tensors
         processed_tensors = defaultdict(lambda: None)
         for key, tensor in loaded_tensors.items():
             if tensor is not None and tensor.ndim == 4 and tensor.shape[2] != 0:
@@ -131,17 +195,26 @@ class DataLoader:
         return processed_tensors
     
     def load_data(self, path: Union[str, Path], data_type: str, shape: Optional[tuple] = None, tensor_type: str = "np") -> Any:
-        """
-        Unified interface to load data of different types.
+        """Provide a unified interface to load data of different types.
         
-        Parameters:
-            path: Path to the data file or directory
-            data_type: Type of data to load ('static', 'images', or 'dynamic')
-            shape: Shape for reshaping tensor data (required for static and dynamic)
-            tensor_type: Either 'np' or 'pt'. If 'pt', the returned data will be converted to PyTorch tensors.
+        Parameters
+        ----------
+        path : Union[str, Path]
+            The path to the data file or directory.
+        data_type : str
+            The type of data to load ('static', 'images', or 'dynamic').
+        shape : Optional[tuple], optional
+            The shape for reshaping tensor data (required for 'static' and
+            'dynamic'), by default None.
+        tensor_type : str, optional
+            Either 'np' or 'pt'. If 'pt', the returned data will be converted
+            to PyTorch tensors, by default "np".
             
-        Returns:
-            Loaded data in the appropriate format for the data type, as either numpy arrays or PyTorch tensors.
+        Returns
+        -------
+        Any
+            The loaded data in the appropriate format for the data type, as
+            either numpy arrays or PyTorch tensors.
         """
         path = Path(path)
         
@@ -183,10 +256,20 @@ class DataLoader:
 
     @staticmethod
     def load_h5_tensors(h5_path: Union[str, Path]) -> dict:
-        """
-        Load tensors from an HDF5 file (pressure, soil, names) and return dictionaries as in the notebook example.
-        Returns:
-            temp_tensors_all, temp_tensors_pressure, temp_tensors_soil (dicts)
+        """Load tensors from an HDF5 file.
+
+        This loads pressure, soil, and names from an HDF5 file and returns them
+        as dictionaries, similar to the notebook example.
+
+        Parameters
+        ----------
+        h5_path : Union[str, Path]
+            The path to the HDF5 file.
+
+        Returns
+        -------
+        dict
+            A dictionary containing 'all', 'pressure', and 'soil' tensors.
         """
         import h5py
         import numpy as np
@@ -216,8 +299,19 @@ class DataLoader:
 
     @staticmethod
     def load_wells_from_json(json_path: Union[str, Path]) -> dict:
-        """
-        Load wells data from a JSON file (as in load_all_wells_from_json).
+        """Load wells data from a JSON file.
+
+        This is similar to `load_all_wells_from_json`.
+
+        Parameters
+        ----------
+        json_path : Union[str, Path]
+            The path to the JSON file.
+
+        Returns
+        -------
+        dict
+            The wells data loaded from the JSON file.
         """
         import json
         json_path = str(json_path)  # json.load expects string path when using open()

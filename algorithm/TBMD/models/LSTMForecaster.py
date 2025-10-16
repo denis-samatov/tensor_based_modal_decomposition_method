@@ -62,7 +62,34 @@ class LSTMModel(nn.Module):
 
 
 class LSTMForecaster:
-    """Complete pipeline for training and using LSTM forecasting models."""
+    """A complete pipeline for training and using LSTM forecasting models.
+
+    This class encapsulates the entire process of training, validating, and
+    using an LSTM model for time series forecasting.
+
+    Parameters
+    ----------
+    in_dim : int
+        The input dimension (number of features).
+    out_dim : int
+        The output dimension (number of features to predict).
+    seq_length : int, optional
+        The length of the input sequence (time steps to look back), by
+        default 5.
+    hidden_dim : int, optional
+        The hidden state dimension, by default 64.
+    num_layers : int, optional
+        The number of LSTM layers, by default 1.
+    dropout_rate : float, optional
+        The dropout rate for regularization, by default 0.0.
+    lr : float, optional
+        The learning rate, by default 1e-3.
+    weight_decay : float, optional
+        The L2 regularization parameter, by default 1e-5.
+    device : str, optional
+        The device to run computations on ('cpu', 'cuda', or 'mps'), by
+        default None.
+    """
     
     def __init__(self, 
                  in_dim: int,
@@ -133,17 +160,23 @@ class LSTMForecaster:
     def make_lagged_dataset(self, 
                            x_history: np.ndarray, 
                            seq_length: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Create a lagged dataset from a time series.
+        """Create a lagged dataset from a time series.
         
-        Args:
-            x_history: Time series data of shape (T, W) where T is time steps and W is features
-            seq_length: Length of input sequences, if None uses self.seq_length
+        Parameters
+        ----------
+        x_history : np.ndarray
+            The time series data of shape (T, W), where T is the number of
+            time steps and W is the number of features.
+        seq_length : Optional[int], optional
+            The length of the input sequences. If `None`, `self.seq_length` is
+            used, by default None.
             
-        Returns:
-            X_seq: Input sequences of shape (N, seq_length, W)
-            Y_seq: Target outputs of shape (N, W)
-            where N = T - seq_length
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            A tuple containing the input sequences `X_seq` of shape
+            (N, seq_length, W) and the target outputs `Y_seq` of shape (N, W),
+            where N = T - seq_length.
         """
         if seq_length is None:
             seq_length = self.seq_length
@@ -177,18 +210,25 @@ class LSTMForecaster:
                     val_split: float = 0.2,
                     batch_size: int = 32,
                     shuffle: bool = True) -> Tuple[DataLoader, Optional[DataLoader]]:
-        """
-        Prepare training and validation data loaders.
+        """Prepare the training and validation data loaders.
         
-        Args:
-            x_history: Time series data of shape (T, W)
-            val_split: Validation split ratio
-            batch_size: Batch size
-            shuffle: Whether to shuffle the training data
+        Parameters
+        ----------
+        x_history : np.ndarray
+            The time series data of shape (T, W).
+        val_split : float, optional
+            The validation split ratio, by default 0.2.
+        batch_size : int, optional
+            The batch size, by default 32.
+        shuffle : bool, optional
+            Whether to shuffle the training data, by default True.
             
-        Returns:
-            train_loader: Training data loader
-            val_loader: Validation data loader (None if val_split=0)
+        Returns
+        -------
+        Tuple[DataLoader, Optional[DataLoader]]
+            A tuple containing the training data loader and the validation
+            data loader. The validation data loader is `None` if `val_split`
+            is 0.
         """
         # Create lagged sequences
         X_seq, Y_seq = self.make_lagged_dataset(x_history, self.seq_length)
@@ -240,14 +280,17 @@ class LSTMForecaster:
             return train_loader, None
     
     def train_epoch(self, train_loader: DataLoader) -> float:
-        """
-        Train for one epoch.
+        """Train the model for one epoch.
         
-        Args:
-            train_loader: Training data loader
+        Parameters
+        ----------
+        train_loader : DataLoader
+            The training data loader.
             
-        Returns:
-            avg_loss: Average training loss for this epoch
+        Returns
+        -------
+        float
+            The average training loss for this epoch.
         """
         self.model.train()
         total_loss = 0.0
@@ -272,14 +315,17 @@ class LSTMForecaster:
         return avg_loss
     
     def validate(self, val_loader: DataLoader) -> float:
-        """
-        Validate the model.
+        """Validate the model.
         
-        Args:
-            val_loader: Validation data loader
+        Parameters
+        ----------
+        val_loader : DataLoader
+            The validation data loader.
             
-        Returns:
-            avg_loss: Average validation loss
+        Returns
+        -------
+        float
+            The average validation loss.
         """
         self.model.eval()
         total_loss = 0.0
@@ -308,21 +354,31 @@ class LSTMForecaster:
              verbose: bool = True,
              save_best: bool = True,
              model_path: str = None) -> Dict[str, List[float]]:
-        """
-        Train the model.
+        """Train the model.
         
-        Args:
-            x_history: Time series data of shape (T, W)
-            num_epochs: Number of training epochs
-            batch_size: Batch size
-            val_split: Validation split ratio
-            early_stopping_patience: Patience for early stopping
-            verbose: Whether to print progress
-            save_best: Whether to save the best model
-            model_path: Path to save the best model
+        Parameters
+        ----------
+        x_history : np.ndarray
+            The time series data of shape (T, W).
+        num_epochs : int, optional
+            The number of training epochs, by default 300.
+        batch_size : int, optional
+            The batch size, by default 32.
+        val_split : float, optional
+            The validation split ratio, by default 0.2.
+        early_stopping_patience : int, optional
+            The patience for early stopping, by default 20.
+        verbose : bool, optional
+            Whether to print progress, by default True.
+        save_best : bool, optional
+            Whether to save the best model, by default True.
+        model_path : str, optional
+            The path to save the best model, by default None.
             
-        Returns:
-            history: Training history
+        Returns
+        -------
+        Dict[str, List[float]]
+            The training history.
         """
         # Prepare data
         train_loader, val_loader = self.prepare_data(
@@ -372,14 +428,17 @@ class LSTMForecaster:
         return self.training_history
     
     def predict_next(self, x_window: np.ndarray) -> np.ndarray:
-        """
-        Predict the next state from the given window.
+        """Predict the next state from the given window.
         
-        Args:
-            x_window: Input window of shape (seq_length, W) or (1, seq_length, W)
+        Parameters
+        ----------
+        x_window : np.ndarray
+            The input window of shape (seq_length, W) or (1, seq_length, W).
             
-        Returns:
-            x_next: Predicted next state of shape (W,)
+        Returns
+        -------
+        np.ndarray
+            The predicted next state of shape (W,).
         """
         self.model.eval()
         
@@ -403,15 +462,19 @@ class LSTMForecaster:
         return x_next.detach().cpu().numpy()[0]  # Remove batch dimension
     
     def predict_sequence(self, x_start_window: np.ndarray, n_steps: int) -> np.ndarray:
-        """
-        Predict a sequence of future states.
+        """Predict a sequence of future states.
         
-        Args:
-            x_start_window: Starting window of shape (seq_length, W)
-            n_steps: Number of steps to predict
+        Parameters
+        ----------
+        x_start_window : np.ndarray
+            The starting window of shape (seq_length, W).
+        n_steps : int
+            The number of steps to predict.
             
-        Returns:
-            sequence: Predicted sequence of shape (n_steps, W)
+        Returns
+        -------
+        np.ndarray
+            The predicted sequence of shape (n_steps, W).
         """
         self.model.eval()
         
@@ -435,11 +498,12 @@ class LSTMForecaster:
         return sequence
     
     def save_model(self, path: str) -> None:
-        """
-        Save the model.
+        """Save the model.
         
-        Args:
-            path: Path to save the model
+        Parameters
+        ----------
+        path : str
+            The path to save the model to.
         """
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -456,11 +520,12 @@ class LSTMForecaster:
         }, path)
     
     def load_model(self, path: str) -> None:
-        """
-        Load the model.
+        """Load the model.
         
-        Args:
-            path: Path to load the model from
+        Parameters
+        ----------
+        path : str
+            The path to load the model from.
         """
         # Load checkpoint
         checkpoint = torch.load(path, map_location=self.device)
@@ -477,11 +542,12 @@ class LSTMForecaster:
         self.best_val_loss = checkpoint.get('best_val_loss', self.best_val_loss)
     
     def plot_training_history(self, figsize: Tuple[int, int] = (10, 6)) -> None:
-        """
-        Plot the training history.
+        """Plot the training history.
         
-        Args:
-            figsize: Figure size
+        Parameters
+        ----------
+        figsize : Tuple[int, int], optional
+            The figure size, by default (10, 6).
         """
         plt.figure(figsize=figsize)
         epochs = range(1, len(self.training_history['train_loss']) + 1)
@@ -501,14 +567,17 @@ class LSTMForecaster:
         plt.show()
     
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
-        """
-        Evaluate the model on historical data.
+        """Evaluate the model on historical data.
         
-        Args:
-            x_history: Time series data of shape (T, W)
+        Parameters
+        ----------
+        x_history : np.ndarray
+            The time series data of shape (T, W).
             
-        Returns:
-            metrics: Evaluation metrics
+        Returns
+        -------
+        Dict[str, float]
+            A dictionary of evaluation metrics.
         """
         self.model.eval()
         

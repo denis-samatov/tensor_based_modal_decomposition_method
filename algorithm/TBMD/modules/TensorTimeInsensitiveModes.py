@@ -58,7 +58,7 @@ class DimensionMismatchError(ValidationError):
 
 
 class ProcessingStrategy(Enum):
-    """Strategy for processing modal tensors."""
+    """A strategy for processing modal tensors."""
     SEQUENTIAL = "sequential"
     BATCH = "batch"
     MEMORY_EFFICIENT = "memory_efficient"
@@ -66,7 +66,29 @@ class ProcessingStrategy(Enum):
 
 @dataclass
 class ModalProcessorConfig:
-    """Configuration for modal tensor processing."""
+    """Configuration for modal tensor processing.
+
+    Attributes
+    ----------
+    device : str, optional
+        The device to use for processing, by default 'cpu'.
+    return_numpy : bool, optional
+        Whether to return the result as a NumPy array, by default True.
+    processing_strategy : ProcessingStrategy, optional
+        The processing strategy to use, by default ProcessingStrategy.BATCH.
+    batch_size : Optional[int], optional
+        The batch size for batch processing, by default None.
+    memory_limit_gb : float, optional
+        The memory limit in gigabytes for memory-efficient processing, by
+        default 4.0.
+    enable_progress_logging : bool, optional
+        Whether to enable progress logging, by default True.
+    validation_enabled : bool, optional
+        Whether to enable input validation, by default True.
+    numerical_precision : torch.dtype, optional
+        The numerical precision to use for processing, by default
+        torch.float32.
+    """
     device: str = 'cpu'
     return_numpy: bool = True
     processing_strategy: ProcessingStrategy = ProcessingStrategy.BATCH
@@ -77,7 +99,7 @@ class ModalProcessorConfig:
     numerical_precision: torch.dtype = torch.float32
     
     def __post_init__(self):
-        """Validate configuration after initialization."""
+        """Validate the configuration after initialization."""
         if self.batch_size is not None and self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if self.memory_limit_gb <= 0:
@@ -89,7 +111,13 @@ class TensorValidator:
     
     @staticmethod
     def validate_core_tensor(core: TensorLike) -> None:
-        """Validate core tensor properties."""
+        """Validate the properties of the core tensor.
+
+        Parameters
+        ----------
+        core : TensorLike
+            The core tensor to validate.
+        """
         if core is None:
             raise ValidationError("Core tensor cannot be None")
         
@@ -110,7 +138,15 @@ class TensorValidator:
     
     @staticmethod
     def validate_factors(factors: FactorList, core_shape: Tuple[int, ...]) -> None:
-        """Validate factor matrices compatibility with core tensor."""
+        """Validate the compatibility of factor matrices with the core tensor.
+
+        Parameters
+        ----------
+        factors : FactorList
+            The list of factor matrices.
+        core_shape : Tuple[int, ...]
+            The shape of the core tensor.
+        """
         if not factors:
             raise ValidationError("Factors list cannot be empty")
         
@@ -141,7 +177,15 @@ class TensorValidator:
     @staticmethod
     def validate_subject_data(cores: Union[SubjectDict, TensorLike], 
                             factors: Union[SubjectFactorsDict, FactorList]) -> None:
-        """Validate subject data consistency."""
+        """Validate the consistency of subject data.
+
+        Parameters
+        ----------
+        cores : Union[SubjectDict, TensorLike]
+            The core tensors for the subjects.
+        factors : Union[SubjectFactorsDict, FactorList]
+            The factor matrices for the subjects.
+        """
         if isinstance(cores, dict) != isinstance(factors, dict):
             raise ValidationError(
                 "cores and factors must both be dictionaries or both be single-subject format"
@@ -155,7 +199,11 @@ class TensorValidator:
 
 
 class TimeInsensitiveModeComputer:
-    """Computes time-insensitive modes according to Equation (12): M_{:,n} = A × G_{:,n} × B"""
+    """Computes time-insensitive modes.
+
+    This class implements the computation of time-insensitive modes according
+    to Equation (12): M_{:,n} = A × G_{:,n} × B.
+    """
     
     def __init__(self, config: ModalProcessorConfig):
         self.config = config
@@ -164,23 +212,23 @@ class TimeInsensitiveModeComputer:
     def compute_single_mode(self, 
                           spatial_factors: List[torch.Tensor], 
                           core_slice: torch.Tensor) -> torch.Tensor:
-        """
-        Compute a single time-insensitive mode according to Equation (12).
+        """Compute a single time-insensitive mode according to Equation (12).
         
-        For 3D case: M_{:,n} = A × G_{:,n} × B^T
-        For higher dimensions: generalized tensor contraction
+        For a 3D case, this is M_{:,n} = A × G_{:,n} × B^T. For higher
+        dimensions, a generalized tensor contraction is used.
         
         Parameters
         ----------
         spatial_factors : List[torch.Tensor]
-            Spatial factor matrices [A, B, ...] (excluding temporal factor)
+            A list of spatial factor matrices [A, B, ...] (excluding the
+            temporal factor).
         core_slice : torch.Tensor
-            n-th slice of core tensor G_{:,n}
+            The n-th slice of the core tensor G_{:,n}.
             
         Returns
         -------
         torch.Tensor
-            Computed mode M_{:,n}
+            The computed mode M_{:,n}.
         """
         try:
             if len(spatial_factors) == 2:  # 3D tensor case
@@ -232,20 +280,19 @@ class TimeInsensitiveModeComputer:
     def compute_all_modes(self, 
                          core: torch.Tensor, 
                          factors: List[torch.Tensor]) -> torch.Tensor:
-        """
-        Compute all time-insensitive modes for a single subject.
+        """Compute all time-insensitive modes for a single subject.
         
         Parameters
         ----------
         core : torch.Tensor
-            Core tensor from Tucker decomposition
+            The core tensor from the Tucker decomposition.
         factors : List[torch.Tensor]
-            Factor matrices from Tucker decomposition
+            The factor matrices from the Tucker decomposition.
             
         Returns
         -------
         torch.Tensor
-            Modal tensor with shape [...spatial_dims..., n_modes]
+            The modal tensor with shape [...spatial_dims..., n_modes].
         """
         # Spatial factors (all except the last temporal factor)
         spatial_factors = factors[:-1]
@@ -262,7 +309,24 @@ class TimeInsensitiveModeComputer:
                            core: torch.Tensor, 
                            spatial_factors: List[torch.Tensor], 
                            time_dim: int) -> torch.Tensor:
-        """Batch computation of all modes (fastest, more memory)."""
+        """Perform a batch computation of all modes.
+
+        This is the fastest method, but uses more memory.
+
+        Parameters
+        ----------
+        core : torch.Tensor
+            The core tensor.
+        spatial_factors : List[torch.Tensor]
+            A list of spatial factor matrices.
+        time_dim : int
+            The time dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed modes.
+        """
         modes = []
         
         # Process in batches if batch_size is specified
@@ -289,7 +353,24 @@ class TimeInsensitiveModeComputer:
                                 core: torch.Tensor, 
                                 spatial_factors: List[torch.Tensor], 
                                 time_dim: int) -> torch.Tensor:
-        """Sequential computation (slower, less memory)."""
+        """Perform a sequential computation.
+
+        This is slower, but uses less memory.
+
+        Parameters
+        ----------
+        core : torch.Tensor
+            The core tensor.
+        spatial_factors : List[torch.Tensor]
+            A list of spatial factor matrices.
+        time_dim : int
+            The time dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed modes.
+        """
         modes = []
         
         for n in range(time_dim):
@@ -306,7 +387,22 @@ class TimeInsensitiveModeComputer:
                                       core: torch.Tensor, 
                                       spatial_factors: List[torch.Tensor], 
                                       time_dim: int) -> torch.Tensor:
-        """Memory-efficient computation with gradient checkpointing."""
+        """Perform a memory-efficient computation with gradient checkpointing.
+
+        Parameters
+        ----------
+        core : torch.Tensor
+            The core tensor.
+        spatial_factors : List[torch.Tensor]
+            A list of spatial factor matrices.
+        time_dim : int
+            The time dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed modes.
+        """
         def compute_batch_fn(start_idx: int, end_idx: int) -> List[torch.Tensor]:
             batch_modes = []
             for n in range(start_idx, end_idx):
@@ -337,7 +433,20 @@ class TimeInsensitiveModeComputer:
     def _estimate_optimal_batch_size(self, 
                                    core: torch.Tensor, 
                                    spatial_factors: List[torch.Tensor]) -> int:
-        """Estimate optimal batch size based on memory constraints."""
+        """Estimate the optimal batch size based on memory constraints.
+
+        Parameters
+        ----------
+        core : torch.Tensor
+            The core tensor.
+        spatial_factors : List[torch.Tensor]
+            A list of spatial factor matrices.
+
+        Returns
+        -------
+        int
+            The estimated optimal batch size.
+        """
         # Rough estimation based on tensor sizes
         core_memory = core.numel() * core.element_size()
         factors_memory = sum(f.numel() * f.element_size() for f in spatial_factors)
@@ -358,9 +467,16 @@ class TimeInsensitiveModeComputer:
 
 
 class ModalTensorProcessor:
-    """Main processor for computing time-insensitive modal tensors."""
+    """The main processor for computing time-insensitive modal tensors."""
     
     def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        """Initializes the modal tensor processor.
+
+        Parameters
+        ----------
+        config : Optional[ModalProcessorConfig], optional
+            Configuration for the processor, by default None.
+        """
         self.config = config or ModalProcessorConfig()
         self.validator = TensorValidator()
         self.computer = TimeInsensitiveModeComputer(self.config)
@@ -371,20 +487,19 @@ class ModalTensorProcessor:
     def process_single_subject(self, 
                              core: TensorLike, 
                              factors: FactorList) -> Union[np.ndarray, torch.Tensor]:
-        """
-        Process a single subject to compute time-insensitive modal tensor.
+        """Process a single subject to compute a time-insensitive modal tensor.
         
         Parameters
         ----------
         core : TensorLike
-            Core tensor from Tucker decomposition
+            The core tensor from the Tucker decomposition.
         factors : FactorList
-            Factor matrices from Tucker decomposition
+            The factor matrices from the Tucker decomposition.
             
         Returns
         -------
         Union[np.ndarray, torch.Tensor]
-            Computed modal tensor
+            The computed modal tensor.
         """
         if self.config.validation_enabled:
             self.validator.validate_core_tensor(core)
@@ -413,26 +528,32 @@ class BatchModalProcessor:
     """Processes multiple subjects efficiently."""
     
     def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        """Initializes the batch modal processor.
+
+        Parameters
+        ----------
+        config : Optional[ModalProcessorConfig], optional
+            Configuration for the processor, by default None
+        """
         self.config = config or ModalProcessorConfig()
         self.processor = ModalTensorProcessor(self.config)
     
     def process_multiple_subjects(self, 
                                 cores: Union[SubjectDict, TensorLike], 
                                 factors: Union[SubjectFactorsDict, FactorList]) -> Dict[str, Union[np.ndarray, torch.Tensor]]:
-        """
-        Process multiple subjects or a single subject.
+        """Process multiple subjects or a single subject.
         
         Parameters
         ----------
         cores : Union[SubjectDict, TensorLike]
-            Core tensors for subjects
+            The core tensors for the subjects.
         factors : Union[SubjectFactorsDict, FactorList]
-            Factor matrices for subjects
+            The factor matrices for the subjects.
             
         Returns
         -------
         Dict[str, Union[np.ndarray, torch.Tensor]]
-            Dictionary of computed modal tensors
+            A dictionary of computed modal tensors.
         """
         if self.config.validation_enabled:
             self.processor.validator.validate_subject_data(cores, factors)
@@ -468,23 +589,29 @@ class ModalTensorStacker:
     """Efficiently stacks modal tensors from multiple subjects."""
     
     def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        """Initializes the modal tensor stacker.
+
+        Parameters
+        ----------
+        config : Optional[ModalProcessorConfig], optional
+            Configuration for the stacker, by default None.
+        """
         self.config = config or ModalProcessorConfig()
         self.device = get_torch_device(self.config.device)
     
     def stack_modal_tensors(self, 
                           modal_tensors: Dict[str, Union[np.ndarray, torch.Tensor]]) -> Union[np.ndarray, torch.Tensor]:
-        """
-        Stack modal tensors from multiple subjects along the time dimension.
+        """Stack modal tensors from multiple subjects along the time dimension.
         
         Parameters
         ----------
         modal_tensors : Dict[str, Union[np.ndarray, torch.Tensor]]
-            Dictionary of modal tensors from multiple subjects
+            A dictionary of modal tensors from multiple subjects.
             
         Returns
         -------
         Union[np.ndarray, torch.Tensor]
-            Stacked tensor with all time slices
+            A stacked tensor with all time slices.
         """
         if not modal_tensors:
             raise ValidationError("modal_tensors is empty")
@@ -534,10 +661,10 @@ def compute_modal_tensor(core: np.ndarray,
                         factors: List[np.ndarray],
                         device: str = 'cpu',
                         return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
-    """
-    Convenience function for single subject modal tensor computation.
+    """Provide a convenience function for single-subject modal tensor computation.
     
-    DEPRECATED: Use ModalTensorProcessor.process_single_subject() instead.
+    .. deprecated:: 0.1.0
+       Use :py:meth:`ModalTensorProcessor.process_single_subject` instead.
     """
     warnings.warn(
         "compute_modal_tensor is deprecated. Use ModalTensorProcessor.process_single_subject() instead.",
@@ -556,10 +683,10 @@ def process_all_subjects(cores: Union[Dict[str, Union[np.ndarray, torch.Tensor]]
                                      List[Union[np.ndarray, torch.Tensor]]],
                         device: str = 'cpu',
                         return_numpy: bool = True) -> Dict[str, Union[np.ndarray, torch.Tensor]]:
-    """
-    Convenience function for multiple subjects processing.
+    """Provide a convenience function for processing multiple subjects.
     
-    DEPRECATED: Use BatchModalProcessor.process_multiple_subjects() instead.
+    .. deprecated:: 0.1.0
+       Use :py:meth:`BatchModalProcessor.process_multiple_subjects` instead.
     """
     warnings.warn(
         "process_all_subjects is deprecated. Use BatchModalProcessor.process_multiple_subjects() instead.",
@@ -575,10 +702,10 @@ def process_all_subjects(cores: Union[Dict[str, Union[np.ndarray, torch.Tensor]]
 def stack_all_modes(modal_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
                    device: str = 'cpu',
                    return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
-    """
-    Convenience function for stacking modal tensors.
+    """Provide a convenience function for stacking modal tensors.
     
-    DEPRECATED: Use ModalTensorStacker.stack_modal_tensors() instead.
+    .. deprecated:: 0.1.0
+       Use :py:meth:`ModalTensorStacker.stack_modal_tensors` instead.
     """
     warnings.warn(
         "stack_all_modes is deprecated. Use ModalTensorStacker.stack_modal_tensors() instead.",
