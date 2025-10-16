@@ -26,13 +26,30 @@ from skimage.metrics import structural_similarity as _ssim
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
 def _to_numpy(a: ArrayLike) -> np.ndarray:
-    """Detach/clone to CPU if *a* is a torch tensor, else np.asarray."""
+    """Detach/clone to CPU if *a* is a torch tensor, else np.asarray.
+
+    Parameters
+    ----------
+    a : ArrayLike
+        The array-like object to convert to a NumPy array.
+
+    Returns
+    -------
+    np.ndarray
+        The converted NumPy array.
+    """
     if torch.is_tensor(a):
         a = a.detach().cpu()
     return np.asarray(a)
 
 def _supports_mask() -> bool:
-    """Return True if the installed skimage.ssims supports the *mask* keyword."""
+    """Return True if the installed skimage.ssims supports the *mask* keyword.
+
+    Returns
+    -------
+    bool
+        True if the mask keyword is supported, False otherwise.
+    """
     from inspect import signature
 
     return "mask" in signature(_ssim).parameters

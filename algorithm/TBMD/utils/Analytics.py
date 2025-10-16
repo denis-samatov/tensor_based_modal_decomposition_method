@@ -15,7 +15,45 @@ from TBMD.config import SEED
 
 @dataclass
 class ExperimentConfig:
-    """Configuration class for experiment parameters."""
+    """Configuration class for experiment parameters.
+
+    Attributes
+    ----------
+    solver_method : str
+        The solver method to use for compressive sensing.
+    seed : int
+        The random seed for reproducibility.
+    device : str
+        The device to run the computations on (e.g., 'cpu', 'cuda').
+    max_iter : int
+        The maximum number of iterations for the compressive sensing solver.
+    epsilon : float
+        The epsilon value for the L1 regularization term in compressive sensing.
+    lambd : float
+        The relaxation lambda parameter for the compressive sensing solver.
+    delta_0 : float
+        The initial delta value for the compressive sensing solver.
+    delta_max : float
+        The maximum delta value for the compressive sensing solver.
+    noise_level : float
+        The level of noise to add to the measurements.
+    num_noise_samples : int
+        The number of noise samples to generate for each measurement.
+    noise_threshold : float
+        The threshold for determining "zero" values when adding noise.
+    confidence_level : float
+        The confidence level for computing confidence intervals.
+    convergence_tol : float
+        The convergence tolerance for the compressive sensing solver.
+    subject_axis : bool
+        Whether to treat the subject axis as a separate dimension.
+    valid_mask : Optional[np.ndarray]
+        A mask of valid locations for sensor placement.
+    wells : Optional[Dict[str, List[Tuple[int, int]]]]
+        A dictionary of well locations for each subject.
+    verbose : bool
+        Whether to print verbose output.
+    """
     
     # Core parameters
     solver_method: str = "triangular"
@@ -54,15 +92,26 @@ class ExperimentConfig:
 
 
 class ExperimentRunner:
-    """
-    Unified experiment runner for tensor-based modal decomposition analysis.
+    """Unified experiment runner for tensor-based modal decomposition analysis.
     
-    All methods return pandas DataFrames for consistent data handling and analysis.
+    This class provides a standardized way to run experiments for tensor-based
+    modal decomposition analysis. It handles QR decomposition, compressive sensing,
+    and noise injection, and returns results in a pandas DataFrame for easy analysis.
+
+    Methods
+    -------
+    run_full_dataset_experiments(A_tensor, test_tensors, sensor_values)
+        Run experiments across the full dataset with all subjects and slices.
+    run_single_slice_experiments(A_tensor, test_tensors, subject_name, slice_idx, sensor_values)
+        Run experiments for a specific slice of a specific subject.
+    run_single_slice_wells_experiments(A_tensor, test_tensors, subject_name, slice_idx, sensor_values)
+        Run wells experiments for a specific slice of a specific subject.
+    run_full_dataset_wells_experiments(A_tensor, test_tensors, sensor_values)
+        Run wells experiments across the full dataset with all subjects and slices.
     """
     
     def __init__(self, config: ExperimentConfig = None):
-        """
-        Initialize the experiment runner with configuration.
+        """Initialize the experiment runner with configuration.
         
         Parameters
         ----------
@@ -73,7 +122,7 @@ class ExperimentRunner:
         self._setup_confidence_intervals()
     
     def _setup_confidence_intervals(self):
-        """Setup z-scores for confidence interval calculations."""
+        """Set up z-scores for confidence interval calculations."""
         self.z_scores = {
             0.90: 1.645,
             0.95: 1.96,
@@ -82,9 +131,17 @@ class ExperimentRunner:
     
     def _compute_confidence_intervals(self, means: List[float], stds: List[float], 
                                     num_samples: int) -> Tuple[List[float], List[float]]:
-        """
-        Compute confidence intervals given means, standard deviations, and number of samples.
+        """Compute confidence intervals given means, standard deviations, and number of samples.
         
+        Parameters
+        ----------
+        means : List[float]
+            The means of the samples.
+        stds : List[float]
+            The standard deviations of the samples.
+        num_samples : int
+            The number of samples.
+
         Returns
         -------
         Tuple[List[float], List[float]]
@@ -103,7 +160,20 @@ class ExperimentRunner:
     
     def _perform_qr_decomposition(self, A_tensor: torch.Tensor, 
                                  number_sensors: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Perform QR decomposition for sensor placement."""
+        """Perform QR decomposition for sensor placement.
+
+        Parameters
+        ----------
+        A_tensor : torch.Tensor
+            The basis tensor for decomposition.
+        number_sensors : int
+            The number of sensors to place.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            The Q, R, and P tensors from the decomposition.
+        """
         # Ensure number_sensors is Python int (not numpy int)
         if hasattr(number_sensors, 'item'):
             number_sensors = number_sensors.item()
@@ -121,7 +191,22 @@ class ExperimentRunner:
     
     def _solve_compressive_sensing(self, A_tensor: torch.Tensor, P: torch.Tensor, 
                                   Y: torch.Tensor) -> torch.Tensor:
-        """Solve compressive sensing problem."""
+        """Solve the compressive sensing problem.
+
+        Parameters
+        ----------
+        A_tensor : torch.Tensor
+            The basis tensor.
+        P : torch.Tensor
+            The sensor placement matrix.
+        Y : torch.Tensor
+            The measured data.
+
+        Returns
+        -------
+        torch.Tensor
+            The reconstructed sparse coefficients.
+        """
         compressive_sensing_config = CompressiveSensingConfig(
             max_iter=self.config.max_iter,
             epsilon_l1=self.config.epsilon,
@@ -142,11 +227,20 @@ class ExperimentRunner:
         return cs_solver.solve()
     
     def _add_noise_to_measurements(self, Y: torch.Tensor) -> torch.Tensor:
-        """
-        Add noise to measurements only for non-zero values.
+        """Add noise to measurements only for non-zero values.
         
-        Important for reservoir data where 0 values represent 
-        absence of fluid/rock and should not be corrupted with noise.
+        This is important for reservoir data where 0 values represent
+        the absence of fluid/rock and should not be corrupted with noise.
+
+        Parameters
+        ----------
+        Y : torch.Tensor
+            The measurement tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            The measurement tensor with added noise.
         """
         if self.config.noise_level > 0:
             # Create mask for non-zero values using configurable threshold
@@ -635,7 +729,27 @@ def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
 
 # Backward compatibility functions (deprecated)
 def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95):
-    """Deprecated: Use ExperimentRunner class instead."""
+    """Compute confidence intervals.
+
+    .. deprecated:: 0.1.0
+       Use :class:`ExperimentRunner` instead.
+
+    Parameters
+    ----------
+    means : list
+        The means of the samples.
+    stds : list
+        The standard deviations of the samples.
+    num_samples : int
+        The number of samples.
+    confidence_level : float, optional
+        The confidence level for the interval, by default 0.95.
+
+    Returns
+    -------
+    tuple
+        The lower and upper bounds of the confidence intervals.
+    """
     print("Warning: This function is deprecated. Use ExperimentRunner class instead.")
     config = ExperimentConfig(confidence_level=confidence_level)
     runner = ExperimentRunner(config)
@@ -643,7 +757,11 @@ def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95
 
 
 def run_experiments(*args, **kwargs):
-    """Deprecated: Use ExperimentRunner.run_full_dataset_experiments() instead."""
+    """Run experiments.
+
+    .. deprecated:: 0.1.0
+       Use :meth:`ExperimentRunner.run_full_dataset_experiments` instead.
+    """
     print("Warning: This function is deprecated. Use ExperimentRunner.run_full_dataset_experiments() instead.")
     config = ExperimentConfig()
     runner = ExperimentRunner(config)
@@ -652,19 +770,31 @@ def run_experiments(*args, **kwargs):
 
 
 def run_experiments_single_slice(*args, **kwargs):
-    """Deprecated: Use ExperimentRunner.run_single_slice_experiments() instead."""
+    """Run experiments for a single slice.
+
+    .. deprecated:: 0.1.0
+       Use :meth:`ExperimentRunner.run_single_slice_experiments` instead.
+    """
     print("Warning: This function is deprecated. Use ExperimentRunner.run_single_slice_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
 
 def run_experiments_df(*args, **kwargs):
-    """Deprecated: Use ExperimentRunner.run_experiments() instead."""
+    """Run experiments and return a DataFrame.
+
+    .. deprecated:: 0.1.0
+       Use :meth:`ExperimentRunner.run_experiments` instead.
+    """
     print("Warning: This function is deprecated. Use ExperimentRunner.run_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
 
 def run_experiments_wells_df(*args, **kwargs):
-    """Deprecated: Use ExperimentRunner.run_wells_experiments() instead."""
+    """Run experiments with wells and return a DataFrame.
+
+    .. deprecated:: 0.1.0
+       Use :meth:`ExperimentRunner.run_wells_experiments` instead.
+    """
     print("Warning: This function is deprecated. Use ExperimentRunner.run_wells_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
@@ -821,7 +951,7 @@ def plot_analytics(df: pd.DataFrame,
         norm_ssim_upper_ci = (ssim_upper_np - ssim_min_val) / ssim_range
         
         # Plot normalized metrics
-        plt.plot(sensor_values, norm_error_means, color='blue', label='Error (Inverted)')
+        plt.plot(sensor_values, norm_error_means, color='blue', label='Error')
         plt.scatter(sensor_values, norm_error_means, color='blue', marker='o', s=30)
         plt.fill_between(sensor_values, 
                         np.minimum(norm_error_lower_ci, norm_error_upper_ci),
@@ -835,7 +965,7 @@ def plot_analytics(df: pd.DataFrame,
         
         plt.xlabel('Number of Sensors (N)')
         plt.ylabel('Normalized Quality Metrics')
-        plt.title('Performance Metrics vs. Number of Sensors (Normalized)')
+        plt.title('Performance Metrics vs. Number of Sensors')
         plt.legend()
         plt.grid(True)
         plt.ylim(0, 1)
@@ -885,11 +1015,35 @@ def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
                          ssim_means, ssim_lower, ssim_upper,
                          psnr_means, psnr_lower, psnr_upper,
                          save_path: Optional[str] = None):
-    """
-    Legacy plot function for backward compatibility.
+    """Plot analytics using a legacy function for backward compatibility.
     
-    This is the original plot_analytics function adapted from plots.py
-    for use with separate arrays instead of DataFrame.
+    This function is the original `plot_analytics` from `plots.py`, adapted for use
+    with separate arrays instead of a DataFrame.
+
+    Parameters
+    ----------
+    sensor_values : array_like
+        The values for the number of sensors.
+    error_means : array_like
+        The mean error values.
+    error_lower : array_like
+        The lower bound of the error confidence interval.
+    error_upper : array_like
+        The upper bound of the error confidence interval.
+    ssim_means : array_like
+        The mean SSIM values.
+    ssim_lower : array_like
+        The lower bound of the SSIM confidence interval.
+    ssim_upper : array_like
+        The upper bound of the SSIM confidence interval.
+    psnr_means : array_like
+        The mean PSNR values.
+    psnr_lower : array_like
+        The lower bound of the PSNR confidence interval.
+    psnr_upper : array_like
+        The upper bound of the PSNR confidence interval.
+    save_path : str, optional
+        The path to save the plot to, by default None.
     """
     print("Warning: Using legacy plot function. Consider using plot_analytics with DataFrame.")
     

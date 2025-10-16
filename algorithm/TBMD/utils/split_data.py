@@ -7,25 +7,33 @@ from sklearn.model_selection import train_test_split
 
 
 def split_data_in_memory(subject_images, num_experiments, train_ratio=0.8, shuffle=True):
-    """
-    Splits each subject's stacked image tensor (shape: H x W x N) into training and testing sets,
-    performing the split for multiple experiments using random splitting.
+    """Split each subject's stacked image tensor into training and testing sets.
 
-    For each experiment (with IDs 1 to num_experiments), the function:
-      - Converts the subject's images into a list (maintaining the sorted order along the third axis),
-      - Uses train_test_split to randomly divide them into training and testing sets,
-      - Stacks the resulting lists back into NumPy arrays with shape (H, W, N_train) and (H, W, N_test).
+    This function performs the split for multiple experiments using random
+    splitting. For each experiment (with IDs from 1 to `num_experiments`), it
+    converts the subject's images into a list, uses `train_test_split` to
+    randomly divide them into training and testing sets, and stacks the
+    resulting lists back into NumPy arrays.
 
-    Parameters:
-        subject_images (dict): A dictionary mapping subject IDs to NumPy arrays of shape (H, W, N),
-                               where N is the number of sorted images.
-        num_experiments (int): The number of experiments (random splits) to perform.
-        train_ratio (float): The fraction of images to use for training.
-        shuffle (bool): Whether to shuffle the images before splitting. If False, sequential splitting is used.
+    Parameters
+    ----------
+    subject_images : dict
+        A dictionary mapping subject IDs to NumPy arrays of shape (H, W, N),
+        where N is the number of sorted images.
+    num_experiments : int
+        The number of experiments (random splits) to perform.
+    train_ratio : float, optional
+        The fraction of images to use for training, by default 0.8.
+    shuffle : bool, optional
+        Whether to shuffle the images before splitting. If `False`, sequential
+        splitting is used, by default True.
 
-    Returns:
-        dict: A dictionary mapping each experiment_id (1-indexed) to another dictionary with keys:
-              'train' and 'test', each mapping subject IDs to their corresponding NumPy array split.
+    Returns
+    -------
+    dict
+        A dictionary mapping each experiment ID (1-indexed) to another
+        dictionary with keys 'train' and 'test', each mapping subject IDs to
+        their corresponding NumPy array split.
     """
     experiments_data = {}
 
@@ -58,20 +66,26 @@ def split_data_in_memory(subject_images, num_experiments, train_ratio=0.8, shuff
     return experiments_data
 
 def split_data_in_memory_ordered(subject_images, train_ratio=0.8):
-    """
-    Splits each subject's stacked image tensor so that:
-      - The first train_ratio fraction (along the third dimension) is used for training.
-      - The remaining images are used for testing.
-    
-    Each subject's images are expected to be stored in a numpy array of shape (H, W, N),
-    where H and W are the image dimensions and N is the number of sorted images.
-    
-    Parameters:
-        subject_images (defaultdict): A dictionary mapping subject IDs to numpy arrays of shape (H, W, N).
-        train_ratio (float): The fraction of images to use for training.
-        
-    Returns:
-        tuple: Two dictionaries (train_data, test_data) mapping subject IDs to numpy arrays for train and test data.
+    """Split each subject's stacked image tensor into training and testing sets.
+
+    The first `train_ratio` fraction of images (along the third dimension) is
+    used for training, and the remaining images are used for testing. Each
+    subject's images are expected to be stored in a NumPy array of shape
+    (H, W, N), where H and W are the image dimensions and N is the number of
+    sorted images.
+
+    Parameters
+    ----------
+    subject_images : defaultdict
+        A dictionary mapping subject IDs to NumPy arrays of shape (H, W, N).
+    train_ratio : float, optional
+        The fraction of images to use for training, by default 0.8.
+
+    Returns
+    -------
+    tuple
+        A tuple containing two dictionaries, `train_data` and `test_data`,
+        which map subject IDs to NumPy arrays for the training and test data.
     """
     train_data = defaultdict(lambda: None)
     test_data = defaultdict(lambda: None)
