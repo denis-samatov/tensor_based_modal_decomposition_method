@@ -11,7 +11,7 @@ from typing import Union, List, Dict, Optional, Tuple, TypeVar, Generic, Protoco
 from enum import Enum
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
+from ..utils.utils import to_torch_tensor, get_torch_device
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

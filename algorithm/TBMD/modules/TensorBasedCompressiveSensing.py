@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
 
 import numpy as np
 import torch
-from TBMD.utils.utils import get_torch_device, to_torch_tensor
+from ..utils.utils import get_torch_device, to_torch_tensor
 
 __all__ = [
     "CompressiveSensingConfig",
