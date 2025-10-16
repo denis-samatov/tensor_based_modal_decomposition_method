@@ -79,7 +79,7 @@ class LinearForecaster:
                 self.M = torch.tensor(self.M, dtype=torch.float32, device=self.device)
                 
             # Calculate predictions for evaluation
-            X_output_est = X_input_tensor @ torch.transpose(self.M, 0, 1)
+            X_output_est = X_input_tensor @ self.M
             
             # Calculate metrics
             mse = torch.mean((X_output_tensor - X_output_est) ** 2).item()
@@ -97,7 +97,7 @@ class LinearForecaster:
             self.M = np.linalg.pinv(X_input) @ X_output  # (W, W)
             
             # Calculate predictions for evaluation
-            X_output_est = X_input @ self.M.T  # (T-1, W)
+            X_output_est = X_input @ self.M  # (T-1, W)
             
             # Calculate metrics
             mse = np.mean((X_output - X_output_est) ** 2)
@@ -199,7 +199,7 @@ class LinearForecaster:
             X_output_tensor = torch.tensor(X_output, dtype=torch.float32, device=self.device)
             
             # Make predictions
-            X_output_est = X_input_tensor @ torch.transpose(self.M, 0, 1)
+            X_output_est = X_input_tensor @ self.M
             
             # Calculate metrics
             mse = torch.mean((X_output_tensor - X_output_est) ** 2).item()
@@ -213,7 +213,7 @@ class LinearForecaster:
             r2 = r2_score(X_output_np, X_output_est_np, multioutput='uniform_average')
         else:
             # Make predictions using numpy
-            X_output_est = X_input @ self.M.T
+            X_output_est = X_input @ self.M
             
             # Calculate metrics
             mse = np.mean((X_output - X_output_est) ** 2)
