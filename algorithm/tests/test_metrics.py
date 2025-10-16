@@ -1,0 +1,38 @@
+import unittest
+import torch
+import numpy as np
+from algorithm.TBMD.utils.metrics import compute_metrics
+
+class TestMetrics(unittest.TestCase):
+    def test_compute_metrics(self):
+        # Test with torch tensors
+        tensor1 = torch.randn(10, 10)
+        tensor2 = tensor1 + torch.randn(10, 10) * 0.1
+        error, mse, ssim, psnr = compute_metrics(tensor1, tensor2)
+        self.assertIsInstance(error, float)
+        self.assertIsInstance(mse, float)
+        self.assertIsInstance(ssim, float)
+        self.assertIsInstance(psnr, float)
+
+        # Test with numpy arrays
+        np_array1 = np.random.rand(10, 10)
+        np_array2 = np_array1 + np.random.rand(10, 10) * 0.1
+        error, mse, ssim, psnr = compute_metrics(np_array1, np_array2)
+        self.assertIsInstance(error, float)
+        self.assertIsInstance(mse, float)
+        self.assertIsInstance(ssim, float)
+        self.assertIsInstance(psnr, float)
+
+        # Test with background value
+        tensor1_bg = torch.ones(10, 10)
+        tensor2_bg = torch.ones(10, 10)
+        tensor1_bg[5, 5] = 10
+        tensor2_bg[5, 5] = 10
+        error, mse, ssim, psnr = compute_metrics(tensor1_bg, tensor2_bg, background_value=1)
+        self.assertEqual(error, 0.0)
+        self.assertEqual(mse, 0.0)
+        self.assertEqual(ssim, 1.0)
+        self.assertTrue(np.isinf(psnr))
+
+if __name__ == "__main__":
+    unittest.main()

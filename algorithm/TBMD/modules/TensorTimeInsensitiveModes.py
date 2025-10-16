@@ -25,7 +25,7 @@ import tensorly as tl
 import torch
 from torch import nn
 
-from TBMD.utils.utils import get_torch_device, to_torch_tensor
+from ..utils.utils import get_torch_device, to_torch_tensor
 
 # Configure logging
 logger = logging.getLogger(__name__)

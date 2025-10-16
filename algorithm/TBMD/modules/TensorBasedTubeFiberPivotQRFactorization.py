@@ -21,7 +21,7 @@ from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
+from ..utils.utils import to_torch_tensor, get_torch_device
 
 
 @dataclass

@@ -126,6 +126,9 @@ def compute_metrics(
         K2 = math.sqrt(C2_paper) / data_range
 
         if A_ref.ndim == 2:                        # single-channel
+            win_size = min(7, min(A_ref.shape))
+            if win_size % 2 == 0:
+                win_size -= 1
             ssim_val = _ssim(
                 A_ref,
                 A_rec,
@@ -135,6 +138,7 @@ def compute_metrics(
                 gaussian_weights=True,
                 channel_axis=None,
                 mask=mask if _supports_mask() else None,  # falls back gracefully
+                win_size=win_size,
             )
             if not _supports_mask() and mask is not None:
                 warnings.warn("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
