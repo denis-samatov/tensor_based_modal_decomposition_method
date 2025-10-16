@@ -47,3 +47,6 @@ algorithm/all_cores.joblib
 algorithm/all_factors.joblib
 algorithm/models
 article/
+exports/
+statistics/
+images/
