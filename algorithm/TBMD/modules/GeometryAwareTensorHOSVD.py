@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from scipy import sparse as sp
 from scipy.sparse.linalg import eigsh
 
-from TBMD.modules.TensorHOSVD import (
+from .TensorHOSVD import (
     TuckerDecomposerInterface,
     TensorProcessor,
     DecompositionResult,
@@ -51,8 +51,8 @@ from TBMD.modules.TensorHOSVD import (
     ValidationError,
     TensorDecompositionError
 )
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
-from TBMD.utils.geometry import MeshGeometry, MeshGraphBuilder
+from ..utils.utils import to_torch_tensor, get_torch_device
+from ..utils.geometry import MeshGeometry, MeshGraphBuilder
 
 logger = logging.getLogger(__name__)
 
