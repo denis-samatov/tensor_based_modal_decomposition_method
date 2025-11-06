@@ -7,13 +7,8 @@ ValueError: N must be a positive integer, got 1
 
 import numpy as np
 import torch
-from pathlib import Path
-import sys
 
-# Добавляем путь к модулю TBMD
-sys.path.append(str(Path(__file__).parent.parent))
-
-from TBMD.utils.analytics import ExperimentRunner, ExperimentConfig, ensure_sensor_values_are_int
+from TBMD.utils.Analytics import ExperimentRunner, ExperimentConfig, ensure_sensor_values_are_int
 
 
 def demonstrate_problem_and_solution():

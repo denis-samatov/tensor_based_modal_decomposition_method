@@ -128,9 +128,14 @@ class MLPForecaster:
         X_target = x_history[1:, :]   # (T-1, W)
         
         if val_split > 0:
+            num_samples = len(X_input)
+            split_idx = int((1 - val_split) * num_samples)
+            if split_idx <= 0 or split_idx >= num_samples:
+                val_split = 0
+
+        if val_split > 0:
             # Split into training and validation sets
             split_idx = int((1 - val_split) * len(X_input))
-            
             X_train, X_val = X_input[:split_idx], X_input[split_idx:]
             y_train, y_val = X_target[:split_idx], X_target[split_idx:]
             
@@ -360,8 +365,9 @@ class MLPForecaster:
         Args:
             path: Path to save the model
         """
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         
         # Save model and metadata
         torch.save({

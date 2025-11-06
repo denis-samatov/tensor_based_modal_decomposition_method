@@ -13,7 +13,6 @@ Run with: python test_geometry_aware_components.py
 
 import numpy as np
 import torch
-import pytest
 from scipy.sparse import issparse
 import matplotlib.pyplot as plt
 from typing import Tuple
@@ -48,7 +47,7 @@ class TestMeshGraphBuilder:
         
         # Check symmetry
         A = mesh.adjacency_matrix
-        assert np.allclose(A.data, A.T.data)
+        assert (A - A.T).nnz == 0
         
         # Check degree (interior points should have degree 4)
         degrees = np.array(A.sum(axis=1)).flatten()
@@ -96,8 +95,8 @@ class TestMeshGraphBuilder:
         L_norm = mesh.normalized_laplacian
         
         # Laplacian should be symmetric
-        assert np.allclose(L.data, L.T.data)
-        assert np.allclose(L_norm.data, L_norm.T.data)
+        assert (L - L.T).nnz == 0
+        assert (L_norm - L_norm.T).nnz == 0
         
         # Row sums of L should be 0 (for connected graph)
         row_sums = np.array(L.sum(axis=1)).flatten()
@@ -557,4 +556,3 @@ def run_all_tests():
 
 if __name__ == "__main__":
     run_all_tests()
-

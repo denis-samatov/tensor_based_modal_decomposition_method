@@ -13,28 +13,24 @@ Key improvements:
 """
 
 import logging
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
 from typing import Dict, List
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from TBMD.modules.TensorTimeInsensitiveModes import (
+    BatchModalProcessor,
+    ModalProcessorConfig,
+    ModalTensorProcessor,
+    ModalTensorStacker,
+    ProcessingStrategy,
+    ValidationError,
+    ComputationError,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-from algorithm.TBMD.modules.TensorTimeInsensitiveModes import (
-    ModalProcessorConfig, 
-    ModalTensorProcessor, 
-    BatchModalProcessor, 
-    ModalTensorStacker,
-    ProcessingStrategy,
-    ValidationError,
-    ComputationError
-)
 
 
 def create_synthetic_decomposition_data(spatial_dims: tuple = (50, 50), 
@@ -316,8 +312,8 @@ def demonstrate_performance_analysis():
     )
     processor = ModalTensorProcessor(config)
     
-    logger.info(f"{'Size':<20} {'Time (s)':<10} {'Memory (MB)':<12} {'Throughput':<15}")
-    logger.info("-" * 65)
+    logger.info(f"{'Size':<20} {'Time (s)':<10} {'Throughput':<15}")
+    logger.info("-" * 50)
     
     for test_config in test_configs:
         core, factors = create_synthetic_decomposition_data(
@@ -328,25 +324,16 @@ def demonstrate_performance_analysis():
         
         # Measure performance
         import time
-        import psutil
-        import os
-        
-        process = psutil.Process(os.getpid())
-        memory_before = process.memory_info().rss / 1024**2  # MB
-        
         start_time = time.time()
         result = processor.process_single_subject(core, factors)
         end_time = time.time()
-        
-        memory_after = process.memory_info().rss / 1024**2  # MB
-        memory_used = memory_after - memory_before
         
         time_taken = end_time - start_time
         throughput = test_config['time'] / time_taken  # modes per second
         
         size_str = f"{test_config['spatial'][0]}x{test_config['spatial'][1]}x{test_config['time']}"
         
-        logger.info(f"{size_str:<20} {time_taken:<10.3f} {memory_used:<12.1f} {throughput:<15.1f}")
+        logger.info(f"{size_str:<20} {time_taken:<10.3f} {throughput:<15.1f}")
 
 
 def create_visualization(modal_tensor: np.ndarray, title: str = "Modal Tensor Analysis"):
