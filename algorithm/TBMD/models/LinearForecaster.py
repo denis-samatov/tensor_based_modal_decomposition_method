@@ -296,8 +296,9 @@ class LinearForecaster:
         Args:
             path: Path to save the model
         """
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         
         # Create save dictionary
         save_dict = {
@@ -329,6 +330,9 @@ class LinearForecaster:
         
         # Restore M, converting to tensor if needed
         if self.use_torch:
+            if not hasattr(self, 'device'):
+                self.device = torch.device('cuda' if torch.cuda.is_available() else 
+                                      ('mps' if torch.backends.mps.is_available() else 'cpu'))
             self.M = torch.tensor(loaded['M'], dtype=torch.float32, device=self.device)
         else:
             self.M = loaded['M']

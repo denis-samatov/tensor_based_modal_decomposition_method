@@ -7,13 +7,8 @@
 
 import numpy as np
 import torch
-from pathlib import Path
-import sys
 
-# Добавляем путь к модулю TBMD
-sys.path.append(str(Path(__file__).parent.parent))
-
-from TBMD.utils.analytics import ExperimentRunner, ExperimentConfig, plot_analytics
+from TBMD.utils.Analytics import ExperimentRunner, ExperimentConfig, plot_analytics
 
 
 def create_sample_data():
