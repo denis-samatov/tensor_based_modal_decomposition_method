@@ -154,9 +154,6 @@ class GeometryAwarePivotSelector:
         
         # Track placed sensors
         self.placed_sensors: List[int] = []
-        
-        # Cache for efficiency
-        self._norm_cache = {}
     
     def _compute_gradient_weights(self, field_data: torch.Tensor) -> None:
         """Compute gradient-based geometric weights."""
@@ -236,6 +233,8 @@ class GeometryAwarePivotSelector:
         # 4. Apply proximity penalties
         if len(self.placed_sensors) > 0 and self.config.proximity_weight > 0:
             prox_penalty = self._compute_proximity_penalty()
+            # Reshape penalty from flat (N_cells,) to spatial_shape to match norms
+            prox_penalty = prox_penalty.reshape(norms.shape)
             max_norm = torch.max(norms[available])
             
             if max_norm > 0:
@@ -258,15 +257,16 @@ class GeometryAwarePivotSelector:
         return pivot
     
     def _compute_residual_norms(self, R: torch.Tensor, d: int) -> torch.Tensor:
-        """Compute residual norms (standard QR)."""
-        cache_key = (R.data_ptr(), d)
+        """
+        Compute residual norms (standard QR).
         
-        if cache_key not in self._norm_cache:
-            residual = R[..., d:]
-            norms = torch.sum(torch.abs(residual), dim=-1)
-            self._norm_cache[cache_key] = norms
-        
-        return self._norm_cache[cache_key]
+        Note: R is mutated in-place during Householder steps, so we cannot
+        cache by data_ptr(). We compute norms fresh each time, or could cache
+        by (iteration_number, d) if performance becomes critical.
+        """
+        residual = R[..., d:]
+        norms = torch.sum(torch.abs(residual), dim=-1)
+        return norms
     
     def _compute_proximity_penalty(self) -> torch.Tensor:
         """
@@ -324,7 +324,6 @@ class GeometryAwarePivotSelector:
     def reset(self) -> None:
         """Reset state for new factorization."""
         self.placed_sensors.clear()
-        self._norm_cache.clear()
 
 
 class GeometryAwareTensorQR:
@@ -428,7 +427,14 @@ class GeometryAwareTensorQR:
         else:
             rejection_tensor = to_torch_tensor(rejection_domain, dtype=torch.bool, device=self.device)
             TensorValidator.validate_rejection_domain(rejection_tensor, self.spatial_shape)
-            self.available = rejection_tensor.clone()
+            # Invert: rejection_domain marks FORBIDDEN cells, available marks ALLOWED cells
+            self.available = ~rejection_tensor
+            
+            # Check that at least some cells are available
+            if not self.available.any():
+                raise ValueError(
+                    "rejection_domain forbids all cells - no valid sensor locations available"
+                )
         
         # Prepare field data for gradients
         if field_data is None:

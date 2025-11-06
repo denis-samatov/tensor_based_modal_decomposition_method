@@ -34,6 +34,11 @@ from .GeometryAwareTensorQR import (
     GeometricQRConfig
 )
 
+from .GeometryAwareTensorCS import (
+    GeometryAwareTensorCS,
+    GeometryAwareCSConfig
+)
+
 __all__ = [
     # Standard HOSVD
     'TuckerDecomposer',
@@ -51,6 +56,9 @@ __all__ = [
     'GeometryAwareConfig',
     # Geometry-aware QR
     'GeometryAwareTensorQR',
-    'GeometricQRConfig'
+    'GeometricQRConfig',
+    # Geometry-aware CS
+    'GeometryAwareTensorCS',
+    'GeometryAwareCSConfig'
 ]
 

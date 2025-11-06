@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from TBMD.utils.utils import to_torch_tensor, get_torch_device
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Create logger (logging configuration should be done at application entry point)
 logger = logging.getLogger(__name__)
 
 # Type definitions

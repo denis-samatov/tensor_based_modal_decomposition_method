@@ -306,14 +306,20 @@ class TimeInsensitiveModeComputer:
                                       core: torch.Tensor, 
                                       spatial_factors: List[torch.Tensor], 
                                       time_dim: int) -> torch.Tensor:
-        """Memory-efficient computation with gradient checkpointing."""
-        def compute_batch_fn(start_idx: int, end_idx: int) -> List[torch.Tensor]:
+        """Memory-efficient computation with gradient checkpointing.
+        
+        Note: Checkpointing requires the wrapped function to return tensors,
+        so we stack the batch before returning.
+        """
+        def compute_batch_fn(start_idx: int, end_idx: int) -> torch.Tensor:
+            """Compute a batch of modes and return as a stacked tensor."""
             batch_modes = []
             for n in range(start_idx, end_idx):
                 core_slice = core[..., n]
                 mode = self.compute_single_mode(spatial_factors, core_slice)
                 batch_modes.append(mode)
-            return batch_modes
+            # Stack the batch into a tensor for checkpoint compatibility
+            return torch.stack(batch_modes, dim=-1)
         
         # Estimate memory usage and adjust batch size
         estimated_batch_size = self._estimate_optimal_batch_size(core, spatial_factors)
@@ -324,13 +330,15 @@ class TimeInsensitiveModeComputer:
             
             # Use gradient checkpointing for memory efficiency
             if torch.is_grad_enabled():
-                batch_modes = torch.utils.checkpoint.checkpoint(
+                batch_tensor = torch.utils.checkpoint.checkpoint(
                     compute_batch_fn, start_idx, end_idx, use_reentrant=False
                 )
             else:
-                batch_modes = compute_batch_fn(start_idx, end_idx)
+                batch_tensor = compute_batch_fn(start_idx, end_idx)
             
-            modes.extend(batch_modes)
+            # Split the stacked tensor back into individual modes
+            for i in range(batch_tensor.shape[-1]):
+                modes.append(batch_tensor[..., i])
         
         return torch.stack(modes, dim=-1)
     

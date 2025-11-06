@@ -240,27 +240,32 @@ class GeometryAwareTuckerCore:
     
     def _update_factor_standard(self, tensor: torch.Tensor, factors: List[torch.Tensor],
                                 mode: int, rank: int) -> torch.Tensor:
-        """Standard factor update (no regularization)."""
-        # Compute unfolding
-        unfolding = tl.unfold(tensor, mode)
+        """Standard factor update (no regularization).
         
-        # Compute product of other factors (Khatri-Rao product)
-        G = self._compute_gramian(factors, mode)
+        Uses mode contractions instead of Khatri-Rao to handle non-uniform ranks.
+        Computes: X ×_{j≠mode} U_j^T, then unfolds and solves for U_mode.
+        """
+        # Contract tensor with all factors except the current mode
+        contracted = tensor.clone()
         
-        # Normal equations: U_mode = X_(mode) * G * (G^T G)^{-1}
-        rhs = unfolding @ G
-        lhs = G.T @ G
+        for m in range(len(factors)):
+            if m != mode:
+                # Apply U_m^T via mode_dot
+                contracted = tl.tenalg.mode_dot(contracted, factors[m].T, mode=m)
         
+        # Now contracted is a reduced tensor with shape (I_mode, r_1, r_2, ..., r_{mode-1}, r_{mode+1}, ...)
+        # Unfold along the mode dimension
+        unfolding = tl.unfold(contracted, mode)
+        
+        # SVD to get best rank-r approximation
         try:
-            # Regularize for numerical stability
-            lhs_reg = lhs + 1e-8 * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
-            U_new = torch.linalg.solve(lhs_reg.T, rhs.T).T
+            U, S, Vh = torch.linalg.svd(unfolding, full_matrices=False)
+            U_new = U[:, :rank]
         except:
-            # Fallback to pseudo-inverse
-            U_new = rhs @ torch.linalg.pinv(lhs)
-        
-        # Orthogonalize (optional but recommended)
-        U_new, _ = torch.linalg.qr(U_new)
+            # Fallback: QR decomposition of random initialization
+            U_new = torch.randn(unfolding.shape[0], rank, 
+                              device=tensor.device, dtype=tensor.dtype)
+            U_new, _ = torch.linalg.qr(U_new)
         
         return U_new
     
@@ -269,148 +274,137 @@ class GeometryAwareTuckerCore:
         """
         Regularized factor update with Laplacian penalty.
         
-        Solves: min ||X_(mode) - U * G^T||²_F + α ||L * U||²_F
+        Uses mode contractions to handle non-uniform ranks, then solves:
+        min_U ||Y_(mode) - U G_(mode)||²_F + α ||L U||²_F
         
-        Normal equations:
-            (X_(mode) * G * G^T + α * L^T L) * U = X_(mode) * G
+        where Y = X ×_{j≠mode} U_j^T and G is the current core estimate.
+        
+        Optimization: Uses sparse Laplacian and reuses precomputed terms.
         """
-        # Compute unfolding
-        unfolding = tl.unfold(tensor, mode)
+        # Contract tensor with all factors except the current mode
+        contracted = tensor.clone()
         
-        # Compute product of other factors
-        G = self._compute_gramian(factors, mode)
+        for m in range(len(factors)):
+            if m != mode:
+                contracted = tl.tenalg.mode_dot(contracted, factors[m].T, mode=m)
         
-        # Data term: X_(mode) * G
-        rhs = unfolding @ G
+        # Unfold the contracted tensor along the mode dimension
+        Y_unfolded = tl.unfold(contracted, mode)
         
-        # LHS: G^T G (data term) + α L^T L (regularization)
-        GTG = G.T @ G
+        # Compute the core tensor and unfold it
+        core = self._compute_core(tensor, factors)
+        G_unfolded = tl.unfold(core, mode)
         
-        # Convert Laplacian to torch (if sparse)
-        if sp.issparse(self.laplacian):
-            L_torch = self._sparse_scipy_to_torch(self.laplacian, tensor.device, tensor.dtype)
-        else:
-            L_torch = torch.from_numpy(self.laplacian).to(device=tensor.device, dtype=tensor.dtype)
+        # Convert Laplacian to torch (if sparse) - do this ONCE during init
+        if not hasattr(self, '_L_torch'):
+            if sp.issparse(self.laplacian):
+                self._L_torch = self._sparse_scipy_to_torch(
+                    self.laplacian, tensor.device, tensor.dtype
+                )
+            else:
+                self._L_torch = torch.from_numpy(self.laplacian).to(
+                    device=tensor.device, dtype=tensor.dtype
+                )
         
-        # Compute L^T L (Laplacian regularization term)
-        if L_torch.is_sparse:
-            # Sparse matrix multiplication
-            LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
-        else:
-            LTL = L_torch.T @ L_torch
+        L_torch = self._L_torch
         
         # Check dimension compatibility
-        if LTL.shape[0] != unfolding.shape[0]:
+        if L_torch.shape[0] != Y_unfolded.shape[0]:
             raise ValidationError(
-                f"Laplacian size {LTL.shape[0]} doesn't match mode size {unfolding.shape[0]}"
+                f"Laplacian size {L_torch.shape[0]} doesn't match mode size {Y_unfolded.shape[0]}"
             )
         
-        # Build augmented system
-        # (Data term)     (Regularization)
-        # rhs^T G^T G  +  α U^T L^T L  →  we want U
+        # Solve the regularized problem
+        # Normal equations: (||g_i||² I + α L^T L) u_i = rhs[:, i]
         # 
-        # More efficiently: solve (G^T G + α L^T L) U = rhs^T
+        # Instead of densifying L^T L, we use a simpler approach:
+        # Solve: (β I + α L^T L) u = b
+        # where β = ||g_i||²
+        #
+        # For efficiency, we solve the system using an iterative method
+        # that exploits sparsity of L
         
-        # We need to solve for each column of U separately, or use a block solver
-        # For simplicity, solve: U * (GTG) = rhs - we add penalty differently
+        U_new = torch.zeros(Y_unfolded.shape[0], rank, device=tensor.device, dtype=tensor.dtype)
         
-        # Alternative formulation: solve (GTG + α * L^T L ⊗ I_r) vec(U) = vec(rhs)
-        # But this is expensive. Instead, use iterative refinement or direct solve.
+        # Precompute right-hand side
+        rhs = Y_unfolded @ G_unfolded.T  # Shape: (I_mode, r_mode)
         
-        # Direct approach: for each column u_i of U:
-        #   (G^T G + α L^T L) u_i = rhs[:, i]
+        # Solve for each column of U
+        for i in range(rank):
+            g_i = G_unfolded[i, :]
+            beta = torch.dot(g_i, g_i).item()
+            
+            # Direct solution when Laplacian is small enough or sparse solve
+            if Y_unfolded.shape[0] < 5000:  # Small problem: direct solve
+                # Build LHS: β I + α L^T L (still need to densify for small problems)
+                if L_torch.is_sparse:
+                    LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
+                else:
+                    LTL = L_torch.T @ L_torch
+                
+                lhs_i = beta * torch.eye(
+                    Y_unfolded.shape[0], device=tensor.device, dtype=tensor.dtype
+                ) + self.geo_config.alpha * LTL
+                
+                try:
+                    u_i = torch.linalg.solve(lhs_i, rhs[:, i])
+                except:
+                    u_i = torch.linalg.pinv(lhs_i) @ rhs[:, i]
+            else:
+                # Large problem: use Conjugate Gradient with sparse matrix-vector products
+                # Solve: (β I + α L^T L) u = rhs[:, i]
+                u_i = self._solve_sparse_regularized(
+                    L_torch, beta, self.geo_config.alpha, rhs[:, i]
+                )
+            
+            U_new[:, i] = u_i
         
-        # Better: solve all at once using Kronecker structure, but for now:
-        # We solve column-by-column
-        
-        U_new = torch.zeros(unfolding.shape[0], rank, device=tensor.device, dtype=tensor.dtype)
-        
-        # Precompute regularized LHS (same for all columns)
-        # Note: we need (sum_j u_j GTG_jj + alpha sum_i (L u)_i^2)
-        # Standard formulation: minimize ||X - U G^T||^2 + alpha ||L U||^2
-        # Taking derivative w.r.t. U:
-        #   -2 (X G - U G^T G) + 2 alpha L^T L U = 0
-        #   →  (G G^T + alpha L^T L) U = X G
-        
-        GGT = GTG  # Note: this is actually G^T G from the Khatri-Rao product
-        
-        # Build LHS for normal equations
-        # We have: X_(mode) @ G  and (G^T @ G)
-        # Regularized: (G^T G) U^T = (X_(mode) G)^T  →  U (G^T G) = X_(mode) G
-        # With regularization: U (G^T G + α I ⊗ L^T L) = X_(mode) G
-        
-        # Simpler: work in unfolding space
-        # min_U ||X_(mode) - U K||^2 + α ||L U||^2,  where K = (other factors Khatri-Rao)^T
-        # Solution: U = (X_(mode) K^T) (K K^T + α L^T L)^{-1}
-        
-        KKT = G @ G.T  # This is the Gram matrix in the mode space
-        
-        # Regularized system
-        lhs = KKT + self.geo_config.alpha * LTL + 1e-8 * torch.eye(
-            KKT.shape[0], device=tensor.device, dtype=tensor.dtype
-        )
-        
-        # Solve for U^T (transpose of factor)
-        rhs_T = unfolding @ G  # This is actually X_(mode) @ K^T
-        
-        try:
-            U_new = torch.linalg.solve(lhs, rhs_T)
-        except:
-            # Fallback to pseudo-inverse
-            U_new = torch.linalg.pinv(lhs) @ rhs_T
-        
-        # Orthogonalize (optional)
+        # Orthogonalize (optional but recommended for stability)
         U_new, _ = torch.linalg.qr(U_new)
         
         return U_new
     
-    def _compute_gramian(self, factors: List[torch.Tensor], skip_mode: int) -> torch.Tensor:
+    def _solve_sparse_regularized(self, L: torch.Tensor, beta: float, alpha: float, 
+                                  b: torch.Tensor, max_iter: int = 100, 
+                                  tol: float = 1e-6) -> torch.Tensor:
         """
-        Compute Khatri-Rao product of all factors except skip_mode.
+        Solve (β I + α L^T L) u = b using Conjugate Gradient.
         
-        Returns G such that unfolding ≈ U_{skip_mode} @ G.T
+        Avoids densifying L^T L by computing matrix-vector products directly.
         """
-        # Start with the last mode (excluding skip_mode)
-        modes = [i for i in range(len(factors)) if i != skip_mode]
+        def matvec(v):
+            """Compute (β I + α L^T L) @ v"""
+            if L.is_sparse:
+                Lv = torch.sparse.mm(L, v.unsqueeze(1)).squeeze()
+                LTLv = torch.sparse.mm(L.t(), Lv.unsqueeze(1)).squeeze()
+            else:
+                Lv = L @ v
+                LTLv = L.T @ Lv
+            return beta * v + alpha * LTLv
         
-        if len(modes) == 0:
-            return torch.ones(1, 1, device=factors[0].device, dtype=factors[0].dtype)
+        # Simple Conjugate Gradient implementation
+        x = torch.zeros_like(b)
+        r = b - matvec(x)
+        p = r.clone()
+        rsold = torch.dot(r, r)
         
-        # Khatri-Rao product (column-wise Kronecker)
-        # For Tucker, we need the Kronecker product in reverse order
-        G = factors[modes[-1]]
+        for _ in range(max_iter):
+            Ap = matvec(p)
+            alpha_cg = rsold / torch.dot(p, Ap)
+            x = x + alpha_cg * p
+            r = r - alpha_cg * Ap
+            rsnew = torch.dot(r, r)
+            
+            if torch.sqrt(rsnew) < tol:
+                break
+            
+            p = r + (rsnew / rsold) * p
+            rsold = rsnew
         
-        for mode in reversed(modes[:-1]):
-            G = self._khatri_rao(factors[mode], G)
-        
-        return G
+        return x
     
-    @staticmethod
-    def _khatri_rao(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
-        """
-        Compute Khatri-Rao product (column-wise Kronecker product).
-        
-        Parameters
-        ----------
-        A : Tensor (I, K)
-        B : Tensor (J, K)
-        
-        Returns
-        -------
-        Tensor (I*J, K)
-        """
-        if A.shape[1] != B.shape[1]:
-            raise ValueError(f"Number of columns must match: {A.shape[1]} != {B.shape[1]}")
-        
-        I, K = A.shape
-        J = B.shape[0]
-        
-        # Efficient implementation using einsum
-        # Result[i*J + j, k] = A[i, k] * B[j, k]
-        result = torch.einsum('ik,jk->ijk', A, B).reshape(I * J, K)
-        
-        return result
-    
+    # Note: _compute_gramian and _khatri_rao methods removed as they cannot handle
+    # non-uniform Tucker ranks. The update methods now use mode contractions instead.
     def _compute_core(self, tensor: torch.Tensor, factors: List[torch.Tensor]) -> torch.Tensor:
         """Compute core tensor given factors."""
         # G = X ×₁ U₁ᵀ ×₂ U₂ᵀ ×₃ U₃ᵀ
