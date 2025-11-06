@@ -45,7 +45,8 @@ Thumbs.db
 
 algorithm/all_cores.joblib
 algorithm/all_factors.joblib
-algorithm/models
+algorithm/pretrained_models/
+algorithm/metadata_forecast_tbmd/
 article/
 exports/
 statistics/
