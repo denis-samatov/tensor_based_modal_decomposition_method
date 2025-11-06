@@ -44,15 +44,15 @@ from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
 from scipy.sparse import csr_matrix
 
-from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
+from .TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition,
     TensorQRConfig,
     TensorValidator,
     NumericallyStableOperations,
     UniformDistributionManager
 )
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
-from TBMD.utils.geometry import (
+from ..utils.utils import to_torch_tensor, get_torch_device
+from ..utils.geometry import (
     MeshGeometry,
     GeometricWeightComputer,
     estimate_characteristic_length

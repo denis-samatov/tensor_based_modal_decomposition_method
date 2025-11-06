@@ -12,46 +12,34 @@ def visualize_tensor(
     cmap="gray",
     cols=5,
     show_colorbar=False,
-    zmin=None,
-    zmax=None,
-    wells=None,
-    frame_step=1
+    zmin=None,  # Add zmin parameter
+    zmax=None,   # Add zmax parameter
+    wells=None,  # Скважины для отображения
+    frame_step=1  # Отображать каждый N-й кадр (по умолчанию каждый)
 ):
-    """Visualize a tensor of images.
+    """
+    Visualizes a tensor of images. If the tensor is 3D (H, W, T), each (H, W) slice is
+    treated as a grayscale frame. If the tensor is 4D (H, W, C, T), each slice is treated
+    as a color image.
 
-    This function visualizes a tensor of images. If the tensor is 3D (H, W, T),
-    each (H, W) slice is treated as a grayscale frame. If the tensor is 4D
-    (H, W, C, T), each slice is treated as a color image.
-
-    Parameters
-    ----------
-    tensor : numpy.ndarray
-        The data to visualize. Expected shapes are (H, W, T) for grayscale
-        images or (H, W, C, T) for color images.
-    subject_name : str, optional
-        The title label for the subject, by default None.
-    save_path : str, optional
-        The path where the plot will be saved, by default None.
-    cmap : str, optional
-        The Matplotlib colormap for grayscale images, by default "gray".
-    cols : int, optional
-        The number of columns in the grid layout, by default 5.
-    show_colorbar : bool, optional
-        Whether to display colorbars for each subplot, by default False.
-    zmin : float, optional
-        The minimum value for the color scale (vmin in imshow). If None, it is
-        calculated per frame as the minimum non-zero value, by default None.
-    zmax : float, optional
-        The maximum value for the color scale (vmax in imshow). If None, it is
-        calculated per frame as the maximum value, by default None.
-    wells : dict or list, optional
-        The coordinates of wells to display. Can be a dictionary with subject
-        names as keys and lists of coordinates as values, a dictionary with
-        subject names as keys and nested dictionaries with frame indices as
-        keys, or a simple list of coordinates for all frames, by default None.
-    frame_step : int, optional
-        The step for displaying frames. For example, a `frame_step` of 10
-        will display every 10th frame, by default 1.
+    Parameters:
+      - tensor (numpy.ndarray): The data to visualize. Expected shapes:
+          * (H, W, T) for grayscale images.
+          * (H, W, C, T) for color images.
+      - subject_name (str): Title label for the subject.
+      - save_path (str): If provided, the path where the plot will be saved.
+      - cmap (str): Matplotlib colormap used for imshow when displaying grayscale images.
+      - cols (int): Number of columns in the grid layout.
+      - show_colorbar (bool): Whether to display colorbars for each subplot.
+      - zmin (float, optional): Minimum value for the color scale (vmin in imshow).
+                                If None, calculated per frame as the minimum non-zero value.
+      - zmax (float, optional): Maximum value for the color scale (vmax in imshow).
+                                If None, calculated per frame as the maximum value.
+      - wells (dict or list): Координаты скважин. Может быть:
+                             * dict с ключами = subject_name и значениями = списки координат [(x1, y1), ...]
+                             * dict с ключами = subject_name и значениями = вложенные словари {frame_idx: [(x1, y1), ...], ...}
+                             * простой список координат [(x1, y1), ...] для всех кадров
+      - frame_step (int): Шаг для отображения кадров. При frame_step=10 будет отображаться каждый 10-й кадр.
     """
     # Ensure tensor has either 3 or 4 dimensions.
     if tensor.ndim not in (3, 4):
@@ -68,16 +56,16 @@ def visualize_tensor(
     else:  # tensor.ndim == 4
         H, W, C, T = tensor.shape
 
-    # Select frames with the specified step
+    # Выбираем кадры с заданным шагом
     frame_indices = list(range(0, T, frame_step))
     selected_frames_count = len(frame_indices)
 
     # Determine the number of rows needed for the grid layout.
     rows = (selected_frames_count + cols - 1) // cols
 
-    # Increase the figure size for larger subplots
-    fig, axes = plt.subplots(rows, cols, figsize=(5.5 * cols, 5.5 * rows))
-    
+    # Увеличиваем размер фигуры для более крупных subplots
+    fig, axes = plt.subplots(rows, cols, figsize=(6.5 * cols, 6.5 * rows))
+
     # Handle case where rows=1 or cols=1, making axes not 2D
     if selected_frames_count <= 1:
         axes = np.array([axes]) # Ensure axes is always iterable
@@ -85,19 +73,21 @@ def visualize_tensor(
 
     for display_idx, ax in enumerate(axes):
         if display_idx < selected_frames_count:
-            # Get the actual frame index
+            # Получаем реальный индекс кадра
             frame_idx = frame_indices[display_idx]
-            
+
             # Extract the frame depending on tensor dimensions.
             if tensor.ndim == 3:
                 frame = tensor[:, :, frame_idx]
-                
+
                 # Determine vmin and vmax for this frame
                 current_zmin = zmin
                 if current_zmin is None:
                     # Calculate min non-zero value, default to 0 if all zero
                     non_zero_frame = frame[frame != 0]
-                    if non_zero_frame.size > 0:
+                    if hasattr(non_zero_frame, 'numel') and non_zero_frame.numel() > 0:
+                        current_zmin = non_zero_frame.min()
+                    elif non_zero_frame.size > 0:
                         current_zmin = non_zero_frame.min()
                     else:
                          current_zmin = 0 # Frame is all zeros
@@ -115,56 +105,57 @@ def visualize_tensor(
                 frame = tensor[:, :, :, frame_idx]
                 # Ensure frame data is in displayable range [0,1] or [0,255] if needed
                 # frame = np.clip(frame, 0, 1) # Example clipping if data is float [0,1]
-                im = ax.imshow(frame, aspect="equal") 
-                
+                im = ax.imshow(frame, aspect="equal")
+
             ax.set_title(f"Frame {frame_idx + 1}", fontsize=20)
-            
-            # Display wells
+
+            # Отображение скважин
             if wells is not None:
                 wells_to_plot = None
-                # Determine which wells to display for the given subject/frame
+                # Определяем какие скважины отображать для данного subject/frame
                 if subject_name is not None:
-                    # Check different formats of wells
+                    # Проверяем разные форматы wells
                     if isinstance(wells, dict):
                         wells_to_plot = wells.get(subject_name)
-                        # If wells[subject_name] is a dictionary with frame numbers as keys
+                        # Если wells[subject_name] - словарь с ключами-номерами кадров
                         if isinstance(wells_to_plot, dict):
                             wells_to_plot = wells_to_plot.get(frame_idx)
-                        # Check for an alternative key subject_name_frame_idx
+                        # Проверяем альтернативный ключ subject_name_frame_idx
                         elif wells_to_plot is None:
                             wells_to_plot = wells.get(f"{subject_name}_{frame_idx}")
                 else:
-                    # If subject_name is not specified, try to use wells directly
+                    # Если subject_name не указан, пытаемся использовать wells напрямую
                     if isinstance(wells, list) or (isinstance(wells, np.ndarray) and wells.ndim >= 2):
                         wells_to_plot = wells
-                
-                # Display wells if found
+
+                # Отображаем скважины, если нашли
                 if wells_to_plot is not None and len(wells_to_plot) > 0:
                     wells_array = np.array(wells_to_plot)
-                    
-                    # Display wells without scaling (coordinates should be in pixels)
+
+                    # Отображение скважин без масштабирования (координаты должны быть в пикселях)
                     ax.scatter(wells_array[:, 0], wells_array[:, 1], c='red', marker='o', s=80, label='Wells')
-                    
-                    ax.legend(loc='upper right', fontsize=15)
-            
+
+                    ax.legend(loc='upper right', fontsize=18)
+
             if show_colorbar:
                  # For 3D tensors, colorbar uses calculated vmin/vmax
                  # For 4D tensors, colorbar might not be meaningful unless specific channel shown
                  if tensor.ndim == 3:
-                     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                 # else: # Optional: add colorbar logic for 4D if needed
-                 #    pass 
+                     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Pressure, psi")
+                     cbar.ax.tick_params(labelsize=16)
+                     cbar.set_label("Pressure, psi", size=18)                 # else: # Optional: add colorbar logic for 4D if needed
+                 #    pass
         ax.axis("off")
 
     # Adjust title position if it exists and make layout more compact
     if subject_name:
         fig.suptitle(f"Subject: {subject_name}", fontsize=40)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust rect to prevent title overlap
-        # Reduce the distance between images for a more compact view
+        # Уменьшаем расстояние между изображениями для более компактного вида
         plt.subplots_adjust(wspace=0.001, hspace=0.15)
     else:
         plt.tight_layout()
-        # Reduce the distance between images for a more compact view
+        # Уменьшаем расстояние между изображениями для более компактного вида
         plt.subplots_adjust(wspace=0.001, hspace=0.15)
 
     if save_path:

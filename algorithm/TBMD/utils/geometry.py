@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from scipy.spatial import KDTree, Delaunay
 import warnings
 
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
+from ..utils.utils import to_torch_tensor, get_torch_device
 
 
 @dataclass
