@@ -1,101 +1,97 @@
-# 2D Navier-Stokes Dataset Analysis
+# Tensor-Based Modal Decomposition (TBMD)
 
-This repository contains tools for analyzing and visualizing the 2D Navier-Stokes dataset with colorful representations and comprehensive analytics.
+**Tensor-Based Modal Decomposition** is a library for reduced-order modeling, sensor placement, and field reconstruction of spatiotemporal data (e.g., reservoir simulation results). It enables the creation of **Digital Twins** that operate in real-time.
 
-## Dataset Structure
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-The dataset is located in the `data/2D Navier-Stokes Datasets` directory with the following structure:
+---
 
-```
-data/2D Navier-Stokes Datasets/
-├── test/
-│   ├── inputs.npy
-│   └── label.npy
-└── train/
-    ├── inputs.npy
-    └── label.npy
-```
+## 📚 Documentation
 
-## Features
+The full documentation is available in the **[`algorithm/docs/`](algorithm/docs/README.md)** directory.
 
-The analysis includes:
+- **🚀 [Digital Twin Guide](algorithm/docs/guides/digital_twin.md)**: Build real-time reservoir models.
+- **📐 [Geometry-Aware TBMD](algorithm/docs/guides/geometry_aware_tbmd.md)**: Handle complex unstructured meshes.
+- **🧠 [Core Concepts](algorithm/docs/guides/tbmd_core.md)**: Learn about Tucker Decomposition and HOSVD.
+- **🎓 [Tutorials](algorithm/docs/tutorials/digital_twin_tutorial.md)**: Step-by-step guides.
 
-- Colorful visualizations of the fluid dynamics data
-- Statistical analysis of input and label datasets
-- Distribution analysis and comparisons
-- PCA (Principal Component Analysis) for dimensionality reduction
-- Interactive visualizations in Jupyter Notebook
-- Animation support for temporal data (if applicable)
+---
 
-## Usage
+## 🚀 Quick Start
 
-### Running the Analysis Script
+### Installation
 
 ```bash
-python navier_stokes_analysis.py
+git clone https://github.com/your-repo/tensor-based-modal-decomposition-method.git
+cd tensor-based-modal-decomposition-method
+pip install -r requirements.txt
 ```
 
-This will:
-1. Load the training and test datasets
-2. Compute and print basic statistics
-3. Create colorful visualizations of samples
-4. Perform PCA analysis
-5. Save all visualizations to an `output_plots` directory
-6. Generate animations if the data has a time dimension
+### Basic Usage
 
-### Interactive Analysis with Jupyter Notebook
+```python
+from algorithm.TBMD.core.decomposition import TuckerDecomposer
+from algorithm.TBMD.config import DecompositionConfig
 
-For interactive analysis, you can use the Jupyter Notebook:
+# 1. Configure
+config = DecompositionConfig(ranks=[20, 20, 10])
 
-```bash
-jupyter notebook navier_stokes_visualization.ipynb
+# 2. Decompose
+decomposer = TuckerDecomposer(config)
+result = decomposer.decompose(data_tensor)
+
+# 3. Reconstruct
+reconstructed = result.reconstruct()
 ```
 
-The notebook provides:
-- Interactive sample visualization with sliders
-- Customizable colormap exploration
-- Distribution analysis
-- PCA visualization
-- Animations (if data has temporal dimension)
+### Digital Twin Demo
 
-## Requirements
+```python
+from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig
 
-The code requires the following Python packages:
-- numpy
-- matplotlib
-- seaborn
-- pandas
-- scikit-learn
-- Jupyter (for notebook)
+# Initialize
+twin = DigitalTwinTBMD(DigitalTwinConfig(n_sensors=30))
 
-You can install them using:
+# Train
+twin.train(historical_data)
 
-```bash
-pip install numpy matplotlib seaborn pandas scikit-learn jupyter
+# Forecast
+forecast = twin.predict_next_state(current_state, time_horizon=10)
 ```
 
-## Output
+---
 
-The script will generate:
-- Statistical summaries in the console
-- Visualization plots saved to `output_plots/`
-- A CSV summary file with dataset statistics
-- Sample animations (if applicable) in `output_animations/`
+## 📂 Project Structure
 
-## Examples
+```
+algorithm/
+├── TBMD/                        # Core Library
+│   ├── core/                    # Decomposition, Sensor Placement, Reconstruction
+│   ├── models/                  # Forecasting Models (LSTM, MLP)
+│   ├── config/                  # Configuration classes
+│   └── utils/                   # Utilities
+├── docs/                        # 📚 Documentation
+├── examples/                    # 💡 Example scripts (Basic, Advanced)
+├── scripts/                     # 🏃 Runnable demos
+└── experiments/                 # 📓 Jupyter Notebooks
+```
 
-Here are some examples of the visualizations:
+## 🧪 Experiments & Examples
 
-- Input samples with custom colormap
-- Comparison between inputs and labels
-- Distribution analysis
-- PCA visualization
-- Temporal data animation (if applicable)
+- **Run the Digital Twin demo**:
+  ```bash
+  python algorithm/scripts/run_digital_twin_demo.py
+  ```
 
-## Analysis Methodology
+- **Explore the notebooks**:
+  Check `algorithm/experiments/` for Jupyter notebooks covering various experiments and visualizations.
 
-1. **Data Loading**: Load train and test datasets from NumPy files
-2. **Statistical Analysis**: Compute mean, std, min, max, etc.
-3. **Visualization**: Create colorful plots with custom colormaps
-4. **PCA Analysis**: Reduce dimensionality and visualize principal components
-5. **Animation**: Generate temporal animations if time dimension is available
+## 🤝 Contributing
+
+Contributions are welcome! Please read the documentation and check existing issues before submitting a PR.
+
+## 📄 License
+
+This project is licensed under the MIT License.

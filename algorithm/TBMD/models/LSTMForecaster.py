@@ -7,6 +7,13 @@ from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from typing import Optional, Dict, Tuple, Union, List, Any
 
+# Import config
+try:
+    from ..config import LSTMForecasterConfig
+except ImportError:
+    # Fallback if running standalone
+    LSTMForecasterConfig = None
+
 
 class LSTMModel(nn.Module):
     """LSTM model for time series forecasting."""
@@ -65,57 +72,96 @@ class LSTMForecaster:
     """Complete pipeline for training and using LSTM forecasting models."""
     
     def __init__(self, 
-                 in_dim: int,
-                 out_dim: int,
-                 seq_length: int = 5,
-                 hidden_dim: int = 64, 
-                 num_layers: int = 1,
-                 dropout_rate: float = 0.0,
-                 lr: float = 1e-3,
-                 weight_decay: float = 1e-5,
-                 device: str = None):
+                 in_dim: Optional[int] = None,
+                 out_dim: Optional[int] = None,
+                 config: Optional['LSTMForecasterConfig'] = None,
+                 # Старые параметры для обратной совместимости
+                 seq_length: Optional[int] = None,
+                 hidden_dim: Optional[int] = None, 
+                 num_layers: Optional[int] = None,
+                 dropout_rate: Optional[float] = None,
+                 lr: Optional[float] = None,
+                 weight_decay: Optional[float] = None,
+                 device: Optional[str] = None):
         """
         Initialize the LSTM forecaster.
         
         Args:
             in_dim: Input dimension (number of features)
             out_dim: Output dimension (number of features to predict)
-            seq_length: Length of input sequence (time steps to look back)
-            hidden_dim: Hidden state dimension
-            num_layers: Number of LSTM layers
-            dropout_rate: Dropout rate for regularization
-            lr: Learning rate
-            weight_decay: L2 regularization parameter
-            device: Device to run computations on ('cpu', 'cuda', or 'mps')
+            config: LSTMForecasterConfig instance (recommended)
+            seq_length: Length of input sequence (deprecated, use config)
+            hidden_dim: Hidden state dimension (deprecated, use config)
+            num_layers: Number of LSTM layers (deprecated, use config)
+            dropout_rate: Dropout rate (deprecated, use config)
+            lr: Learning rate (deprecated, use config)
+            weight_decay: L2 regularization (deprecated, use config)
+            device: Device to run on (deprecated, use config)
+        
+        Examples:
+            >>> # New way (recommended):
+            >>> from algorithm.TBMD.config import LSTMForecasterConfig
+            >>> config = LSTMForecasterConfig(hidden_size=128, num_epochs=500)
+            >>> forecaster = LSTMForecaster(in_dim=10, out_dim=10, config=config)
+            >>> 
+            >>> # Old way (still works):
+            >>> forecaster = LSTMForecaster(in_dim=10, out_dim=10, hidden_dim=64)
         """
-        # Set device
-        if device is None:
+        # Handle config vs individual parameters
+        if config is not None:
+            # New API: use config
+            self.config = config
+            # Store dimensions
+            if in_dim is not None:
+                self.config.in_dim = in_dim
+            if out_dim is not None:
+                self.config.out_dim = out_dim
+        else:
+            # Old API: create config from parameters
+            if LSTMForecasterConfig is None:
+                raise ImportError("LSTMForecasterConfig not available. Please update imports.")
+            
+            self.config = LSTMForecasterConfig(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                seq_length=seq_length if seq_length is not None else 5,
+                hidden_size=hidden_dim if hidden_dim is not None else 64,
+                num_layers=num_layers if num_layers is not None else 1,
+                dropout=dropout_rate if dropout_rate is not None else 0.0,
+                learning_rate=lr if lr is not None else 1e-3,
+                weight_decay=weight_decay if weight_decay is not None else 1e-5,
+                device=device
+            )
+        
+        # Set device from config
+        if self.config.device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 
                                       ('mps' if torch.backends.mps.is_available() else 'cpu'))
         else:
-            self.device = torch.device(device)
-            
-        print(f"Using device: {self.device}")
+            self.device = torch.device(self.config.device)
+        
+        if self.config.verbose:
+            print(f"Using device: {self.device}")
         
         # Store configuration
-        self.seq_length = seq_length
-        self.in_dim = in_dim
-        self.out_dim = out_dim
+        self.seq_length = self.config.seq_length
+        self.in_dim = self.config.in_dim if self.config.in_dim else in_dim
+        self.out_dim = self.config.out_dim if self.config.out_dim else out_dim
         
         # Initialize model
         self.model = LSTMModel(
-            in_dim=in_dim,
-            hidden_dim=hidden_dim,
-            out_dim=out_dim,
-            num_layers=num_layers,
-            dropout_rate=dropout_rate
+            in_dim=self.in_dim,
+            hidden_dim=self.config.hidden_size,
+            out_dim=self.out_dim,
+            num_layers=self.config.num_layers,
+            dropout_rate=self.config.dropout
         ).to(self.device)
         
         # Initialize optimizer
         self.optimizer = optim.Adam(
             self.model.parameters(), 
-            lr=lr, 
-            weight_decay=weight_decay
+            lr=self.config.learning_rate, 
+            weight_decay=self.config.weight_decay
         )
         
         # Initialize loss function
@@ -270,6 +316,7 @@ class LSTMForecaster:
             # Backward pass and optimization
             self.optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             
             total_loss += loss.item() * X_batch.size(0)
@@ -307,11 +354,11 @@ class LSTMForecaster:
     
     def train(self, 
              x_history: np.ndarray, 
-             num_epochs: int = 300,
-             batch_size: int = 32,
-             val_split: float = 0.2,
-             early_stopping_patience: int = 20,
-             verbose: bool = True,
+             num_epochs: Optional[int] = None,
+             batch_size: Optional[int] = None,
+             val_split: Optional[float] = None,
+             early_stopping_patience: Optional[int] = None,
+             verbose: Optional[bool] = None,
              save_best: bool = True,
              model_path: str = None) -> Dict[str, List[float]]:
         """
@@ -330,11 +377,19 @@ class LSTMForecaster:
         Returns:
             history: Training history
         """
+        # Use config defaults if not provided
+        num_epochs = num_epochs if num_epochs is not None else self.config.num_epochs
+        batch_size = batch_size if batch_size is not None else self.config.batch_size
+        val_split = val_split if val_split is not None else self.config.val_split
+        early_stopping_patience = early_stopping_patience if early_stopping_patience is not None else self.config.early_stopping_patience
+        verbose = verbose if verbose is not None else self.config.verbose
+        
         # Prepare data
         train_loader, val_loader = self.prepare_data(
             x_history, 
             val_split=val_split,
-            batch_size=batch_size
+            batch_size=batch_size,
+            shuffle=self.config.shuffle
         )
         
         # Initialize early stopping counter

@@ -17,7 +17,7 @@ Module Layout
 - ``MetricsHook``       — optional metric collection / logging callback.
 - ``TensorCompressiveSensingCore`` — class implementing ADMM based only on the provided strategies.
 
-Dependencies: ``torch``, ``numpy``, ``TBMD.utils.utils`` (``get_torch_device``, ``to_torch_tensor``).
+Dependencies: ``torch``, ``numpy``, ``TBMD.utils.tbmd_utils`` (``get_torch_device``, ``to_torch_tensor``).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ import time
 import torch
 import numpy as np
 
-from TBMD.utils.utils import get_torch_device, to_torch_tensor
+from TBMD.utils.tbmd_utils import get_torch_device, to_torch_tensor
 
 
 # ------------------------------------------------------------------
@@ -400,6 +400,19 @@ class TensorCompressiveSensing:
         self.hook = hook or noop_metrics_hook
 
         self.history: List[float] = []
+
+    def reset(self) -> None:
+        """Reset ADMM variables for a fresh solve.
+        
+        Call this method before solve() if you want to re-run the algorithm
+        from scratch on the same data.
+        """
+        self.delta = self.cfg.delta_init
+        self.x = torch.zeros(self.W, 1, device=self.device, dtype=self.dtype)
+        self.d = torch.zeros_like(self.x)
+        self.p = torch.zeros_like(self.x)
+        self._d_prev = torch.zeros_like(self.x)
+        self.history.clear()
 
     # --- helpers ---------------------------------------------------
     @staticmethod

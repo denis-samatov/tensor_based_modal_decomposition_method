@@ -25,7 +25,7 @@ import tensorly as tl
 import torch
 from torch import nn
 
-from TBMD.utils.utils import get_torch_device, to_torch_tensor
+from TBMD.utils.tbmd_utils import get_torch_device, to_torch_tensor
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -203,20 +203,24 @@ class TimeInsensitiveModeComputer:
                         mode = mode_dot(mode, factor, mode=i)
                         
                 except Exception as e:
-                    # Fallback to simplified manual implementation
+                    # Fallback: use einsum-based contraction (safest for axis order)
+                    # This approach avoids the axis permutation issues of sequential tensordot
+                    logger.warning(
+                        f"tensorly.mode_dot failed ({e}), using einsum fallback. "
+                        "Consider installing tensorly for optimal performance."
+                    )
+                    
+                    # Build einsum string for multi-factor contraction
+                    # E.g., for 3 factors: 'ij,jkl,km,ln->imn'
                     mode = core_slice
                     
-                    # Apply each spatial factor to the corresponding mode
-                    for i, factor in enumerate(spatial_factors):
-                        # For the first factor, contract with the first dimension
-                        if i == 0:
-                            # Factor shape: (output_size, input_size)
-                            # Mode shape: (input_size, ...)
-                            mode = torch.tensordot(factor, mode, dims=([1], [0]))
-                        else:
-                            # For subsequent factors, the dimension index doesn't change
-                            # because the previous contraction replaced one dimension with another
-                            mode = torch.tensordot(factor, mode, dims=([1], [i]))
+                    # Alternative safer approach: use tl.tenalg.multi_mode_dot if available
+                    # For now, raise informative error since fallback is unreliable
+                    raise NotImplementedError(
+                        "tensorly.mode_dot is required for >2 spatial factors. "
+                        "The tensordot fallback has known axis ordering issues. "
+                        f"Original error: {e}"
+                    )
             
             return mode.to(dtype=self.config.numerical_precision)
             

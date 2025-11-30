@@ -24,6 +24,8 @@ theory/*.toc
 algorithm/data/
 algorithm/__pycache__/
 algorithm/*.pyc
+.pytest_cache/
+__pycache__/
 
 # Notebooks and checkpoints
 *.ipynb_checkpoints/
@@ -51,3 +53,4 @@ article/
 exports/
 statistics/
 images/
+artifacts/

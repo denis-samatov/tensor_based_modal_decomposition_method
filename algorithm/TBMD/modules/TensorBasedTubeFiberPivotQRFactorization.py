@@ -21,7 +21,7 @@ from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
+from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
 
 
 @dataclass
@@ -94,7 +94,7 @@ class TensorValidator:
                 try:
                     flat_tensor = tensor.flatten(-2, -1)
                     if flat_tensor.shape[-1] > 0:
-                        _, s, _ = torch.svd(flat_tensor[..., :min(flat_tensor.shape[-2:])].float())
+                        _, s, _ = torch.linalg.svd(flat_tensor[..., :min(flat_tensor.shape[-2:])].float(), full_matrices=False)
                         if s.min() < TensorQRConfig.MACHINE_EPSILON_FACTOR:
                             print("Warning: Tensor may be numerically rank-deficient")
                 except RuntimeError:
@@ -220,7 +220,7 @@ class NumericallyStableOperations:
             if tensor.ndim >= 2:
                 representative_slice = tensor.flatten(-2, -1)
                 if representative_slice.shape[-1] > 0:
-                    _, s, _ = torch.svd(representative_slice[..., :min(representative_slice.shape[-2:])].float())
+                    _, s, _ = torch.linalg.svd(representative_slice[..., :min(representative_slice.shape[-2:])].float(), full_matrices=False)
                     if s.numel() > 1 and s.min() > 0:
                         return (s.max() / s.min()).item()
         except RuntimeError:
@@ -240,7 +240,6 @@ class OptimizedPivotSelector:
         self.config = config
         self.device = device
         self.dtype = dtype
-        self._cached_max_norms = {}
     
     def select_pivot(self, 
                     R: torch.Tensor, 
@@ -259,6 +258,12 @@ class OptimizedPivotSelector:
         Returns:
             Tuple of pivot indices
         """
+        # Guard against empty availability
+        if not available.any():
+            raise RuntimeError(
+                f"No available locations at step {d}. All cells are forbidden or already selected."
+            )
+        
         # Compute residual norms efficiently
         norms = self._compute_residual_norms(R, d)
         
@@ -275,16 +280,17 @@ class OptimizedPivotSelector:
         return np.unravel_index(flat_idx, norms.shape)
     
     def _compute_residual_norms(self, R: torch.Tensor, d: int) -> torch.Tensor:
-        """Compute residual norms efficiently using vectorized operations."""
-        cache_key = (R.data_ptr(), d)
+        """
+        Compute residual norms using L2 norm (Algorithm 2 standard).
         
-        if cache_key not in self._cached_max_norms:
-            # Vectorized computation of residual norms
-            residual = R[..., d:]
-            norms = torch.sum(torch.abs(residual), dim=-1)
-            self._cached_max_norms[cache_key] = norms
-        
-        return self._cached_max_norms[cache_key]
+        Note: R is mutated in-place during factorization, so we cannot
+        cache by data_ptr(). Computing fresh each time ensures correct pivots.
+        Uses L2 norm for alignment with DEIM literature and numerical stability.
+        """
+        residual = R[..., d:]
+        # Use L2 norm (Frobenius norm along last dimension) per Algorithm 2
+        norms = torch.linalg.norm(residual, dim=-1)
+        return norms
     
     def _apply_distribution_penalties(self, norms: torch.Tensor, state: Dict) -> torch.Tensor:
         """Apply distribution penalties using vectorized operations."""
@@ -556,13 +562,26 @@ class TensorTubeQRDecomposition:
                 torch.cuda.manual_seed_all(random_state)
     
     def _setup_availability_mask(self, rejection_domain: Optional[Union[np.ndarray, torch.Tensor]]) -> torch.Tensor:
-        """Setup and validate availability mask for sensor placement."""
+        """
+        Setup and validate availability mask for sensor placement.
+        
+        Note: rejection_domain marks cells that CANNOT host sensors (True = forbidden).
+        We invert it to get availability mask (True = available).
+        """
         if rejection_domain is None:
             return torch.ones(self.spatial_shape, dtype=torch.bool, device=self.device)
         
         rejection_tensor = to_torch_tensor(rejection_domain, dtype=torch.bool, device=self.device)
         TensorValidator.validate_rejection_domain(rejection_tensor, self.spatial_shape)
-        return rejection_tensor.clone()
+        
+        # Invert: rejection marks forbidden, availability marks allowed
+        available = ~rejection_tensor
+        
+        # Validate that at least some cells are available
+        if not available.any():
+            raise ValueError("rejection_domain forbids all cells - no valid sensor locations")
+        
+        return available
     
     def _reset_results(self) -> None:
         """Reset algorithm results for fresh computation."""

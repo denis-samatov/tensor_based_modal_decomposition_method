@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from scipy import sparse as sp
 from scipy.sparse.linalg import eigsh
 
-from TBMD.modules.TensorHOSVD import (
+from TBMD.core.decomposition.hosvd import (
     TuckerDecomposerInterface,
     TensorProcessor,
     DecompositionResult,
@@ -51,8 +51,8 @@ from TBMD.modules.TensorHOSVD import (
     ValidationError,
     TensorDecompositionError
 )
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
-from TBMD.utils.geometry import MeshGeometry, MeshGraphBuilder
+from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
+from TBMD.core.geometry import MeshGeometry, MeshGraphBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -211,28 +211,16 @@ class GeometryAwareTuckerCore:
         for mode in range(len(tensor.shape)):
             unfolding = tl.unfold(tensor, mode)
             
-            if unfolding.shape[0] <= unfolding.shape[1]:
-                # Tall matrix: compute left singular vectors
-                try:
-                    U, _, _ = torch.svd(unfolding)
-                    factor = U[:, :ranks[mode]]
-                except:
-                    # Fallback to random initialization
-                    factor = torch.randn(unfolding.shape[0], ranks[mode], 
-                                       device=tensor.device, dtype=tensor.dtype)
-                    factor, _ = torch.qr(factor)
-            else:
-                # Wide matrix: compute via covariance
-                try:
-                    C = unfolding @ unfolding.T
-                    eigenvalues, eigenvectors = torch.linalg.eigh(C)
-                    # Take largest eigenvalues
-                    idx = torch.argsort(eigenvalues, descending=True)[:ranks[mode]]
-                    factor = eigenvectors[:, idx]
-                except:
-                    factor = torch.randn(unfolding.shape[0], ranks[mode],
-                                       device=tensor.device, dtype=tensor.dtype)
-                    factor, _ = torch.qr(factor)
+            # Always use SVD with full_matrices=False for memory efficiency
+            # This avoids the O(n²) memory explosion of the covariance approach
+            try:
+                U, _, _ = torch.linalg.svd(unfolding, full_matrices=False)
+                factor = U[:, :ranks[mode]]
+            except:
+                # Fallback to random initialization
+                factor = torch.randn(unfolding.shape[0], ranks[mode], 
+                                   device=tensor.device, dtype=tensor.dtype)
+                factor, _ = torch.linalg.qr(factor)
             
             factors.append(factor)
         
@@ -501,13 +489,21 @@ class GeometryAwareTuckerDecomposer:
             self.mesh = mesh
         
         # Validate mesh vs tensor shape
-        spatial_shape = self.tensor.shape[:-1] if len(self.tensor.shape) == 3 else self.tensor.shape
-        expected_cells = int(np.prod(spatial_shape))
+        # For geometry-aware decomposition, we expect the first mode to be spatial (flattened)
+        # Tensor can be 2D (spatial_cells, time) or 3D+ (spatial_x, spatial_y, ..., time)
+        if len(self.tensor.shape) == 2:
+            # 2D tensor: first dimension is spatial (already flattened)
+            expected_cells = self.tensor.shape[0]
+        else:
+            # 3D+ tensor: all dimensions except the last are spatial
+            spatial_shape = self.tensor.shape[:-1]
+            expected_cells = int(np.prod(spatial_shape))
         
         if self.mesh.adjacency_matrix.shape[0] != expected_cells:
             raise ValidationError(
                 f"Mesh has {self.mesh.adjacency_matrix.shape[0]} cells but "
-                f"tensor spatial size is {expected_cells}"
+                f"tensor spatial size is {expected_cells}. "
+                f"Tensor shape: {self.tensor.shape}"
             )
         
         self.geo_config = geo_config or GeometryAwareConfig()

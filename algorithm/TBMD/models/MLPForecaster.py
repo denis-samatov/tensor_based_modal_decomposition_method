@@ -7,6 +7,13 @@ from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from typing import Optional, Dict, Tuple, Union, List, Any
 
+# Import config
+try:
+    from ..config import MLPForecasterConfig
+except ImportError:
+    # Fallback if running standalone
+    MLPForecasterConfig = None
+
 
 class MLPModel(nn.Module):
     """Multi-layer perceptron model for time series forecasting."""
@@ -51,49 +58,90 @@ class MLPForecaster:
     """Complete pipeline for training and using MLP forecasting models."""
     
     def __init__(self, 
-                 in_dim: int,
-                 out_dim: int,
-                 hidden_dim: int = 256, 
-                 dropout_rate: float = 0.3,
-                 num_layers: int = 2,
-                 lr: float = 1e-3,
-                 weight_decay: float = 1e-5,
-                 device: str = None):
+                 in_dim: Optional[int] = None,
+                 out_dim: Optional[int] = None,
+                 config: Optional['MLPForecasterConfig'] = None,
+                 # Старые параметры для обратной совместимости
+                 hidden_dim: Optional[int] = None, 
+                 dropout_rate: Optional[float] = None,
+                 num_layers: Optional[int] = None,
+                 lr: Optional[float] = None,
+                 weight_decay: Optional[float] = None,
+                 device: Optional[str] = None):
         """
         Initialize the MLP forecaster.
         
         Args:
             in_dim: Input dimension
             out_dim: Output dimension
-            hidden_dim: Hidden layer dimension
-            dropout_rate: Dropout rate for regularization
-            num_layers: Number of hidden layers
-            lr: Learning rate
-            weight_decay: L2 regularization parameter
-            device: Device to run computations on ('cpu', 'cuda', or 'mps')
+            config: MLPForecasterConfig instance (recommended)
+            hidden_dim: Hidden layer dimension (deprecated, use config)
+            dropout_rate: Dropout rate (deprecated, use config)
+            num_layers: Number of hidden layers (deprecated, use config)
+            lr: Learning rate (deprecated, use config)
+            weight_decay: L2 regularization (deprecated, use config)
+            device: Device to run on (deprecated, use config)
+        
+        Examples:
+            >>> # New way (recommended):
+            >>> from algorithm.TBMD.config import MLPForecasterConfig
+            >>> config = MLPForecasterConfig(hidden_size=512, num_epochs=1000)
+            >>> forecaster = MLPForecaster(in_dim=10, out_dim=10, config=config)
+            >>> 
+            >>> # Old way (still works):
+            >>> forecaster = MLPForecaster(in_dim=10, out_dim=10, hidden_dim=256)
         """
-        # Set device
-        if device is None:
+        # Handle config vs individual parameters
+        if config is not None:
+            # New API: use config
+            self.config = config
+            if in_dim is not None:
+                self.config.in_dim = in_dim
+            if out_dim is not None:
+                self.config.out_dim = out_dim
+        else:
+            # Old API: create config from parameters
+            if MLPForecasterConfig is None:
+                raise ImportError("MLPForecasterConfig not available. Please update imports.")
+            
+            self.config = MLPForecasterConfig(
+                in_dim=in_dim,
+                out_dim=out_dim,
+                hidden_size=hidden_dim if hidden_dim is not None else 256,
+                dropout=dropout_rate if dropout_rate is not None else 0.3,
+                num_layers=num_layers if num_layers is not None else 2,
+                learning_rate=lr if lr is not None else 1e-3,
+                weight_decay=weight_decay if weight_decay is not None else 1e-5,
+                device=device
+            )
+        
+        # Set device from config
+        if self.config.device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 
                                       ('mps' if torch.backends.mps.is_available() else 'cpu'))
         else:
-            self.device = torch.device(device)
-            
-        print(f"Using device: {self.device}")
+            self.device = torch.device(self.config.device)
+        
+        if self.config.verbose:
+            print(f"Using device: {self.device}")
+        
+        # Store dimensions
+        self.in_dim = self.config.in_dim if self.config.in_dim else in_dim
+        self.out_dim = self.config.out_dim if self.config.out_dim else out_dim
         
         # Initialize model and hyperparameters
         self.model = MLPModel(
-            in_dim=in_dim,
-            out_dim=out_dim,
-            hidden_dim=hidden_dim,
-            dropout_rate=dropout_rate,
-            num_layers=num_layers
+            in_dim=self.in_dim,
+            out_dim=self.out_dim,
+            hidden_dim=self.config.hidden_size,
+            dropout_rate=self.config.dropout,
+            num_layers=self.config.num_layers
         ).to(self.device)
         
         self.optimizer = optim.Adam(
             self.model.parameters(), 
-            lr=lr, 
-            weight_decay=weight_decay
+            lr=self.config.learning_rate, 
+            weight_decay=self.config.weight_decay
         )
         
         self.loss_fn = nn.MSELoss()
@@ -102,8 +150,6 @@ class MLPForecaster:
             'val_loss': []
         }
         self.best_val_loss = float('inf')
-        self.in_dim = in_dim
-        self.out_dim = out_dim
     
     def prepare_data(self, 
                      x_history: np.ndarray, 
@@ -240,11 +286,11 @@ class MLPForecaster:
     
     def train(self, 
               x_history: np.ndarray, 
-              num_epochs: int = 500,
-              batch_size: int = 32,
-              val_split: float = 0.2,
-              early_stopping_patience: int = 20,
-              verbose: bool = True,
+              num_epochs: Optional[int] = None,
+              batch_size: Optional[int] = None,
+              val_split: Optional[float] = None,
+              early_stopping_patience: Optional[int] = None,
+              verbose: Optional[bool] = None,
               save_best: bool = True,
               model_path: str = None) -> Dict[str, List[float]]:
         """
@@ -263,11 +309,19 @@ class MLPForecaster:
         Returns:
             history: Training history
         """
+        # Use config defaults if not provided
+        num_epochs = num_epochs if num_epochs is not None else self.config.num_epochs
+        batch_size = batch_size if batch_size is not None else self.config.batch_size
+        val_split = val_split if val_split is not None else self.config.val_split
+        early_stopping_patience = early_stopping_patience if early_stopping_patience is not None else self.config.early_stopping_patience
+        verbose = verbose if verbose is not None else self.config.verbose
+        
         # Prepare data
         train_loader, val_loader = self.prepare_data(
             x_history, 
             val_split=val_split,
-            batch_size=batch_size
+            batch_size=batch_size,
+            shuffle=self.config.shuffle
         )
         
         # Initialize early stopping counter

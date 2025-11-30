@@ -5,6 +5,12 @@ import torch
 from typing import Dict, Tuple, List, Optional, Union, Any
 from sklearn.metrics import r2_score
 
+# Import config
+try:
+    from ..config import LinearForecasterConfig
+except ImportError:
+    LinearForecasterConfig = None
+
 
 class LinearForecaster:
     """
@@ -15,26 +21,55 @@ class LinearForecaster:
     X_output = X_input @ M^T where X_input and X_output are matrices of consecutive states.
     """
     
-    def __init__(self, use_torch: bool = False, device: str = None):
+    def __init__(self, 
+                 config: Optional['LinearForecasterConfig'] = None,
+                 use_torch: Optional[bool] = None, 
+                 device: Optional[str] = None):
         """
         Initialize the linear forecaster.
         
         Args:
-            use_torch: Whether to use PyTorch for calculations (useful for GPU acceleration).
-            device: Device to use if using PyTorch ('cpu', 'cuda', 'mps').
+            config: LinearForecasterConfig instance (recommended)
+            use_torch: Whether to use PyTorch (deprecated, use config)
+            device: Device to use if using PyTorch (deprecated, use config)
+        
+        Examples:
+            >>> # New way (recommended):
+            >>> from algorithm.TBMD.config import LinearForecasterConfig
+            >>> config = LinearForecasterConfig()
+            >>> forecaster = LinearForecaster(config=config)
+            >>> 
+            >>> # Old way (still works):
+            >>> forecaster = LinearForecaster(use_torch=True, device='cuda')
         """
+        # Handle config vs individual parameters
+        if config is not None:
+            self.config = config
+        else:
+            # Old API: create config from parameters
+            if LinearForecasterConfig is None:
+                raise ImportError("LinearForecasterConfig not available.")
+            
+            self.config = LinearForecasterConfig(
+                device=device
+            )
+            if use_torch is not None:
+                # LinearForecasterConfig doesn't have use_torch, but we can infer backend
+                self.config.backend = 'pytorch' if use_torch else 'numpy'
+        
         self.M = None
         self.trained = False
-        self.use_torch = use_torch
+        self.use_torch = (self.config.backend == 'pytorch')
         self.metrics = {}
         
-        if use_torch:
-            if device is None:
+        if self.use_torch:
+            if self.config.device is None:
                 self.device = torch.device('cuda' if torch.cuda.is_available() else 
                                       ('mps' if torch.backends.mps.is_available() else 'cpu'))
             else:
-                self.device = torch.device(device)
-            print(f"Using device: {self.device}")
+                self.device = torch.device(self.config.device)
+            if self.config.verbose:
+                print(f"Using device: {self.device}")
     
     def train(self, x_history: np.ndarray, verbose: bool = True) -> Dict[str, float]:
         """
@@ -59,14 +94,12 @@ class LinearForecaster:
             X_input_tensor = torch.tensor(X_input, dtype=torch.float32, device=self.device)
             X_output_tensor = torch.tensor(X_output, dtype=torch.float32, device=self.device)
             
-            # Calculate pseudoinverse and transformation matrix
-            if hasattr(torch, 'pinverse'):  # For newer PyTorch versions
-                X_input_pinv = torch.pinverse(X_input_tensor)
-                self.M = X_input_pinv @ X_output_tensor
-            else:  # Fallback to numpy
-                X_input_pinv = np.linalg.pinv(X_input)
-                self.M = np.matmul(X_input_pinv, X_output)
-                self.M = torch.tensor(self.M, dtype=torch.float32, device=self.device)
+            # Calculate pseudoinverse and transformation matrix with regularization
+            if hasattr(torch.linalg, 'pinv'):
+                X_input_pinv = torch.linalg.pinv(X_input_tensor, rcond=1e-3)
+            else:
+                X_input_pinv = torch.pinverse(X_input_tensor, rcond=1e-3)  # fallback
+            self.M = X_input_pinv @ X_output_tensor
                 
             # Calculate predictions for evaluation
             X_output_est = X_input_tensor @ torch.transpose(self.M, 0, 1)
@@ -84,7 +117,7 @@ class LinearForecaster:
             
         else:
             # Calculate pseudoinverse and transformation matrix using numpy
-            self.M = np.linalg.pinv(X_input) @ X_output  # (W, W)
+            self.M = np.linalg.pinv(X_input, rcond=1e-3) @ X_output  # (W, W)
             
             # Calculate predictions for evaluation
             X_output_est = X_input @ self.M.T  # (T-1, W)

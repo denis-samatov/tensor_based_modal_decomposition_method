@@ -20,14 +20,17 @@ Mathematical Formulation
 ------------------------
 Modified pivot selection criterion:
     
-    pivot = argmax_i { ||R[i, d:]||₂ + β * w_grad[i] - γ * w_prox[i] - δ * w_dist[i] }
+    pivot = argmax_i { ||R[i, d:]||₂ + β * w_grad[i] + η * w_amp[i] + ζ * w_energy[i] 
+                       - γ * w_prox[i] - δ * w_dist[i] }
 
 where:
     - ||R[i, d:]||₂: residual norm (standard QR criterion)
     - w_grad[i]: geometric weight (gradient magnitude)
+    - w_amp[i]: amplitude weight (RMS of field values)
+    - w_energy[i]: local energy weight (own + neighbors)
     - w_prox[i]: proximity penalty to existing sensors
     - w_dist[i]: distribution penalty (slice/region balance)
-    - β, γ, δ: tunable weights
+    - β, η, ζ, γ, δ: tunable weights
 
 References
 ----------
@@ -44,16 +47,16 @@ from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
 from scipy.sparse import csr_matrix
 
-from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
+from TBMD.core.sensor_placement.tensor_qr_factorization import (
     TensorTubeQRDecomposition,
-    TensorQRConfig,
     TensorValidator,
-    NumericallyStableOperations,
-    UniformDistributionManager
+    NumericallyStableOperations
 )
-from TBMD.utils.utils import to_torch_tensor, get_torch_device
-from TBMD.utils.geometry import (
+from TBMD.config.sensor_placement_config import SensorPlacementConfig
+from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
+from TBMD.core.geometry import (
     MeshGeometry,
+    MeshGraphBuilder,
     GeometricWeightComputer,
     estimate_characteristic_length
 )
@@ -62,11 +65,11 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class GeometricQRConfig(TensorQRConfig):
+class GeometricQRConfig(SensorPlacementConfig):
     """
     Extended configuration for geometry-aware QR factorization.
     
-    Inherits from TensorQRConfig and adds geometry-specific parameters.
+    Inherits from SensorPlacementConfig and adds geometry-specific parameters.
     
     New Attributes
     --------------
@@ -76,6 +79,10 @@ class GeometricQRConfig(TensorQRConfig):
         Weight γ for proximity penalty (higher = more spacing).
     distribution_weight : float, default=0.5
         Weight δ for distribution uniformity (complements existing penalties).
+    amplitude_weight : float, default=1.0
+        Weight for field amplitude/energy (higher = prefer high-amplitude regions).
+    energy_weight : float, default=0.5
+        Weight for local energy in spatial neighborhood.
     min_distance_factor : float, default=2.0
         Minimum sensor spacing as multiple of characteristic mesh length.
         Actual min_distance = min_distance_factor * h_char.
@@ -90,6 +97,8 @@ class GeometricQRConfig(TensorQRConfig):
     gradient_weight: float = 0.5
     proximity_weight: float = 1.0
     distribution_weight: float = 0.5
+    amplitude_weight: float = 1.0  # NEW: prioritize high-amplitude regions
+    energy_weight: float = 0.5      # NEW: local energy importance
     
     # Sensor spacing
     min_distance_factor: float = 2.0
@@ -154,6 +163,9 @@ class GeometryAwarePivotSelector:
         
         # Track placed sensors
         self.placed_sensors: List[int] = []
+        
+        # Store field data for amplitude/energy computation
+        self.field_data = field_data
     
     def _compute_gradient_weights(self, field_data: torch.Tensor) -> None:
         """Compute gradient-based geometric weights."""
@@ -184,6 +196,90 @@ class GeometryAwarePivotSelector:
         
         logger.info(f"Computed gradient weights: min={grad_mag.min():.4f}, "
                    f"max={grad_mag.max():.4f}, mean={grad_mag.mean():.4f}")
+    
+    def _compute_amplitude_weights(self, field_data: torch.Tensor) -> torch.Tensor:
+        """
+        Compute amplitude-based weights to prioritize high-energy regions.
+        
+        Parameters
+        ----------
+        field_data : torch.Tensor
+            Field data (N_cells, N_time) or (N_cells,).
+        
+        Returns
+        -------
+        torch.Tensor
+            Amplitude weights (N_cells,), normalized to [0, 1].
+        """
+        # Convert to torch if needed
+        if not isinstance(field_data, torch.Tensor):
+            field_data = torch.from_numpy(field_data).to(device=self.device, dtype=self.dtype)
+        
+        # Compute temporal mean and RMS for each cell
+        if field_data.ndim == 1:
+            amplitude = torch.abs(field_data)
+        else:
+            # RMS over time: sqrt(mean(field^2))
+            amplitude = torch.sqrt(torch.mean(field_data ** 2, dim=1))
+        
+        # Normalize to [0, 1]
+        if amplitude.max() > 0:
+            amplitude = amplitude / amplitude.max()
+        
+        logger.info(f"Computed amplitude weights: min={amplitude.min():.4f}, "
+                   f"max={amplitude.max():.4f}, mean={amplitude.mean():.4f}")
+        
+        return amplitude
+    
+    def _compute_energy_weights(self, field_data: torch.Tensor) -> torch.Tensor:
+        """
+        Compute local energy weights using mesh neighborhood.
+        
+        Energy at cell i = |f_i|^2 + sum_j(|f_j|^2) for neighbors j.
+        
+        Parameters
+        ----------
+        field_data : torch.Tensor
+            Field data (N_cells, N_time) or (N_cells,).
+        
+        Returns
+        -------
+        torch.Tensor
+            Energy weights (N_cells,), normalized to [0, 1].
+        """
+        # Convert to numpy for sparse operations
+        if isinstance(field_data, torch.Tensor):
+            field_np = field_data.detach().cpu().numpy()
+        else:
+            field_np = field_data
+        
+        # Compute local energy
+        if field_np.ndim == 1:
+            field_energy = field_np ** 2
+        else:
+            # Mean energy over time
+            field_energy = np.mean(field_np ** 2, axis=1)
+        
+        # Add neighbor energy (using adjacency matrix)
+        adj = self.mesh.adjacency_matrix
+        neighbor_energy = adj @ field_energy  # Sparse matrix-vector multiply
+        
+        # Total energy: own + neighbors
+        total_energy = field_energy + neighbor_energy
+        
+        # Normalize to [0, 1]
+        if total_energy.max() > 0:
+            total_energy = total_energy / total_energy.max()
+        
+        # Convert to torch
+        energy_weights = torch.from_numpy(total_energy).to(
+            device=self.device, dtype=self.dtype
+        )
+        
+        logger.info(f"Computed energy weights: min={total_energy.min():.4f}, "
+                   f"max={total_energy.max():.4f}, mean={total_energy.mean():.4f}")
+        
+        return energy_weights
     
     def select_pivot(self,
                     R: torch.Tensor,
@@ -229,6 +325,30 @@ class GeometryAwarePivotSelector:
                 # Scale gradients to be comparable to norms
                 scaled_gradients = self.config.gradient_weight * max_norm * grad_reshaped
                 norms = norms + scaled_gradients
+        
+        # 3b. Add amplitude-based weights (NEW!)
+        if self.field_data is not None and self.config.amplitude_weight > 0:
+            amplitude_weights = self._compute_amplitude_weights(self.field_data)
+            amp_reshaped = amplitude_weights.view(norms.shape)
+            max_norm = torch.max(norms[available])
+            
+            if max_norm > 0:
+                # Scale amplitude weights to be comparable to norms
+                scaled_amplitude = self.config.amplitude_weight * max_norm * amp_reshaped
+                norms = norms + scaled_amplitude
+                logger.debug(f"Added amplitude weights (weight={self.config.amplitude_weight:.2f})")
+        
+        # 3c. Add energy-based weights (NEW!)
+        if self.field_data is not None and self.config.energy_weight > 0:
+            energy_weights = self._compute_energy_weights(self.field_data)
+            energy_reshaped = energy_weights.view(norms.shape)
+            max_norm = torch.max(norms[available])
+            
+            if max_norm > 0:
+                # Scale energy weights to be comparable to norms
+                scaled_energy = self.config.energy_weight * max_norm * energy_reshaped
+                norms = norms + scaled_energy
+                logger.debug(f"Added energy weights (weight={self.config.energy_weight:.2f})")
         
         # 4. Apply proximity penalties
         if len(self.placed_sensors) > 0 and self.config.proximity_weight > 0:
@@ -316,7 +436,7 @@ class GeometryAwarePivotSelector:
                     imbalance = max(0, current_count - target_per_slice)
                     
                     if imbalance > 0:
-                        penalty_value = imbalance * self.config.SLICE_PENALTY_WEIGHT * max_norm
+                        penalty_value = imbalance * self.config.slice_penalty_weight * max_norm
                         penalties[..., z] += penalty_value
         
         return penalties
@@ -335,7 +455,7 @@ class GeometryAwareTensorQR:
     
     Usage
     -----
-    >>> from TBMD.utils.geometry import MeshGraphBuilder
+    >>> from TBMD.geometry import MeshGraphBuilder
     >>> 
     >>> # Build mesh
     >>> builder = MeshGraphBuilder(connectivity_type='grid')
@@ -403,18 +523,26 @@ class GeometryAwareTensorQR:
         
         # Convert tensor
         self.tensor = to_torch_tensor(tensor, device=self.device, dtype=self.dtype)
-        TensorValidator.validate_tensor(self.tensor)
+        # For geometry-aware QR, we support both 2D (spatial_cells, time) and 3D tensors
+        min_dims = 2 if self.tensor.ndim == 2 else 3
+        TensorValidator.validate_tensor(self.tensor, min_dims=min_dims)
         
         # Extract properties
         self.spatial_shape = self.tensor.shape[:-1]
         self.k = self.tensor.shape[-1]
         
         # Validate mesh compatibility
-        expected_cells = int(np.prod(self.spatial_shape))
+        if self.tensor.ndim == 2:
+            # 2D tensor: first dimension is spatial (already flattened)
+            expected_cells = self.tensor.shape[0]
+        else:
+            # 3D+ tensor: spatial dimensions are all except last
+            expected_cells = int(np.prod(self.spatial_shape))
+        
         if mesh.adjacency_matrix.shape[0] != expected_cells:
             raise ValueError(
                 f"Mesh has {mesh.adjacency_matrix.shape[0]} cells but "
-                f"tensor spatial size is {expected_cells}"
+                f"tensor spatial size is {expected_cells}. Tensor shape: {self.tensor.shape}"
             )
         
         # Validate sensor count
@@ -423,7 +551,11 @@ class GeometryAwareTensorQR:
         
         # Setup availability mask
         if rejection_domain is None:
-            self.available = torch.ones(self.spatial_shape, dtype=torch.bool, device=self.device)
+            if self.tensor.ndim == 2:
+                # 2D tensor: availability mask is 1D
+                self.available = torch.ones(self.tensor.shape[0], dtype=torch.bool, device=self.device)
+            else:
+                self.available = torch.ones(self.spatial_shape, dtype=torch.bool, device=self.device)
         else:
             rejection_tensor = to_torch_tensor(rejection_domain, dtype=torch.bool, device=self.device)
             TensorValidator.validate_rejection_domain(rejection_tensor, self.spatial_shape)
@@ -540,7 +672,7 @@ class GeometryAwareTensorQR:
         
         # Check significance
         tube_norm = torch.norm(tube)
-        if tube_norm < self.config.MACHINE_EPSILON_FACTOR:
+        if tube_norm < self.config.machine_epsilon_factor:
             return False
         
         # Update placement
@@ -551,7 +683,7 @@ class GeometryAwareTensorQR:
         u = self.numerical_ops.compute_householder_vector(tube)
         u_norm = torch.norm(u)
         
-        if u_norm < self.config.HOUSEHOLDER_THRESHOLD:
+        if u_norm < self.config.householder_threshold:
             return False
         
         # Apply transformations

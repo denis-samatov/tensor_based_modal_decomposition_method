@@ -67,18 +67,17 @@ from TBMD.modules.TensorBasedCompressiveSensing import (
     CompressiveSensingConfig,
     ExtensionCompressiveSensingConfig,
     CompressiveSensingMetrics,
-    TensorCompressiveSensing,
     LinearSolver,
     DeltaPolicy,
     StopPolicy,
-    MetricsHook,
-    make_linear_solver,
-    make_delta_policy,
-    make_stop_policy,
-    noop_metrics_hook
 )
-from TBMD.utils.utils import get_torch_device, to_torch_tensor
-from TBMD.utils.geometry import MeshGeometry
+from TBMD.core.reconstruction.tensor_compressive_sensing import (
+    TensorCompressiveSensing,
+    TensorCSReconstructor,
+    TensorCSConfig
+)
+from TBMD.utils.tbmd_utils import to_torch_tensor
+from TBMD.core.geometry import MeshGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +99,19 @@ class GeometryAwareCSConfig(CompressiveSensingConfig):
         If True, automatically tune α based on problem conditioning.
     alpha_max : float, default=1.0
         Maximum value for α when auto-tuning is enabled.
+    adaptive_alpha : bool, default=True
+        If True, adapt α based on measurement quality (amplitude).
+        Higher amplitude measurements → lower α (less smoothing needed).
+    alpha_reference_amplitude : float, default=50.0
+        Reference amplitude for adaptive α scaling.
+        α_adaptive = α_base * (ref_amp / actual_amp)
     """
     alpha: float = 0.01
     laplacian_type: str = 'normalized'
     auto_alpha: bool = True
     alpha_max: float = 1.0
+    adaptive_alpha: bool = True
+    alpha_reference_amplitude: float = 50.0
     
     def __post_init__(self) -> None:
         """Validate parameters after initialization."""
@@ -149,7 +156,7 @@ class GeometryAwareTensorCS:
     
     Examples
     --------
-    >>> from TBMD.utils.geometry import MeshGraphBuilder
+    >>> from TBMD.geometry import MeshGraphBuilder
     >>> # Build mesh
     >>> builder = MeshGraphBuilder(connectivity_type='grid')
     >>> mesh = builder.build_from_shape((100, 100))
@@ -228,23 +235,28 @@ class GeometryAwareTensorCS:
         else:
             self.L = torch.from_numpy(laplacian).to(device=device, dtype=dtype)
         
-        # Precompute L^T L
+        # Precompute L^T L term for regularization
+        # We need A^T L^T L A.
+        # Instead of computing L^T L (which is N_cells x N_cells and dense if L is not carefully handled),
+        # we compute (L A)^T (L A).
+        # L is (N_cells, N_cells), A is (N_cells, W).
+        # L @ A is (N_cells, W).
+        # (L @ A)^T @ (L @ A) is (W, W).
+        
+        # 1. Compute L @ A
         if self.L.is_sparse:
-            self.LTL = torch.sparse.mm(self.L.t(), self.L).to_dense()
+            # torch.sparse.mm requires sparse matrix as first argument
+            # A_flat is dense.
+            LA = torch.sparse.mm(self.L, A_flat)
         else:
-            self.LTL = self.L.T @ self.L
+            LA = self.L @ A_flat
+            
+        # 2. Compute (L A)^T (L A)
+        self.ALTLA = LA.T @ LA  # W×W
         
-        # Check dimensions
-        if self.LTL.shape[0] != spatial_size:
-            raise ValueError(
-                f"Laplacian size {self.LTL.shape[0]} doesn't match spatial size {spatial_size}"
-            )
-        
-        # Since x has size W (coefficients), we need to map to spatial dimensions
-        # Typically, A @ x reconstructs the spatial field, so L acts on spatial field
-        # We'll compute ||L (A x)||² = x^T A^T L^T L A x
-        # So the regularization matrix is: A^T L^T L A
-        self.ALTLA = A_flat.T @ self.LTL @ A_flat  # W×W
+        # We no longer need LTL or L stored if we only use it for this precomputation
+        # But we might keep L if needed for other things (though currently not used elsewhere in init)
+        # self.LTL is removed to save memory
         
         # Auto-tune alpha if requested
         if self.cfg.auto_alpha:
@@ -252,6 +264,11 @@ class GeometryAwareTensorCS:
             logger.info(f"Auto-tuned α = {self.alpha:.6f}")
         else:
             self.alpha = self.cfg.alpha
+        
+        # Apply adaptive alpha based on measurement quality
+        if self.cfg.adaptive_alpha:
+            self.alpha = self._adapt_alpha_to_measurements()
+            logger.info(f"Adaptive α (based on measurement quality) = {self.alpha:.6f}")
         
         # --- ADMM variables ---
         self.delta = self.cfg.delta_init
@@ -314,6 +331,55 @@ class GeometryAwareTensorCS:
         except Exception as e:
             logger.warning(f"Auto-tuning failed: {e}, using default α={self.cfg.alpha}")
             return self.cfg.alpha
+    
+    def _adapt_alpha_to_measurements(self) -> float:
+        """
+        Adapt α based on measurement quality (amplitude).
+        
+        Strategy: High-quality (high-amplitude) measurements need less smoothing.
+        
+        α_adaptive = α_base * (reference_amplitude / actual_amplitude)
+        
+        This ensures:
+        - High amplitude measurements (good SNR) → lower α (less smoothing)
+        - Low amplitude measurements (poor SNR) → higher α (more smoothing)
+        
+        Returns
+        -------
+        float
+            Adapted regularization strength.
+        """
+        try:
+            # Compute mean absolute measurement amplitude
+            measurement_amplitude = torch.mean(torch.abs(self.Ys)).item()
+            
+            if measurement_amplitude < 1e-6:
+                logger.warning("Measurements near zero, using current α")
+                return self.alpha
+            
+            # Adaptive scaling
+            reference = self.cfg.alpha_reference_amplitude
+            scale_factor = reference / measurement_amplitude
+            
+            # Clamp scale factor to reasonable range [0.1, 10.0]
+            scale_factor = max(0.1, min(scale_factor, 10.0))
+            
+            alpha_adaptive = self.alpha * scale_factor
+            
+            # Ensure within bounds
+            alpha_adaptive = max(1e-6, min(alpha_adaptive, self.cfg.alpha_max))
+            
+            logger.info(
+                f"Adaptive α: measurement_amp={measurement_amplitude:.2f}, "
+                f"reference={reference:.2f}, scale={scale_factor:.3f}, "
+                f"α: {self.alpha:.6f} → {alpha_adaptive:.6f}"
+            )
+            
+            return alpha_adaptive
+            
+        except Exception as e:
+            logger.warning(f"Adaptive α failed: {e}, using current α={self.alpha}")
+            return self.alpha
     
     @staticmethod
     def _soft(z: torch.Tensor, kappa: float) -> torch.Tensor:
