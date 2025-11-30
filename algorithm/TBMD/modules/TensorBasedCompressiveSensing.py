@@ -50,26 +50,20 @@ __all__ = [
 
 @dataclass
 class CompressiveSensingConfig:
-    """Core hyperparameters of the TBMD‑CS algorithm.
+    """Core hyperparameters for the TBMD-CS algorithm.
 
-    Parameters
-    ----------
-    max_iter : int, default=1000
-        Maximum number of ADMM iterations.
-    tol : float, default=1e-4
-        Termination threshold for ``max(primal_residual, dual_residual)``.
-    epsilon_l1 : float, default=1e-2
-        ε in equation (28); L1 shrinkage parameter for the soft-thresholding step.
-    delta_init : float, default=1.0
-        Initial value of the ADMM penalty parameter δ₀.
-    delta_max : float, default=1.0
-        Maximum cap for δ as in (36).
-    relax_lambda : float, default=0.95
-        Over-relaxation mixing coefficient for ``x`` and ``d`` (Boyd et al. suggestion: λ∈(1,2); here we use <1 to "under‑relax"). Must be in (0, 1).
-    device : str, default="cpu"
-        Torch device string (e.g., "cpu", "cuda:0").
-    dtype : torch.dtype, default=torch.float32
-        Torch dtype used for tensors in the algorithm.
+    Attributes:
+        max_iter (int): The maximum number of ADMM iterations.
+        tol (float): The termination threshold for the maximum of the primal
+            and dual residuals.
+        epsilon_l1 (float): The L1 shrinkage parameter for the soft-thresholding
+            step.
+        delta_init (float): The initial value of the ADMM penalty parameter.
+        delta_max (float): The maximum cap for the penalty parameter.
+        relax_lambda (float): The over-relaxation mixing coefficient for `x`
+            and `d`. Must be in the range (0, 1).
+        device (str): The torch device to use for computations.
+        dtype (torch.dtype): The torch dtype for tensors in the algorithm.
     """
 
     max_iter: int = 1000
@@ -95,24 +89,21 @@ class CompressiveSensingConfig:
 
 @dataclass
 class ExtensionCompressiveSensingConfig:
-    """Convenience switches for features outside the strict TBMD‑CS core.
+    """Configuration for extended features of the TBMD-CS algorithm.
 
-    Parameters
-    ----------
-    solver : {"cholesky", "direct", "svd"}, default="cholesky"
-        Linear system solver used in the x‑update.
-    reg : float, default=1e-8
-        Small diagonal regularization added to ``lhs`` for numerical stability.
-    delta_policy : {"boyd", "cap_only"}, default="boyd"
-        Strategy for adapting δ during iterations.
-    stop_policy : {"residual", "relative", "both"}, default="residual"
-        Termination rule. ``relative`` considers a rolling window drop; ``both`` is OR between the two.
-    relative_window : int, default=5
-        Window size (iterations) for the relative stopping rule.
-    relative_drop : float, default=1e-3
-        Required relative decrease within ``relative_window`` iterations.
-    collect_history : bool, default=True
-        Whether to store residual history for diagnostics and plotting.
+    Attributes:
+        solver (str): The linear system solver to use in the x-update. Can be
+            'cholesky', 'direct', or 'svd'.
+        reg (float): A small diagonal regularization value for numerical
+            stability.
+        delta_policy (str): The strategy for adapting the penalty parameter
+            during iterations ('boyd' or 'cap_only').
+        stop_policy (str): The termination rule ('residual', 'relative', or
+            'both').
+        relative_window (int): The window size for the relative stopping rule.
+        relative_drop (float): The required relative decrease for the relative
+            stopping rule.
+        collect_history (bool): Whether to store residual history.
     """
 
     # Linear solver
@@ -342,24 +333,16 @@ def noop_metrics_hook(*_args, **_kwargs) -> None:
 class CompressiveSensingMetrics:
     """Summary statistics returned after `solve`.
 
-    Attributes
-    ----------
-    iterations : int
-        The number of iterations actually performed.
-    converged : bool
-        Whether a stopping policy was triggered before `max_iter`.
-    primal_residual : float
-        The final primal residual norm.
-    dual_residual : float
-        The final dual residual norm.
-    objective : float
-        The final objective value.
-    delta_final : float
-        The final value of delta.
-    history : list[float]
-        The residual history if `collect_history` is True, otherwise an empty list.
-    time_sec : float
-        The wall-clock time for `solve` in seconds.
+    Attributes:
+        iterations (int): The number of iterations performed.
+        converged (bool): Whether the algorithm converged before reaching the
+            maximum number of iterations.
+        primal_residual (float): The final primal residual norm.
+        dual_residual (float): The final dual residual norm.
+        objective (float): The final objective value.
+        delta_final (float): The final value of the penalty parameter.
+        history (List[float]): The residual history, if collected.
+        time_sec (float): The wall-clock time for the `solve` method, in seconds.
     """
 
     iterations: int
@@ -378,31 +361,30 @@ class CompressiveSensingMetrics:
 
 
 class TensorCompressiveSensing:
-    """ADMM-based solver for tensor compressive sensing (TBMD‑CS core).
+    """An ADMM-based solver for tensor compressive sensing.
 
-    The class is agnostic to most implementation details through dependency
-    injection of strategies (solver, δ policy, stopping policy, hooks).
+    This class provides a flexible implementation of the TBMD-CS core algorithm,
+    allowing for dependency injection of strategies for solving, updating
+    parameters, and stopping.
 
-    Parameters
-    ----------
-    A : (… , W) array_like
-        Forward model flattened along the last axis. Spatial dims must match ``P`` and ``Y``.
-    P : bool array_like, shape = A.shape[:-1]
-        Sensor mask. Only entries with ``True`` are used.
-    Y : array_like, shape = A.shape[:-1]
-        Measurements corresponding to A.
-    core_cfg : CoreCompressiveSensingConfig, optional
-        Core algorithm configuration.
-    ext_cfg : ExtensionCompressiveSensingConfig, optional
-        Extensions configuration.
-    solver : LinearSolver, optional
-        Custom linear solver. If ``None``, a solver is built from ``ext_cfg``.
-    delta_policy : DeltaPolicy, optional
-        Custom δ policy. If ``None``, created from ``ext_cfg``.
-    stop_policy : StopPolicy, optional
-        Custom stop policy. If ``None``, created from ``ext_cfg``.
-    hook : MetricsHook, optional
-        Callback executed each iteration.
+    Args:
+        A (Union[np.ndarray, torch.Tensor]): The forward model, flattened
+            along the last axis.
+        P (Union[np.ndarray, torch.Tensor]): The sensor mask, with `True` for
+            active sensors.
+        Y (Union[np.ndarray, torch.Tensor]): The measurements corresponding to
+            `A`.
+        core_cfg (Optional[CompressiveSensingConfig]): The core algorithm
+            configuration.
+        ext_cfg (Optional[ExtensionCompressiveSensingConfig]): The extended
+            features configuration.
+        solver (Optional[LinearSolver]): A custom linear solver. If `None`, a
+            solver is created from `ext_cfg`.
+        delta_policy (Optional[DeltaPolicy]): A custom delta policy. If
+            `None`, a policy is created from `ext_cfg`.
+        stop_policy (Optional[StopPolicy]): A custom stop policy. If `None`, a
+            policy is created from `ext_cfg`.
+        hook (Optional[MetricsHook]): A callback executed at each iteration.
     """
 
     def __init__(
@@ -539,14 +521,13 @@ class TensorCompressiveSensing:
 
     # --- public API ------------------------------------------------
     def solve(self) -> Tuple[torch.Tensor, CompressiveSensingMetrics]:
-        """Run ADMM until convergence or ``max_iter``.
+        """Runs the ADMM algorithm until convergence or `max_iter`.
 
-        Returns
-        -------
-        x_vec : torch.Tensor, shape = (W,)
-            Recovered coefficients (detached CPU tensor).
-        metrics : CompressiveSensingMetrics
-            Summary metrics and diagnostics.
+        Returns:
+            Tuple[torch.Tensor, CompressiveSensingMetrics]: A tuple containing:
+                - x_vec (torch.Tensor): The recovered coefficients, with shape (W,).
+                - metrics (CompressiveSensingMetrics): Summary metrics and
+                  diagnostics.
         """
         start = time.perf_counter()
         converged = False
@@ -575,17 +556,17 @@ class TensorCompressiveSensing:
         return x_vec, metrics
 
     def reconstruction_error(self, x: Union[np.ndarray, torch.Tensor]) -> float:
-        """Relative reconstruction error w.r.t. the observed measurements.
+        """Calculates the relative reconstruction error.
 
-        Parameters
-        ----------
-        x : array_like
-            Ground-truth or reference vector of shape (W,) or (W, 1).
+        This method computes the error with respect to the observed
+        measurements.
 
-        Returns
-        -------
-        float
-            ‖A_s x − y_s‖ / ‖y_s‖, where the subscript ``s`` denotes rows selected by mask ``P``.
+        Args:
+            x (Union[np.ndarray, torch.Tensor]): The ground-truth or reference
+                vector, with shape (W,) or (W, 1).
+
+        Returns:
+            float: The relative reconstruction error.
         """
         x_t = to_torch_tensor(x, device=self.device, dtype=self.dtype).view(-1, 1)
         res = self.As @ x_t - self.Ys

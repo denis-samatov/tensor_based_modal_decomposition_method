@@ -59,23 +59,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GeometryAwareConfig:
-    """
-    Configuration for geometry-aware HOSVD.
-    
-    Attributes
-    ----------
-    alpha : float, default=0.01
-        Laplacian regularization strength. Higher values → smoother modes.
-    spatial_modes : List[int], default=[0]
-        Which modes to regularize (0-indexed). Typically mode 0 for spatial.
-    laplacian_type : {'standard', 'normalized'}, default='normalized'
-        Type of Laplacian to use.
-    connectivity_type : {'grid', 'knn', 'radius', 'delaunay'}, default='grid'
-        How to build the mesh graph.
-    connectivity_params : dict, default={}
-        Parameters for graph construction (e.g., {'k': 6} for knn).
-    use_generalized_eig : bool, default=False
-        If True, solve generalized eigenvalue problem; else use Tikhonov.
+    """Configuration for geometry-aware HOSVD.
+
+    Attributes:
+        alpha (float): Laplacian regularization strength. Higher values lead
+            to smoother modes. Defaults to 0.01.
+        spatial_modes (List[int]): The modes to regularize (0-indexed).
+            Typically, mode 0 is used for spatial regularization. Defaults to
+            [0].
+        laplacian_type (str): The type of Laplacian to use ('standard' or
+            'normalized'). Defaults to 'normalized'.
+        connectivity_type (str): The method for building the mesh graph
+            ('grid', 'knn', 'radius', or 'delaunay'). Defaults to 'grid'.
+        connectivity_params (dict): Parameters for graph construction (e.g.,
+            `{'k': 6}` for 'knn').
+        use_generalized_eig (bool): If `True`, solves a generalized eigenvalue
+            problem; otherwise, uses Tikhonov regularization. Defaults to
+            `False`.
     """
     alpha: float = 0.01
     spatial_modes: List[int] = None
@@ -96,11 +96,18 @@ class GeometryAwareConfig:
 
 
 class GeometryAwareTuckerCore:
-    """
-    Core implementation of geometry-aware Tucker decomposition.
-    
-    Uses alternating least squares (ALS) with Laplacian regularization
-    on specified modes.
+    """A core implementation of geometry-aware Tucker decomposition.
+
+    This class uses alternating least squares (ALS) with Laplacian
+    regularization on specified modes.
+
+    Args:
+        mesh (MeshGeometry): The mesh geometry, including Laplacian matrices.
+        geo_config (GeometryAwareConfig): The geometry-aware configuration.
+        ranks (Optional[Union[int, List[int]]]): The Tucker ranks.
+        epsilon (float): The convergence tolerance. Defaults to 1e-2.
+        max_iter (int): The maximum number of ALS iterations. Defaults to 50.
+        random_state (Optional[int]): The random seed for reproducibility.
     """
     
     def __init__(self, 
@@ -110,22 +117,6 @@ class GeometryAwareTuckerCore:
                  epsilon: float = 1e-2,
                  max_iter: int = 50,
                  random_state: Optional[int] = None):
-        """
-        Parameters
-        ----------
-        mesh : MeshGeometry
-            Mesh geometry with Laplacian matrices.
-        geo_config : GeometryAwareConfig
-            Geometry-aware configuration.
-        ranks : int or List[int], optional
-            Tucker ranks.
-        epsilon : float, default=1e-2
-            Convergence tolerance.
-        max_iter : int, default=50
-            Maximum ALS iterations.
-        random_state : int, optional
-            Random seed.
-        """
         self.mesh = mesh
         self.geo_config = geo_config
         self.ranks = ranks
@@ -143,20 +134,14 @@ class GeometryAwareTuckerCore:
                    f"regularizing modes {geo_config.spatial_modes}")
     
     def decompose(self, tensor: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-        """
-        Perform geometry-aware Tucker decomposition.
-        
-        Parameters
-        ----------
-        tensor : torch.Tensor
-            Input tensor.
-        
-        Returns
-        -------
-        core : torch.Tensor
-            Core tensor.
-        factors : List[torch.Tensor]
-            List of factor matrices, one per mode.
+        """Performs geometry-aware Tucker decomposition.
+
+        Args:
+            tensor (torch.Tensor): The input tensor.
+
+        Returns:
+            Tuple[torch.Tensor, List[torch.Tensor]]: A tuple containing the
+            core tensor and a list of factor matrices.
         """
         # Validate and normalize ranks
         if self.ranks is None:
@@ -434,27 +419,21 @@ class GeometryAwareTuckerCore:
 
 
 class GeometryAwareTuckerDecomposer:
-    """
-    High-level interface for geometry-aware Tucker decomposition.
-    
-    Usage
-    -----
-    >>> # Build mesh geometry
-    >>> builder = MeshGraphBuilder(connectivity_type='grid')
-    >>> mesh = builder.build_from_shape(spatial_shape=(100, 100))
-    >>> 
-    >>> # Configure geometry-aware HOSVD
-    >>> geo_config = GeometryAwareConfig(alpha=0.1, spatial_modes=[0])
-    >>> 
-    >>> # Decompose tensor
-    >>> decomposer = GeometryAwareTuckerDecomposer(
-    ...     tensor=my_tensor,
-    ...     mesh=mesh,
-    ...     geo_config=geo_config,
-    ...     ranks=[50, 10, 100]
-    ... )
-    >>> decomposer.decompose()
-    >>> core, factors = decomposer.cores, decomposer.factors
+    """A high-level interface for geometry-aware Tucker decomposition.
+
+    Args:
+        tensor (Union[torch.Tensor, np.ndarray]): The input tensor to decompose.
+        mesh (Union[MeshGeometry, Tuple[int, ...]]): A `MeshGeometry` object
+            or a tuple representing the spatial shape of the mesh.
+        geo_config (Optional[GeometryAwareConfig]): Configuration for the
+            geometry-aware decomposition.
+        ranks (Optional[Union[int, List[int]]]): The Tucker ranks.
+        epsilon (float): The convergence tolerance. Defaults to 1e-2.
+        max_iter (int): The maximum number of ALS iterations. Defaults to 50.
+        random_state (Optional[int]): The random seed for reproducibility.
+        device (str): The PyTorch device to use. Defaults to 'cpu'.
+        dtype (torch.dtype): The data type for the tensor. Defaults to
+            `torch.float32`.
     """
     
     def __init__(self,
@@ -467,29 +446,6 @@ class GeometryAwareTuckerDecomposer:
                  random_state: Optional[int] = None,
                  device: str = 'cpu',
                  dtype: torch.dtype = torch.float32):
-        """
-        Parameters
-        ----------
-        tensor : array-like
-            Input tensor to decompose.
-        mesh : MeshGeometry or tuple
-            Either a MeshGeometry object or a spatial shape tuple.
-            If tuple, builds a grid mesh automatically.
-        geo_config : GeometryAwareConfig, optional
-            Configuration for geometry-aware decomposition.
-        ranks : int or List[int], optional
-            Tucker ranks.
-        epsilon : float, default=1e-2
-            Convergence tolerance.
-        max_iter : int, default=50
-            Maximum ALS iterations.
-        random_state : int, optional
-            Random seed.
-        device : str, default='cpu'
-            PyTorch device.
-        dtype : torch.dtype, default=torch.float32
-            Data type.
-        """
         self.processor = TensorProcessor(device, dtype)
         self.tensor = self.processor.process_tensors(tensor)
         
@@ -534,7 +490,7 @@ class GeometryAwareTuckerDecomposer:
         self._factors = None
     
     def decompose(self) -> None:
-        """Perform geometry-aware decomposition."""
+        """Performs the geometry-aware decomposition."""
         if self.state != DecomposerState.INITIALIZED:
             logger.warning(f"Re-decomposing from state {self.state}")
         
@@ -548,27 +504,43 @@ class GeometryAwareTuckerDecomposer:
     
     @property
     def cores(self) -> torch.Tensor:
-        """Get core tensor."""
+        """Returns the core tensor of the decomposition.
+
+        Returns:
+            torch.Tensor: The core tensor.
+        """
         if self.state == DecomposerState.INITIALIZED:
             raise ValueError("Call decompose() first")
         return self._core
     
     @property
     def factors(self) -> List[torch.Tensor]:
-        """Get factor matrices."""
+        """Returns the factor matrices of the decomposition.
+
+        Returns:
+            List[torch.Tensor]: A list of factor matrices.
+        """
         if self.state == DecomposerState.INITIALIZED:
             raise ValueError("Call decompose() first")
         return self._factors
     
     def reconstruct(self) -> torch.Tensor:
-        """Reconstruct tensor from factors."""
+        """Reconstructs the tensor from its factors.
+
+        Returns:
+            torch.Tensor: The reconstructed tensor.
+        """
         if self.state != DecomposerState.DECOMPOSED:
             raise ValueError("Call decompose() first")
         
         return tl.tucker_to_tensor((self._core, self._factors))
     
     def get_spatial_modes(self) -> torch.Tensor:
-        """Get spatial factor matrix (mode 0 by default)."""
+        """Returns the spatial factor matrix (mode 0 by default).
+
+        Returns:
+            torch.Tensor: The spatial factor matrix.
+        """
         if self.state != DecomposerState.DECOMPOSED:
             raise ValueError("Call decompose() first")
         

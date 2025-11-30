@@ -26,23 +26,19 @@ from ..utils.utils import to_torch_tensor, get_torch_device
 
 @dataclass
 class MeshGeometry:
-    """
-    Container for mesh geometry information.
-    
-    Attributes
-    ----------
-    adjacency_matrix : scipy.sparse matrix (N_cells × N_cells)
-        Sparse adjacency matrix representing cell connectivity.
-    laplacian_matrix : scipy.sparse matrix (N_cells × N_cells)
-        Graph Laplacian matrix L = D - A.
-    normalized_laplacian : scipy.sparse matrix (N_cells × N_cells)
-        Normalized Laplacian L_sym = I - D^{-1/2} A D^{-1/2}.
-    coordinates : np.ndarray (N_cells, spatial_dim)
-        Cell center coordinates (x, y) or (x, y, z).
-    distances : scipy.sparse matrix (N_cells × N_cells), optional
-        Pairwise distances between adjacent cells.
-    gradient_weights : scipy.sparse matrix (N_cells × N_cells), optional
-        Edge weights based on gradient magnitude estimation.
+    """A container for mesh geometry information.
+
+    Attributes:
+        adjacency_matrix (sp.spmatrix): A sparse adjacency matrix representing
+            cell connectivity.
+        laplacian_matrix (sp.spmatrix): The graph Laplacian matrix L = D - A.
+        normalized_laplacian (sp.spmatrix): The normalized Laplacian L_sym = I
+            - D^{-1/2} A D^{-1/2}.
+        coordinates (np.ndarray): The cell center coordinates.
+        distances (Optional[sp.spmatrix]): The pairwise distances between
+            adjacent cells.
+        gradient_weights (Optional[sp.spmatrix]): The edge weights based on
+            gradient magnitude estimation.
     """
     adjacency_matrix: sp.spmatrix
     laplacian_matrix: sp.spmatrix
@@ -52,7 +48,16 @@ class MeshGeometry:
     gradient_weights: Optional[sp.spmatrix] = None
     
     def to_torch(self, device: str = 'cpu', dtype: torch.dtype = torch.float32) -> 'TorchMeshGeometry':
-        """Convert sparse matrices to PyTorch sparse tensors."""
+        """Converts sparse matrices to PyTorch sparse tensors.
+
+        Args:
+            device (str): The device to move the tensors to. Defaults to 'cpu'.
+            dtype (torch.dtype): The desired data type of the tensors. Defaults
+                to torch.float32.
+
+        Returns:
+            TorchMeshGeometry: A new object with PyTorch sparse tensors.
+        """
         dev = get_torch_device(device)
         
         def sparse_to_torch(mat):
@@ -76,8 +81,20 @@ class MeshGeometry:
 
 
 @dataclass
+@dataclass
 class TorchMeshGeometry:
-    """PyTorch version of MeshGeometry with sparse tensors."""
+    """A PyTorch version of MeshGeometry with sparse tensors.
+
+    Attributes:
+        adjacency_matrix (torch.Tensor): A sparse adjacency matrix.
+        laplacian_matrix (torch.Tensor): The graph Laplacian matrix.
+        normalized_laplacian (torch.Tensor): The normalized Laplacian.
+        coordinates (torch.Tensor): The cell center coordinates.
+        distances (Optional[torch.Tensor]): The pairwise distances between
+            adjacent cells.
+        gradient_weights (Optional[torch.Tensor]): The edge weights based on
+            gradient magnitude estimation.
+    """
     adjacency_matrix: torch.Tensor
     laplacian_matrix: torch.Tensor
     normalized_laplacian: torch.Tensor
@@ -87,44 +104,36 @@ class TorchMeshGeometry:
 
 
 class MeshGraphBuilder:
-    """
-    Build cell adjacency graphs for structured and unstructured meshes.
-    
-    Supports multiple connectivity strategies:
-    - 'grid': Regular grid with 4-connectivity (2D) or 6-connectivity (3D)
-    - 'knn': K-nearest neighbors based on cell centers
-    - 'radius': Connect cells within a distance threshold
-    - 'delaunay': Delaunay triangulation-based connectivity (2D/3D)
+    """Builds cell adjacency graphs for structured and unstructured meshes.
+
+    This class supports multiple connectivity strategies:
+    - 'grid': Regular grid with 4-connectivity (2D) or 6-connectivity (3D).
+    - 'knn': K-nearest neighbors based on cell centers.
+    - 'radius': Connects cells within a distance threshold.
+    - 'delaunay': Delaunay triangulation-based connectivity (2D/3D).
     """
     
     def __init__(self, connectivity_type: str = 'knn', **kwargs):
-        """
-        Parameters
-        ----------
-        connectivity_type : {'grid', 'knn', 'radius', 'delaunay'}
-            Type of connectivity to build.
-        **kwargs : dict
-            Additional parameters:
-            - k : int (for 'knn'), default 6
-            - radius : float (for 'radius')
-            - periodic : bool (for 'grid'), default False
+        """Initializes the MeshGraphBuilder.
+
+        Args:
+            connectivity_type (str): The type of connectivity to build. Can be
+                'grid', 'knn', 'radius', or 'delaunay'. Defaults to 'knn'.
+            **kwargs: Additional parameters for the connectivity type (e.g.,
+                `k` for 'knn', `radius` for 'radius').
         """
         self.connectivity_type = connectivity_type
         self.params = kwargs
         
     def build_from_shape(self, spatial_shape: Tuple[int, ...]) -> MeshGeometry:
-        """
-        Build graph for a regular grid mesh.
-        
-        Parameters
-        ----------
-        spatial_shape : tuple of int
-            Shape of the grid (H, W) or (H, W, D).
-        
-        Returns
-        -------
-        MeshGeometry
-            Constructed mesh geometry.
+        """Builds a graph for a regular grid mesh.
+
+        Args:
+            spatial_shape (Tuple[int, ...]): The shape of the grid (H, W) or
+                (H, W, D).
+
+        Returns:
+            MeshGeometry: The constructed mesh geometry.
         """
         if len(spatial_shape) == 2:
             return self._build_2d_grid(spatial_shape)
@@ -134,18 +143,14 @@ class MeshGraphBuilder:
             raise ValueError(f"Unsupported spatial dimension: {len(spatial_shape)}")
     
     def build_from_coordinates(self, coordinates: np.ndarray) -> MeshGeometry:
-        """
-        Build graph from cell center coordinates (unstructured mesh).
-        
-        Parameters
-        ----------
-        coordinates : np.ndarray (N_cells, spatial_dim)
-            Cell center coordinates.
-        
-        Returns
-        -------
-        MeshGeometry
-            Constructed mesh geometry.
+        """Builds a graph from cell center coordinates (unstructured mesh).
+
+        Args:
+            coordinates (np.ndarray): The cell center coordinates, with shape
+                (N_cells, spatial_dim).
+
+        Returns:
+            MeshGeometry: The constructed mesh geometry.
         """
         N = len(coordinates)
         
@@ -399,9 +404,8 @@ class MeshGraphBuilder:
 
 
 class GeometricWeightComputer:
-    """
-    Compute geometric weights for sensor placement.
-    
+    """Computes geometric weights for sensor placement.
+
     These weights help prioritize areas with:
     - High spatial gradients (sharp fronts)
     - Geometric significance (corners, boundaries)
@@ -409,30 +413,26 @@ class GeometricWeightComputer:
     """
     
     def __init__(self, mesh: MeshGeometry):
-        """
-        Parameters
-        ----------
-        mesh : MeshGeometry
-            Mesh geometry information.
+        """Initializes the GeometricWeightComputer.
+
+        Args:
+            mesh (MeshGeometry): The mesh geometry information.
         """
         self.mesh = mesh
     
     def compute_gradient_weights(self, field: np.ndarray, method: str = 'fd') -> np.ndarray:
-        """
-        Compute spatial gradient magnitude for each cell.
-        
-        Parameters
-        ----------
-        field : np.ndarray (N_cells, N_time) or (N_cells,)
-            Scalar field values at each cell.
-        method : {'fd', 'graph'}
-            'fd': Finite difference approximation using neighbors
-            'graph': Graph-based gradient using Laplacian
-        
-        Returns
-        -------
-        np.ndarray (N_cells,)
-            Gradient magnitude at each cell (averaged over time if field is 2D).
+        """Computes the spatial gradient magnitude for each cell.
+
+        Args:
+            field (np.ndarray): A scalar field of values at each cell, with
+                shape (N_cells, N_time) or (N_cells,).
+            method (str): The method to use for gradient computation. Can be
+                'fd' (finite difference) or 'graph' (graph-based). Defaults to
+                'fd'.
+
+        Returns:
+            np.ndarray: The gradient magnitude at each cell, averaged over
+            time if the field is 2D.
         """
         if field.ndim == 2:
             # Average over time
@@ -506,20 +506,17 @@ class GeometricWeightComputer:
     
     def compute_proximity_penalty(self, sensor_positions: np.ndarray,
                                    min_distance: float) -> np.ndarray:
-        """
-        Compute penalty for placing sensors too close to existing ones.
-        
-        Parameters
-        ----------
-        sensor_positions : np.ndarray (N_sensors,)
-            Indices of currently placed sensors.
-        min_distance : float
-            Minimum allowed distance between sensors (in coordinate units).
-        
-        Returns
-        -------
-        np.ndarray (N_cells,)
-            Penalty values for each cell (higher = less desirable).
+        """Computes a penalty for placing sensors too close to existing ones.
+
+        Args:
+            sensor_positions (np.ndarray): The indices of currently placed
+                sensors, with shape (N_sensors,).
+            min_distance (float): The minimum allowed distance between sensors,
+                in coordinate units.
+
+        Returns:
+            np.ndarray: The penalty values for each cell, with shape
+            (N_cells,). Higher values are less desirable.
         """
         N = len(self.mesh.coordinates)
         penalty = np.zeros(N)
@@ -542,20 +539,16 @@ class GeometricWeightComputer:
 
 
 def estimate_characteristic_length(mesh: MeshGeometry) -> float:
-    """
-    Estimate characteristic length scale of the mesh.
-    
-    Uses average edge length from adjacency matrix and distances.
-    
-    Parameters
-    ----------
-    mesh : MeshGeometry
-        Mesh geometry.
-    
-    Returns
-    -------
-    float
-        Characteristic length (mean edge length).
+    """Estimates the characteristic length scale of the mesh.
+
+    This function uses the average edge length from the adjacency matrix and
+    distances to estimate the characteristic length.
+
+    Args:
+        mesh (MeshGeometry): The mesh geometry.
+
+    Returns:
+        float: The characteristic length, which is the mean edge length.
     """
     if mesh.distances is not None:
         D_coo = mesh.distances.tocoo()

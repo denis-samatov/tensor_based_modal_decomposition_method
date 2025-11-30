@@ -9,26 +9,19 @@ from typing import Optional, Dict, Tuple, Union, List, Any
 
 
 class MLPModel(nn.Module):
-    """A multi-layer perceptron model for time series forecasting."""
+    """A multi-layer perceptron model for time series forecasting.
+
+    Args:
+        in_dim (int): The input dimension.
+        out_dim (int): The output dimension.
+        hidden_dim (int, optional): The hidden layer dimension. Defaults to 256.
+        dropout_rate (float, optional): The dropout rate for regularization.
+            Defaults to 0.3.
+        num_layers (int, optional): The number of hidden layers. Defaults to 2.
+    """
     
     def __init__(self, in_dim: int, out_dim: int, hidden_dim: int = 256, 
                  dropout_rate: float = 0.3, num_layers: int = 2):
-        """
-        Initialize the MLP model.
-        
-        Parameters
-        ----------
-        in_dim : int
-            The input dimension.
-        out_dim : int
-            The output dimension.
-        hidden_dim : int, optional
-            The hidden layer dimension, by default 256.
-        dropout_rate : float, optional
-            The dropout rate for regularization, by default 0.3.
-        num_layers : int, optional
-            The number of hidden layers, by default 2.
-        """
         super().__init__()
         
         layers = []
@@ -49,43 +42,32 @@ class MLPModel(nn.Module):
         self.net = nn.Sequential(*layers)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Perform a forward pass through the model.
+        """Performs a forward pass through the model.
 
-        Parameters
-        ----------
-        x : torch.Tensor
-            The input tensor.
+        Args:
+            x (torch.Tensor): The input tensor.
 
-        Returns
-        -------
-        torch.Tensor
-            The output tensor.
+        Returns:
+            torch.Tensor: The output tensor.
         """
         return self.net(x)
 
 
 class MLPForecaster:
-    """A complete pipeline for training and using MLP forecasting models.
+    """A pipeline for training and using MLP forecasting models.
 
-    Parameters
-    ----------
-    in_dim : int
-        The input dimension.
-    out_dim : int
-        The output dimension.
-    hidden_dim : int, optional
-        The hidden layer dimension, by default 256.
-    dropout_rate : float, optional
-        The dropout rate for regularization, by default 0.3.
-    num_layers : int, optional
-        The number of hidden layers, by default 2.
-    lr : float, optional
-        The learning rate, by default 1e-3.
-    weight_decay : float, optional
-        The L2 regularization parameter, by default 1e-5.
-    device : str, optional
-        The device to run computations on ('cpu', 'cuda', or 'mps'), by
-        default None.
+    Args:
+        in_dim (int): The input dimension.
+        out_dim (int): The output dimension.
+        hidden_dim (int, optional): The hidden layer dimension. Defaults to 256.
+        dropout_rate (float, optional): The dropout rate for regularization.
+            Defaults to 0.3.
+        num_layers (int, optional): The number of hidden layers. Defaults to 2.
+        lr (float, optional): The learning rate. Defaults to 1e-3.
+        weight_decay (float, optional): The L2 regularization parameter.
+            Defaults to 1e-5.
+        device (str, optional): The device to run computations on ('cpu',
+            'cuda', or 'mps'). If `None`, the device is automatically selected.
     """
     
     def __init__(self, 
@@ -97,19 +79,6 @@ class MLPForecaster:
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
                  device: str = None):
-        """
-        Initialize the MLP forecaster.
-        
-        Args:
-            in_dim: Input dimension
-            out_dim: Output dimension
-            hidden_dim: Hidden layer dimension
-            dropout_rate: Dropout rate for regularization
-            num_layers: Number of hidden layers
-            lr: Learning rate
-            weight_decay: L2 regularization parameter
-            device: Device to run computations on ('cpu', 'cuda', or 'mps')
-        """
         # Set device
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 
@@ -148,24 +117,20 @@ class MLPForecaster:
                      val_split: float = 0.2,
                      batch_size: int = 32,
                      shuffle: bool = True) -> Tuple[DataLoader, Optional[DataLoader]]:
-        """Prepare the training and validation data loaders.
-        
-        Parameters
-        ----------
-        x_history : np.ndarray
-            The historical data array of shape (T, W).
-        val_split : float, optional
-            The validation split ratio, by default 0.2.
-        batch_size : int, optional
-            The batch size, by default 32.
-        shuffle : bool, optional
-            Whether to shuffle the data, by default True.
-            
-        Returns
-        -------
-        Tuple[DataLoader, Optional[DataLoader]]
-            A tuple containing the training data loader and the validation data
-            loader, which is `None` if `val_split` is 0.
+        """Prepares the training and validation data loaders.
+
+        Args:
+            x_history (np.ndarray): The historical data, with shape (T, W).
+            val_split (float, optional): The validation split ratio. Defaults
+                to 0.2.
+            batch_size (int, optional): The batch size. Defaults to 32.
+            shuffle (bool, optional): Whether to shuffle the data. Defaults to
+                True.
+
+        Returns:
+            Tuple[DataLoader, Optional[DataLoader]]: A tuple containing the
+            training and validation data loaders. The validation loader is
+            `None` if `val_split` is 0.
         """
         # Create input-output pairs
         X_input = x_history[:-1, :]   # (T-1, W)
@@ -223,17 +188,13 @@ class MLPForecaster:
             return train_loader, None
     
     def train_epoch(self, train_loader: DataLoader) -> float:
-        """Train the model for one epoch.
-        
-        Parameters
-        ----------
-        train_loader : DataLoader
-            The training data loader.
-            
-        Returns
-        -------
-        float
-            The average training loss for this epoch.
+        """Trains the model for one epoch.
+
+        Args:
+            train_loader (DataLoader): The training data loader.
+
+        Returns:
+            float: The average training loss for the epoch.
         """
         self.model.train()
         total_loss = 0.0
@@ -258,17 +219,13 @@ class MLPForecaster:
         return avg_loss
     
     def validate(self, val_loader: DataLoader) -> float:
-        """Validate the model.
-        
-        Parameters
-        ----------
-        val_loader : DataLoader
-            The validation data loader.
-            
-        Returns
-        -------
-        float
-            The average validation loss.
+        """Validates the model.
+
+        Args:
+            val_loader (DataLoader): The validation data loader.
+
+        Returns:
+            float: The average validation loss.
         """
         self.model.eval()
         total_loss = 0.0
@@ -297,31 +254,26 @@ class MLPForecaster:
               verbose: bool = True,
               save_best: bool = True,
               model_path: str = None) -> Dict[str, List[float]]:
-        """Train the model.
-        
-        Parameters
-        ----------
-        x_history : np.ndarray
-            The historical data array of shape (T, W).
-        num_epochs : int, optional
-            The number of training epochs, by default 500.
-        batch_size : int, optional
-            The batch size, by default 32.
-        val_split : float, optional
-            The validation split ratio, by default 0.2.
-        early_stopping_patience : int, optional
-            The patience for early stopping, by default 20.
-        verbose : bool, optional
-            Whether to print progress, by default True.
-        save_best : bool, optional
-            Whether to save the best model, by default True.
-        model_path : str, optional
-            The path to save the best model to, by default None.
-            
-        Returns
-        -------
-        Dict[str, List[float]]
-            The training history.
+        """Trains the model.
+
+        Args:
+            x_history (np.ndarray): The historical data, with shape (T, W).
+            num_epochs (int, optional): The number of training epochs. Defaults
+                to 500.
+            batch_size (int, optional): The batch size. Defaults to 32.
+            val_split (float, optional): The validation split ratio. Defaults
+                to 0.2.
+            early_stopping_patience (int, optional): The patience for early
+                stopping. Defaults to 20.
+            verbose (bool, optional): Whether to print progress. Defaults to
+                True.
+            save_best (bool, optional): Whether to save the best model.
+                Defaults to True.
+            model_path (str, optional): The path to save the best model to.
+                Defaults to None.
+
+        Returns:
+            Dict[str, List[float]]: The training history.
         """
         # Prepare data
         train_loader, val_loader = self.prepare_data(
@@ -371,17 +323,13 @@ class MLPForecaster:
         return self.training_history
     
     def predict_next(self, x_current: np.ndarray) -> np.ndarray:
-        """Predict the next state.
-        
-        Parameters
-        ----------
-        x_current : np.ndarray
-            The current state vector of shape (W,).
-            
-        Returns
-        -------
-        np.ndarray
-            The predicted next state vector of shape (W,).
+        """Predicts the next state.
+
+        Args:
+            x_current (np.ndarray): The current state vector, with shape (W,).
+
+        Returns:
+            np.ndarray: The predicted next state vector, with shape (W,).
         """
         self.model.eval()
         
@@ -396,19 +344,14 @@ class MLPForecaster:
         return x_next.detach().cpu().numpy()
     
     def predict_sequence(self, x_start: np.ndarray, n_steps: int) -> np.ndarray:
-        """Predict a sequence of future states.
-        
-        Parameters
-        ----------
-        x_start : np.ndarray
-            The starting state vector of shape (W,).
-        n_steps : int
-            The number of steps to predict.
-            
-        Returns
-        -------
-        np.ndarray
-            The predicted sequence of shape (n_steps, W).
+        """Predicts a sequence of future states.
+
+        Args:
+            x_start (np.ndarray): The starting state vector, with shape (W,).
+            n_steps (int): The number of steps to predict.
+
+        Returns:
+            np.ndarray: The predicted sequence, with shape (n_steps, W).
         """
         self.model.eval()
         
@@ -426,12 +369,10 @@ class MLPForecaster:
         return sequence[1:, :]  # Remove the starting state
     
     def save_model(self, path: str) -> None:
-        """Save the model.
-        
-        Parameters
-        ----------
-        path : str
-            The path to save the model to.
+        """Saves the model.
+
+        Args:
+            path (str): The path to save the model to.
         """
         dir_path = os.path.dirname(path)
         if dir_path:
@@ -448,12 +389,10 @@ class MLPForecaster:
         }, path)
     
     def load_model(self, path: str) -> None:
-        """Load the model.
-        
-        Parameters
-        ----------
-        path : str
-            The path to load the model from.
+        """Loads the model.
+
+        Args:
+            path (str): The path to load the model from.
         """
         # Load checkpoint
         checkpoint = torch.load(path, map_location=self.device)
@@ -469,12 +408,11 @@ class MLPForecaster:
         self.best_val_loss = checkpoint.get('best_val_loss', self.best_val_loss)
     
     def plot_training_history(self, figsize: Tuple[int, int] = (10, 6)) -> None:
-        """Plot the training history.
-        
-        Parameters
-        ----------
-        figsize : Tuple[int, int], optional
-            The figure size, by default (10, 6).
+        """Plots the training history.
+
+        Args:
+            figsize (Tuple[int, int], optional): The figure size. Defaults to
+                (10, 6).
         """
         plt.figure(figsize=figsize)
         epochs = range(1, len(self.training_history['train_loss']) + 1)
@@ -494,17 +432,13 @@ class MLPForecaster:
         plt.show()
     
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
-        """Evaluate the model on historical data.
-        
-        Parameters
-        ----------
-        x_history : np.ndarray
-            The historical data array of shape (T, W).
-            
-        Returns
-        -------
-        Dict[str, float]
-            A dictionary of evaluation metrics.
+        """Evaluates the model on historical data.
+
+        Args:
+            x_history (np.ndarray): The historical data, with shape (T, W).
+
+        Returns:
+            Dict[str, float]: A dictionary of evaluation metrics.
         """
         self.model.eval()
         

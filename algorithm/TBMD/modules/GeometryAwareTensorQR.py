@@ -63,28 +63,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GeometricQRConfig(TensorQRConfig):
-    """
-    Extended configuration for geometry-aware QR factorization.
-    
-    Inherits from TensorQRConfig and adds geometry-specific parameters.
-    
-    New Attributes
-    --------------
-    gradient_weight : float, default=0.5
-        Weight β for geometric gradient importance (0 = ignore gradients).
-    proximity_weight : float, default=1.0
-        Weight γ for proximity penalty (higher = more spacing).
-    distribution_weight : float, default=0.5
-        Weight δ for distribution uniformity (complements existing penalties).
-    min_distance_factor : float, default=2.0
-        Minimum sensor spacing as multiple of characteristic mesh length.
-        Actual min_distance = min_distance_factor * h_char.
-    gradient_method : {'fd', 'graph'}, default='graph'
-        Method for computing spatial gradients.
-    adaptive_weights : bool, default=True
-        If True, automatically normalize and scale weights based on data.
-    use_graph_distance : bool, default=False
-        If True, use graph geodesic distance; else Euclidean distance.
+    """An extended configuration for geometry-aware QR factorization.
+
+    This class inherits from `TensorQRConfig` and adds geometry-specific
+    parameters.
+
+    Attributes:
+        gradient_weight (float): The weight for geometric gradient importance.
+            Defaults to 0.5.
+        proximity_weight (float): The weight for the proximity penalty. Higher
+            values encourage more spacing between sensors. Defaults to 1.0.
+        distribution_weight (float): The weight for distribution uniformity.
+            Defaults to 0.5.
+        min_distance_factor (float): The minimum sensor spacing as a multiple
+            of the characteristic mesh length. Defaults to 2.0.
+        gradient_method (str): The method for computing spatial gradients
+            ('fd' or 'graph'). Defaults to 'graph'.
+        adaptive_weights (bool): If `True`, automatically normalizes and
+            scales weights based on the data. Defaults to `True`.
+        use_graph_distance (bool): If `True`, uses graph geodesic distance;
+            otherwise, uses Euclidean distance. Defaults to `False`.
     """
     # Geometry-specific weights
     gradient_weight: float = 0.5
@@ -101,13 +99,19 @@ class GeometricQRConfig(TensorQRConfig):
 
 
 class GeometryAwarePivotSelector:
-    """
-    Enhanced pivot selector incorporating geometric information.
-    
-    Combines residual norms from QR with:
-    - Field gradient weights
-    - Proximity penalties
-    - Mesh topology awareness
+    """An enhanced pivot selector that incorporates geometric information.
+
+    This selector combines residual norms from QR factorization with field
+    gradient weights, proximity penalties, and mesh topology awareness to
+    improve pivot selection.
+
+    Args:
+        config (GeometricQRConfig): The configuration with geometric parameters.
+        mesh (MeshGeometry): The mesh geometry information.
+        field_data (Optional[torch.Tensor]): Field data for computing
+            gradients. If `None`, gradients are not used.
+        device (torch.device): The PyTorch device.
+        dtype (torch.dtype): The data type.
     """
     
     def __init__(self,
@@ -116,21 +120,6 @@ class GeometryAwarePivotSelector:
                  field_data: Optional[torch.Tensor],
                  device: torch.device,
                  dtype: torch.dtype):
-        """
-        Parameters
-        ----------
-        config : GeometricQRConfig
-            Configuration with geometric parameters.
-        mesh : MeshGeometry
-            Mesh geometry information.
-        field_data : torch.Tensor, optional
-            Field data for computing gradients (spatial × time).
-            If None, gradients are not used.
-        device : torch.device
-            PyTorch device.
-        dtype : torch.dtype
-            Data type.
-        """
         self.config = config
         self.mesh = mesh
         self.device = device
@@ -193,24 +182,17 @@ class GeometryAwarePivotSelector:
                     d: int,
                     available: torch.Tensor,
                     distribution_state: Optional[Dict] = None) -> Tuple[int, ...]:
-        """
-        Select pivot with geometric enhancements.
-        
-        Parameters
-        ----------
-        R : torch.Tensor
-            Current R matrix from QR.
-        d : int
-            Current decomposition step.
-        available : torch.Tensor
-            Boolean mask of available positions.
-        distribution_state : dict, optional
-            State for distribution tracking.
-        
-        Returns
-        -------
-        Tuple[int, ...]
-            Multi-index of selected pivot.
+        """Selects a pivot with geometric enhancements.
+
+        Args:
+            R (torch.Tensor): The current R matrix from the QR decomposition.
+            d (int): The current decomposition step.
+            available (torch.Tensor): A boolean mask of available positions.
+            distribution_state (Optional[Dict]): The state for distribution
+                tracking.
+
+        Returns:
+            Tuple[int, ...]: The multi-index of the selected pivot.
         """
         # 1. Compute residual norms (standard QR criterion)
         norms = self._compute_residual_norms(R, d)
@@ -328,36 +310,27 @@ class GeometryAwarePivotSelector:
 
 
 class GeometryAwareTensorQR:
-    """
-    Geometry-aware Tensor QR factorization for optimal sensor placement.
-    
-    Extends TensorTubeQRDecomposition with geometric information from
-    unstructured meshes to improve sensor placement quality.
-    
-    Usage
-    -----
-    >>> from TBMD.utils.geometry import MeshGraphBuilder
-    >>> 
-    >>> # Build mesh
-    >>> builder = MeshGraphBuilder(connectivity_type='grid')
-    >>> mesh = builder.build_from_shape((100, 100))
-    >>> 
-    >>> # Configure
-    >>> config = GeometricQRConfig(
-    ...     gradient_weight=0.5,
-    ...     proximity_weight=1.0,
-    ...     min_distance_factor=2.0
-    ... )
-    >>> 
-    >>> # Perform QR with geometry
-    >>> qr = GeometryAwareTensorQR(
-    ...     tensor=my_tensor,
-    ...     mesh=mesh,
-    ...     N=20,
-    ...     config=config,
-    ...     field_data=my_tensor  # For gradient computation
-    ... )
-    >>> P, Q, R = qr.factorize()
+    """A geometry-aware Tensor QR factorization for optimal sensor placement.
+
+    This class extends `TensorTubeQRDecomposition` with geometric information
+    from unstructured meshes to improve the quality of sensor placement.
+
+    Args:
+        tensor (Union[np.ndarray, torch.Tensor, tl.tensor]): The input tensor.
+        mesh (MeshGeometry): The mesh geometry with adjacency and Laplacian.
+        N (int): The number of sensors to place.
+        field_data (Optional[Union[np.ndarray, torch.Tensor]]): Field data for
+            gradient computation. If `None`, the input tensor is used.
+        rejection_domain (Optional[Union[np.ndarray, torch.Tensor]]): A boolean
+            mask of forbidden positions.
+        random_state (Optional[int]): The random seed for reproducibility.
+        check_orthogonality (bool): If `True`, verifies the orthogonality of Q
+            during factorization. Defaults to `False`.
+        device (str): The PyTorch device to use. Defaults to "cpu".
+        dtype (torch.dtype): The data type for tensors. Defaults to
+            `torch.float32`.
+        config (Optional[GeometricQRConfig]): The configuration with geometric
+            parameters.
     """
     
     def __init__(self,
@@ -371,30 +344,6 @@ class GeometryAwareTensorQR:
                  device: str = "cpu",
                  dtype: torch.dtype = torch.float32,
                  config: Optional[GeometricQRConfig] = None):
-        """
-        Parameters
-        ----------
-        tensor : array-like
-            Input tensor (spatial × time).
-        mesh : MeshGeometry
-            Mesh geometry with adjacency and Laplacian.
-        N : int
-            Number of sensors to place.
-        field_data : array-like, optional
-            Field data for gradient computation. If None, uses tensor.
-        rejection_domain : array-like, optional
-            Boolean mask of forbidden positions.
-        random_state : int, optional
-            Random seed.
-        check_orthogonality : bool, default=False
-            Verify Q orthogonality during factorization.
-        device : str, default='cpu'
-            PyTorch device.
-        dtype : torch.dtype, default=torch.float32
-            Data type.
-        config : GeometricQRConfig, optional
-            Configuration with geometric parameters.
-        """
         self.config = config or GeometricQRConfig()
         self.mesh = mesh
         
@@ -469,17 +418,13 @@ class GeometryAwareTensorQR:
         self._orthogonality_history: List[float] = []
     
     def factorize(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Perform geometry-aware QR factorization.
-        
-        Returns
-        -------
-        P : torch.Tensor
-            Binary sensor placement mask.
-        Q : torch.Tensor
-            Orthogonal matrix (k × k).
-        R : torch.Tensor
-            Transformed tensor.
+        """Performs geometry-aware QR factorization.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing:
+                - P (torch.Tensor): The binary sensor placement mask.
+                - Q (torch.Tensor): The orthogonal matrix (k × k).
+                - R (torch.Tensor): The transformed tensor.
         """
         try:
             # Initialize
@@ -579,13 +524,11 @@ class GeometryAwareTensorQR:
         Q_block -= 2 * Qu.unsqueeze(1) * u.unsqueeze(0)
     
     def get_sensor_coordinates(self) -> np.ndarray:
-        """
-        Get coordinates of placed sensors.
-        
-        Returns
-        -------
-        np.ndarray (N_sensors, spatial_dim)
-            Sensor coordinates.
+        """Returns the coordinates of the placed sensors.
+
+        Returns:
+            np.ndarray: The sensor coordinates, with shape (N_sensors,
+            spatial_dim).
         """
         if self.P is None:
             raise ValueError("Call factorize() first")
@@ -594,15 +537,12 @@ class GeometryAwareTensorQR:
         return self.mesh.coordinates[sensor_indices]
     
     def visualize_with_geometry(self, show_mesh: bool = True, figsize: Tuple[int, int] = (12, 6)) -> None:
-        """
-        Visualize sensor placement with mesh overlay.
-        
-        Parameters
-        ----------
-        show_mesh : bool, default=True
-            Whether to show mesh edges.
-        figsize : tuple, default=(12, 6)
-            Figure size.
+        """Visualizes sensor placement with a mesh overlay.
+
+        Args:
+            show_mesh (bool, optional): Whether to show the mesh edges.
+                Defaults to `True`.
+            figsize (tuple, optional): The figure size. Defaults to (12, 6).
         """
         if self.P is None:
             raise ValueError("Call factorize() first")

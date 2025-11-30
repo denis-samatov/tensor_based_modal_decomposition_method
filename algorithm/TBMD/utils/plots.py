@@ -17,29 +17,32 @@ def visualize_tensor(
     wells=None,  # Скважины для отображения
     frame_step=1  # Отображать каждый N-й кадр (по умолчанию каждый)
 ):
-    """
-    Visualizes a tensor of images. If the tensor is 3D (H, W, T), each (H, W) slice is
-    treated as a grayscale frame. If the tensor is 4D (H, W, C, T), each slice is treated
-    as a color image.
+    """Visualizes a tensor of images.
 
-    Parameters:
-      - tensor (numpy.ndarray): The data to visualize. Expected shapes:
-          * (H, W, T) for grayscale images.
-          * (H, W, C, T) for color images.
-      - subject_name (str): Title label for the subject.
-      - save_path (str): If provided, the path where the plot will be saved.
-      - cmap (str): Matplotlib colormap used for imshow when displaying grayscale images.
-      - cols (int): Number of columns in the grid layout.
-      - show_colorbar (bool): Whether to display colorbars for each subplot.
-      - zmin (float, optional): Minimum value for the color scale (vmin in imshow).
-                                If None, calculated per frame as the minimum non-zero value.
-      - zmax (float, optional): Maximum value for the color scale (vmax in imshow).
-                                If None, calculated per frame as the maximum value.
-      - wells (dict or list): Координаты скважин. Может быть:
-                             * dict с ключами = subject_name и значениями = списки координат [(x1, y1), ...]
-                             * dict с ключами = subject_name и значениями = вложенные словари {frame_idx: [(x1, y1), ...], ...}
-                             * простой список координат [(x1, y1), ...] для всех кадров
-      - frame_step (int): Шаг для отображения кадров. При frame_step=10 будет отображаться каждый 10-й кадр.
+    This function visualizes a 3D or 4D tensor as a grid of images.
+    - For a 3D tensor (H, W, T), each slice is treated as a grayscale frame.
+    - For a 4D tensor (H, W, C, T), each slice is treated as a color image.
+
+    Args:
+        tensor (np.ndarray): The data to visualize, with shape (H, W, T) or
+            (H, W, C, T).
+        subject_name (str, optional): The title label for the subject. Defaults
+            to None.
+        save_path (str, optional): The path to save the plot. If None, the plot
+            is displayed. Defaults to None.
+        cmap (str): The Matplotlib colormap for grayscale images. Defaults to
+            "gray".
+        cols (int): The number of columns in the grid layout. Defaults to 5.
+        show_colorbar (bool): Whether to display a colorbar for each subplot.
+            Defaults to False.
+        zmin (float, optional): The minimum value for the color scale. If None,
+            it is calculated as the minimum non-zero value per frame.
+        zmax (float, optional): The maximum value for the color scale. If None,
+            it is calculated as the maximum value per frame.
+        wells (dict or list, optional): The coordinates of wells to display.
+            Can be a dictionary or list of coordinates.
+        frame_step (int): The step for displaying frames (e.g., a value of 10
+            displays every 10th frame). Defaults to 1.
     """
     # Ensure tensor has either 3 or 4 dimensions.
     if tensor.ndim not in (3, 4):
@@ -176,31 +179,21 @@ def plot_two_matrices(
     titles: tuple = ('Matrix X', 'Matrix Y'),
     show_colorbar: bool = True
 ):
-    """
-    Plot two 2D arrays or tensors side by side with a shared colormap scale.
+    """Plots two 2D arrays or tensors side-by-side with a shared colormap.
 
-    Parameters
-    ----------
-    X : numpy.ndarray or torch.Tensor
-        First matrix to visualize. Can be on CPU or GPU.
-    Y : numpy.ndarray or torch.Tensor
-        Second matrix to visualize.
-    zmin : float, optional
-        Lower bound for color scale. If None, uses the smallest non-zero value across both matrices.
-    zmax : float, optional
-        Upper bound for color scale. If None, uses the maximum value across both matrices.
-    cmap : str, default 'viridis'
-        Name of the Matplotlib colormap to use.
-    figsize : tuple of two ints, default (12, 6)
-        Size of the entire figure in inches (width, height).
-    titles : tuple of str, default ('Matrix X', 'Matrix Y')
-        Titles for the two subplots.
-    show_colorbar : bool, default True
-        If True, show colorbar for each subplot.
-
-    Example
-    -------
-    plot_two_matrices(X, Y, zmin=0.1, zmax=1.0, cmap='plasma', figsize=(10, 5), titles=('Input', 'Output'))
+    Args:
+        X (np.ndarray or torch.Tensor): The first matrix to visualize.
+        Y (np.ndarray or torch.Tensor): The second matrix to visualize.
+        zmin (float, optional): The lower bound for the color scale. If None,
+            the smallest non-zero value across both matrices is used.
+        zmax (float, optional): The upper bound for the color scale. If None,
+            the maximum value across both matrices is used.
+        cmap (str): The name of the Matplotlib colormap. Defaults to 'viridis'.
+        figsize (tuple): The size of the figure in inches. Defaults to (12, 6).
+        titles (tuple): The titles for the two subplots. Defaults to ('Matrix
+            X', 'Matrix Y').
+        show_colorbar (bool): Whether to show a colorbar for each subplot.
+            Defaults to True.
     """
     def _get_nonzero_min(frame):
         """Get the minimum non-zero value from a tensor or array."""
@@ -313,29 +306,21 @@ def plot_original_reconstructed_diff(
     titles: tuple = ("Original", "Reconstructed", "Difference"),
     show_colorbar: bool = True,
 ):
-    """Visualise *original*, *reconstructed* matrices and their difference.
+    """Visualizes the original and reconstructed matrices and their difference.
 
-    Parameters
-    ----------
-    original : np.ndarray | torch.Tensor
-        Ground-truth 2-D data.
-    reconstructed : np.ndarray | torch.Tensor
-        Reconstructed (or predicted) 2-D data of the same shape as *original*.
-    common_cmap : str, default "viridis"
-        Colormap shared by the first two panels.
-    diff_cmap : str, default "RdBu_r"
-        Diverging colormap for the difference panel.
-    figsize : tuple, default (12, 4)
-        Figure size passed to ``plt.subplots``.
-    titles : tuple(str, str, str)
-        Panel titles for (original, reconstructed, difference).
-    show_colorbar : bool, default True
-        Whether to attach colour bars to every panel.
-
-    Notes
-    -----
-    *If* the inputs reside on GPU, they are moved to CPU **without** cloning
-    (no gradients preserved).
+    Args:
+        original (np.ndarray or torch.Tensor): The ground-truth 2D data.
+        reconstructed (np.ndarray or torch.Tensor): The reconstructed or
+            predicted 2D data, of the same shape as `original`.
+        common_cmap (str): The colormap shared by the first two panels.
+            Defaults to "viridis".
+        diff_cmap (str): The diverging colormap for the difference panel.
+            Defaults to "RdBu_r".
+        figsize (tuple): The figure size for the plot. Defaults to (12, 4).
+        titles (tuple): The panel titles for the original, reconstructed, and
+            difference plots.
+        show_colorbar (bool): Whether to attach a colorbar to every panel.
+            Defaults to True.
     """
     import numpy as _np  # local import to prevent polluting public namespace
     import torch as _torch
@@ -416,17 +401,16 @@ def plot_original_reconstructed_diff(
     plt.show()
 
 def visualize_wells_placement(wells_matrix, title="Wells placement"):
-    """Visualize the placement of wells.
+    """Visualizes the placement of wells.
 
     This function visualizes a wells placement matrix, where 1s indicate the
-    positions of wells.
+    positions of the wells.
 
-    Parameters
-    ----------
-    wells_matrix : torch.Tensor
-        A binary tensor with 1s at the well positions.
-    title : str, optional
-        The title for the plot, by default "Wells placement".
+    Args:
+        wells_matrix (torch.Tensor): A binary tensor with 1s at the well
+            positions.
+        title (str, optional): The title for the plot. Defaults to "Wells
+            placement".
     """
     wells_np = wells_matrix.detach().cpu().numpy()
     fig, ax = plt.subplots(figsize=(wells_np.shape[1] / 10, wells_np.shape[0] / 10))

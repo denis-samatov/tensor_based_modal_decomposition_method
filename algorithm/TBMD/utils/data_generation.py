@@ -9,26 +9,21 @@ from timeit import default_timer
 class GaussianRF:
     """A Gaussian Random Field (GRF) generator.
 
-    This class generates random fields with Gaussian statistics and a prescribed
-    spatial correlation structure. It supports 1D, 2D, and 3D fields.
+    This class generates random fields with Gaussian statistics and a
+    prescribed spatial correlation structure. It supports 1D, 2D, and 3D
+    fields.
 
-    Parameters
-    ----------
-    dim : int
-        The dimensionality of the random field (1, 2, or 3).
-    size : int
-        The size of the domain, which must be a power of 2.
-    alpha : float, optional
-        A smoothness parameter, by default 2.
-    tau : float, optional
-        A correlation length parameter, by default 3.
-    sigma : float, optional
-        The standard deviation parameter. If None, it is computed from tau and
-        alpha, by default None.
-    boundary : str, optional
-        The boundary condition type, by default "periodic".
-    device : torch.device, optional
-        The device for computation, by default None.
+    Args:
+        dim (int): The dimensionality of the random field (1, 2, or 3).
+        size (int): The size of the domain, which must be a power of 2.
+        alpha (float, optional): A smoothness parameter. Defaults to 2.
+        tau (float, optional): A correlation length parameter. Defaults to 3.
+        sigma (float, optional): The standard deviation parameter. If None, it
+            is computed from tau and alpha. Defaults to None.
+        boundary (str, optional): The boundary condition type. Defaults to
+            "periodic".
+        device (torch.device, optional): The device for computation. Defaults
+            to None.
     """
 
     def __init__(self, dim, size, alpha=2, tau=3, sigma=None, boundary="periodic", device=None):
@@ -75,17 +70,14 @@ class GaussianRF:
         self.size = tuple(self.size)
 
     def sample(self, N):
-        """Generate N samples from the random field.
+        """Generates N samples from the random field.
         
-        Parameters
-        ----------
-        N : int
-            The number of samples to generate.
+        Args:
+            N (int): The number of samples to generate.
             
-        Returns
-        -------
-        torch.Tensor
-            A tensor of shape (N, *self.size) containing the generated samples.
+        Returns:
+            torch.Tensor: A tensor of shape (N, *self.size) containing the
+            generated samples.
         """
         coeff = torch.randn(N, *self.size, 2, device=self.device)
 
@@ -109,32 +101,26 @@ class GaussianRF:
 
 
 def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
-    """Solve the 2D Navier-Stokes equations in vorticity form.
+    """Solves the 2D Navier-Stokes equations in vorticity form.
 
     This function uses a pseudo-spectral method with a Crank-Nicolson
     time-stepping scheme to solve the 2D Navier-Stokes equations.
 
-    Parameters
-    ----------
-    w0 : torch.Tensor
-        The initial vorticity field.
-    f : torch.Tensor
-        The forcing term.
-    visc : float
-        The viscosity (1 / Reynolds number).
-    T : float
-        The final simulation time.
-    delta_t : float, optional
-        The time step for numerical integration, by default 1e-4.
-    record_steps : int, optional
-        The number of snapshots to record, by default 1.
+    Args:
+        w0 (torch.Tensor): The initial vorticity field.
+        f (torch.Tensor): The forcing term.
+        visc (float): The viscosity (1 / Reynolds number).
+        T (float): The final simulation time.
+        delta_t (float, optional): The time step for numerical integration.
+            Defaults to 1e-4.
+        record_steps (int, optional): The number of snapshots to record.
+            Defaults to 1.
 
-    Returns
-    -------
-    sol : torch.Tensor
-        The solution tensor of shape (*w0.size(), record_steps).
-    sol_t : torch.Tensor
-        The time points corresponding to the recorded solutions.
+    Returns:
+        sol (torch.Tensor): The solution tensor of shape `(*w0.size(),
+            record_steps)`.
+        sol_t (torch.Tensor): The time points corresponding to the recorded
+            solutions.
     """
     # Grid size - must be power of 2
     N = w0.size()[-1]
@@ -257,24 +243,23 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
 
 
 def generate_navier_stokes_dataset(resolution=256, num_samples=20, batch_size=20, record_steps=200, save_path='ns_data.mat'):
-    """Generate a dataset of Navier-Stokes solutions.
+    """Generates a dataset of Navier-Stokes solutions.
 
     This function generates solutions to the 2D Navier-Stokes equations with
-    random initial conditions drawn from a Gaussian Random Field. The generated
-    data is saved to a .mat file.
+    random initial conditions drawn from a Gaussian Random Field. The
+    generated data is saved to a .mat file.
 
-    Parameters
-    ----------
-    resolution : int, optional
-        The resolution of the spatial grid, by default 256.
-    num_samples : int, optional
-        The total number of samples to generate, by default 20.
-    batch_size : int, optional
-        The batch size for parallel computation, by default 20.
-    record_steps : int, optional
-        The number of temporal snapshots to record, by default 200.
-    save_path : str, optional
-        The path to save the generated data, by default 'ns_data.mat'.
+    Args:
+        resolution (int, optional): The resolution of the spatial grid.
+            Defaults to 256.
+        num_samples (int, optional): The total number of samples to generate.
+            Defaults to 20.
+        batch_size (int, optional): The batch size for parallel computation.
+            Defaults to 20.
+        record_steps (int, optional): The number of temporal snapshots to record.
+            Defaults to 200.
+        save_path (str, optional): The path to save the generated data.
+            Defaults to 'ns_data.mat'.
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
