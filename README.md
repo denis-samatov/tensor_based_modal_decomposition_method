@@ -14,6 +14,8 @@ The core of this repository is the TBMD algorithm, which leverages tensor decomp
   - [Running Experiments](#running-experiments)
   - [Interactive Analysis](#interactive-analysis)
 - [Analysis Methodology](#analysis-methodology)
+- [Forecasting Models](#forecasting-models)
+- [Geometry-Aware Features](#geometry-aware-features)
 - [Output](#output)
 - [Examples](#examples)
 
@@ -26,6 +28,8 @@ The core of this repository is the TBMD algorithm, which leverages tensor decomp
 - **Tensor-Based Modal Decomposition (TBMD)** for identifying dominant modes.
 - **Interactive visualizations** in Jupyter Notebooks.
 - **Animation support** for temporal data.
+- **Multiple forecasting models** (LSTM, MLP, Linear).
+- **Geometry-aware HOSVD and QR factorization** for unstructured meshes.
 
 ## Repository Structure
 
@@ -52,9 +56,9 @@ The repository is organized as follows:
 
 - **`algorithm/`**: Contains the core TBMD algorithm, experiments, and notebooks.
   - **`TBMD/`**: The main TBMD module.
-    - **`models/`**: Forecasting models (LSTM, MLP, Linear).
-    - **`modules/`**: Core TBMD components (HOSVD, QR factorization, Compressive Sensing).
-    - **`utils/`**: Utility functions for data loading, processing, and plotting.
+    - **`models/`**: Forecasting models (`LSTMForecaster`, `MLPForecaster`, `LinearForecaster`).
+    - **`modules/`**: Core TBMD components, including `TensorHOSVD` for standard decomposition, `GeometryAwareTensorHOSVD` for decompositions on unstructured meshes, `TensorBasedTubeFiberPivotQRFactorization` for sensor placement, and `TensorBasedCompressiveSensing` for signal reconstruction.
+    - **`utils/`**: Utility functions for data loading, processing, plotting, and performance metrics.
   - **`experiments/`**: Scripts to run TBMD experiments.
   - **`notebooks/`**: Jupyter notebooks for interactive analysis and visualization.
 - **`data/`**: The location for the dataset.
@@ -133,14 +137,33 @@ The notebooks provide:
 
 ## Analysis Methodology
 
-1.  **Data Loading**: Load train and test datasets from NumPy files.
+1.  **Data Loading**: Load train and test datasets from various file formats.
 2.  **Tensor-Based Modal Decomposition (TBMD)**:
-    - **HOSVD**: Apply Higher-Order Singular Value Decomposition to the data tensor.
+    - **HOSVD**: Apply Higher-Order Singular Value Decomposition to the data tensor to extract the core tensor and factor matrices.
     - **QR Factorization**: Use QR factorization with tube pivoting for sensor placement.
     - **Compressive Sensing**: Reconstruct the signal from a limited number of sensors.
-3.  **Statistical Analysis**: Compute mean, std, min, max, etc.
-4.  **Visualization**: Create colorful plots with custom colormaps.
-5.  **Forecasting**: Use LSTM, MLP, or Linear models to forecast future states.
+3.  **Statistical Analysis**: Compute descriptive statistics for the datasets.
+4.  **Visualization**: Generate plots and animations to visualize the data and results.
+5.  **Forecasting**: Use various models to forecast future states.
+
+## Forecasting Models
+
+The repository includes three types of forecasting models:
+
+- **`LSTMForecaster`**: A Long Short-Term Memory (LSTM) model for time series forecasting.
+- **`MLPForecaster`**: A Multi-Layer Perceptron (MLP) model for time series forecasting.
+- **`LinearForecaster`**: A linear model that learns a transformation matrix using the pseudoinverse.
+
+These models can be found in the `algorithm/TBMD/models` directory and are used to predict future states based on the decomposed modal coefficients.
+
+## Geometry-Aware Features
+
+For datasets based on unstructured meshes, the repository provides geometry-aware versions of HOSVD and QR factorization:
+
+- **`GeometryAwareTensorHOSVD`**: Incorporates a Laplacian regularization term to encourage spatially smooth modes that respect the mesh geometry.
+- **`GeometryAwareTensorQR`**: Enhances sensor placement by considering geometric weights, proximity penalties, and mesh topology.
+
+These features are particularly useful for fluid dynamics simulations on complex geometries.
 
 ## Output
 

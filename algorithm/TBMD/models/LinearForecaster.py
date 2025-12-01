@@ -9,30 +9,18 @@ from sklearn.metrics import r2_score
 class LinearForecaster:
     """A linear forecasting model.
 
-    This model uses a transformation matrix learned via pseudoinverse. It learns
-    a linear transformation matrix M such that x(t+1) = M @ x(t). The matrix
-    is learned by solving for the pseudoinverse of the system:
-    X_output = X_input @ M^T, where X_input and X_output are matrices of
-    consecutive states.
+    This model learns a linear transformation `M` such that `x(t+1) = M @ x(t)`,
+    using a pseudoinverse method to solve the system.
 
-    Parameters
-    ----------
-    use_torch : bool, optional
-        Whether to use PyTorch for calculations, which is useful for GPU
-        acceleration, by default False.
-    device : str, optional
-        The device to use if using PyTorch ('cpu', 'cuda', 'mps'), by default
-        None.
+    Args:
+        use_torch (bool, optional): If `True`, use PyTorch for calculations,
+            which can leverage GPU acceleration. Defaults to `False`.
+        device (str, optional): The device to use if `use_torch` is `True`
+            (e.g., 'cpu', 'cuda', 'mps'). If `None`, the device is automatically
+            selected.
     """
     
     def __init__(self, use_torch: bool = False, device: str = None):
-        """
-        Initialize the linear forecaster.
-        
-        Args:
-            use_torch: Whether to use PyTorch for calculations (useful for GPU acceleration).
-            device: Device to use if using PyTorch ('cpu', 'cuda', 'mps').
-        """
         self.M = None
         self.trained = False
         self.use_torch = use_torch
@@ -47,15 +35,17 @@ class LinearForecaster:
             print(f"Using device: {self.device}")
     
     def train(self, x_history: np.ndarray, verbose: bool = True) -> Dict[str, float]:
-        """
-        Train the linear forecaster by learning the transformation matrix M.
-        
+        """Trains the linear forecaster by learning the transformation matrix `M`.
+
         Args:
-            x_history: Time series data of shape (T, W) where T is time steps and W is features
-            verbose: Whether to print training information
-            
+            x_history (np.ndarray): The time series data, with shape (T, W),
+                where T is the number of time steps and W is the number of
+                features.
+            verbose (bool, optional): Whether to print training information.
+                Defaults to `True`.
+
         Returns:
-            metrics: Dictionary of training metrics
+            Dict[str, float]: A dictionary of training metrics.
         """
         if verbose:
             print("Training linear forecaster...")
@@ -121,14 +111,13 @@ class LinearForecaster:
         return self.metrics
     
     def predict_next(self, x_current: np.ndarray) -> np.ndarray:
-        """
-        Predict the next state.
-        
+        """Predicts the next state.
+
         Args:
-            x_current: Current state vector of shape (W,)
-            
+            x_current (np.ndarray): The current state vector, with shape (W,).
+
         Returns:
-            x_next: Predicted next state vector of shape (W,)
+            np.ndarray: The predicted next state vector, with shape (W,).
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
@@ -150,15 +139,14 @@ class LinearForecaster:
             return x_current @ self.M
     
     def predict_sequence(self, x_start: np.ndarray, n_steps: int) -> np.ndarray:
-        """
-        Predict a sequence of future states.
-        
+        """Predicts a sequence of future states.
+
         Args:
-            x_start: Starting state vector of shape (W,)
-            n_steps: Number of steps to predict
-            
+            x_start (np.ndarray): The starting state vector, with shape (W,).
+            n_steps (int): The number of steps to predict.
+
         Returns:
-            sequence: Predicted sequence of shape (n_steps, W)
+            np.ndarray: The predicted sequence, with shape (n_steps, W).
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
@@ -177,14 +165,13 @@ class LinearForecaster:
         return sequence[1:]  # Return without the starting state
     
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
-        """
-        Evaluate the model on historical data.
-        
+        """Evaluates the model on historical data.
+
         Args:
-            x_history: Time series data of shape (T, W)
-            
+            x_history (np.ndarray): The time series data, with shape (T, W).
+
         Returns:
-            metrics: Evaluation metrics
+            Dict[str, float]: A dictionary of evaluation metrics.
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before evaluating.")
@@ -235,14 +222,16 @@ class LinearForecaster:
                                   feature_indices: List[int] = None, 
                                   n_steps_ahead: int = 10,
                                   figsize: Tuple[int, int] = (15, 8)) -> None:
-        """
-        Plot comparison between actual and predicted values.
-        
+        """Plots a comparison between actual and predicted values.
+
         Args:
-            x_history: Time series data of shape (T, W)
-            feature_indices: Indices of features to plot (default: first 3 features)
-            n_steps_ahead: Number of steps to predict ahead
-            figsize: Figure size
+            x_history (np.ndarray): The time series data, with shape (T, W).
+            feature_indices (List[int], optional): The indices of the features
+                to plot. If `None`, the first 3 features are plotted.
+            n_steps_ahead (int, optional): The number of steps to predict
+                ahead. Defaults to 10.
+            figsize (Tuple[int, int], optional): The figure size. Defaults to
+                (15, 8).
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before plotting predictions.")
@@ -290,11 +279,10 @@ class LinearForecaster:
         plt.show()
     
     def save_model(self, path: str) -> None:
-        """
-        Save the model to a file.
-        
+        """Saves the model to a file.
+
         Args:
-            path: Path to save the model
+            path (str): The path to save the model to.
         """
         dir_path = os.path.dirname(path)
         if dir_path:
@@ -314,11 +302,10 @@ class LinearForecaster:
         print(f"Model saved to {path}")
     
     def load_model(self, path: str) -> None:
-        """
-        Load the model from a file.
-        
+        """Loads the model from a file.
+
         Args:
-            path: Path to load the model from
+            path (str): The path to load the model from.
         """
         # Load the saved model
         loaded = np.load(path, allow_pickle=True)

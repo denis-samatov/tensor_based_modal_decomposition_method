@@ -13,20 +13,16 @@ from tqdm import tqdm
 
 
 def extract_step_number(filename: str) -> int:
-    """Extract the step number from a filename.
+    """Extracts the step number from a filename.
 
-    This function extracts the step number from a filename of the form
-    'PRESSURE_STEP_XXX.png'.
+    This function is designed to parse filenames of the form
+    'PRESSURE_STEP_XXX.png' and extract the step number.
 
-    Parameters
-    ----------
-    filename : str
-        The filename to extract the step number from.
+    Args:
+        filename (str): The filename to extract the step number from.
 
-    Returns
-    -------
-    int
-        The step number, or 0 if no step number is found (as a fallback).
+    Returns:
+        int: The extracted step number, or 0 if no number is found.
     """
     match = re.search(r"_(\d+)", filename)
     if match:
@@ -35,41 +31,23 @@ def extract_step_number(filename: str) -> int:
 
 def auto_select_mode(tensor: Union[np.ndarray, 'tl.tensor', torch.Tensor],
                      x_hat: Union[np.ndarray, 'tl.tensor', torch.Tensor]) -> int:
-    """Automatically select the mode of the tensor that matches the vector size.
+    """Automatically selects the mode of a tensor that matches a vector's size.
 
-    This function accepts NumPy arrays, PyTorch tensors, and TensorLy tensors
-    (with any backend recognized by TensorLy).
+    This function supports NumPy arrays, PyTorch tensors, and TensorLy tensors.
 
-    Parameters
-    ----------
-    tensor : Union[np.ndarray, 'tl.tensor', torch.Tensor]
-        The input tensor of any shape.
-    x_hat : Union[np.ndarray, 'tl.tensor', torch.Tensor]
-        A 1D vector whose size must match one of the tensor dimensions.
+    Args:
+        tensor (Union[np.ndarray, 'tl.tensor', torch.Tensor]): The input tensor.
+        x_hat (Union[np.ndarray, 'tl.tensor', torch.Tensor]): A 1D vector whose
+            size must match one of the tensor's dimensions.
 
-    Returns
-    -------
-    int
-        The index of the mode (dimension) in the tensor that matches the size
-        of `x_hat`.
+    Returns:
+        int: The index of the mode in the tensor that matches the size of
+        `x_hat`.
 
-    Raises
-    ------
-    TypeError
-        If `tensor` is not a NumPy array, a PyTorch tensor, or recognized by
-        TensorLy.
-    ValueError
-        If `x_hat` is not 1D or if its size does not match any dimension of
-        `tensor`.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> tensor = np.random.rand(4, 5, 6)
-    >>> x_hat = np.random.rand(5)
-    >>> mode = auto_select_mode(tensor, x_hat)
-    >>> print(mode)
-    1
+    Raises:
+        TypeError: If `tensor` or `x_hat` is not a supported tensor type.
+        ValueError: If `x_hat` is not 1D or if its size does not match any
+            dimension of `tensor`.
     """
 
     is_numpy_tensor = isinstance(tensor, np.ndarray)
@@ -113,30 +91,25 @@ def generate_noisy_datasets(
     output_dir: str = None,
     experiment_id: str = None
 ) -> dict:
-    """Generate multiple datasets by adding Gaussian noise to the input data.
+    """Generates multiple datasets by adding Gaussian noise to the input data.
 
-    This function supports ``torch.Tensor``, ``numpy.ndarray``, or a dictionary
-    (defaultdict) of them. The returned dictionary has keys
-    'noisy_dataset_{index}', where index 1 is the original data.
+    This function supports `torch.Tensor`, `numpy.ndarray`, or a dictionary of
+    these types. The returned dictionary contains the noisy datasets, with the
+    original data as the first entry.
 
-    Parameters
-    ----------
-    data : torch.Tensor, numpy.ndarray, or dict
-        The original data.
-    noise_level : float, optional
-        The level of noise to add, by default 0.1.
-    num_noisy_datasets : int, optional
-        The number of noisy datasets to generate, by default 5.
-    output_dir : str, optional
-        The base directory where datasets will be saved, by default None.
-    experiment_id : str, optional
-        An identifier for the experiment, by default None.
+    Args:
+        data (Union[torch.Tensor, np.ndarray, dict]): The original data.
+        noise_level (float, optional): The level of noise to add. Defaults to 0.1.
+        num_noisy_datasets (int, optional): The number of noisy datasets to
+            generate. Defaults to 5.
+        output_dir (str, optional): The base directory to save the datasets.
+            Defaults to None.
+        experiment_id (str, optional): An identifier for the experiment.
+            Defaults to None.
 
-    Returns
-    -------
-    dict
-        A dictionary with keys 'noisy_dataset_{index}' and corresponding
-        tensor/array values.
+    Returns:
+        dict: A dictionary of the noisy datasets, with keys
+        'noisy_dataset_{index}'.
     """
     # Initialize the datasets dictionary using defaultdict
     datasets = defaultdict(lambda: None)
@@ -190,27 +163,23 @@ def reconstruct_tensor(
     zero_threshold: float = 1e-4,
     decimals: int = 3
 ) -> Optional[torch.Tensor | np.ndarray]:
-    """Reconstruct a tensor and round the result to the requested precision.
+    """Reconstructs a tensor and rounds the result to a specified precision.
 
-    This function computes A * x_hat and rounds the result.
+    This function computes `A * x_hat` and rounds the result.
 
-    Parameters
-    ----------
-    A_tensor : Union[torch.Tensor, np.ndarray]
-        The basis tensor A with shape (*spatial_dims, W).
-    x_hat : Union[torch.Tensor, np.ndarray]
-        The coefficient vector of shape (W,) or (W, 1).
-    zero_threshold : float, optional
-        Entries with an absolute value less than this threshold are set to zero
-        before rounding, by default 1e-4.
-    decimals : int, optional
-        The number of decimal places to keep in the final tensor, by default 3.
+    Args:
+        A_tensor (Union[torch.Tensor, np.ndarray]): The basis tensor `A`, with
+            shape (*spatial_dims, W).
+        x_hat (Union[torch.Tensor, np.ndarray]): The coefficient vector, with
+            shape (W,) or (W, 1).
+        zero_threshold (float, optional): Values with an absolute value less
+            than this threshold are set to zero before rounding. Defaults to 1e-4.
+        decimals (int, optional): The number of decimal places to keep in the
+            final tensor. Defaults to 3.
 
-    Returns
-    -------
-    Optional[torch.Tensor | np.ndarray]
-        The reconstructed tensor with the same backend as the inputs, or `None`
-        on failure.
+    Returns:
+        Optional[torch.Tensor | np.ndarray]: The reconstructed tensor, or `None`
+        if the reconstruction fails.
     """
     try:
         # Convert NumPy inputs to torch for uniform handling
@@ -248,25 +217,20 @@ def reconstruct_tensor(
         return None
 
 def to_torch_tensor(arr: Union[np.ndarray, torch.Tensor], device: torch.device, dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    """Convert a NumPy array or PyTorch tensor to a TensorLy tensor.
+    """Converts a NumPy array or PyTorch tensor to a TensorLy tensor.
 
-    If the input is already a `torch.Tensor`, it is moved to the desired
-    device with the given dtype. If it is a NumPy array, it is converted
-    using TensorLy.
+    If the input is already a `torch.Tensor`, it is moved to the specified
+    device and data type. If it is a NumPy array, it is converted using
+    TensorLy.
 
-    Parameters
-    ----------
-    arr : Union[np.ndarray, torch.Tensor]
-        The array or tensor to convert.
-    device : torch.device
-        The device to move the tensor to.
-    dtype : torch.dtype, optional
-        The desired data type of the tensor, by default torch.float32.
+    Args:
+        arr (Union[np.ndarray, torch.Tensor]): The array or tensor to convert.
+        device (torch.device): The device to move the tensor to.
+        dtype (torch.dtype, optional): The desired data type of the tensor.
+            Defaults to torch.float32.
 
-    Returns
-    -------
-    torch.Tensor
-        The converted tensor.
+    Returns:
+        torch.Tensor: The converted tensor.
     """
     if isinstance(arr, torch.Tensor):
         return arr.to(device=device, dtype=dtype)
@@ -279,23 +243,17 @@ def to_torch_tensor(arr: Union[np.ndarray, torch.Tensor], device: torch.device, 
             raise TypeError("Input must be a NumPy array or a PyTorch tensor.") from e
 
 def get_torch_device(device: str = 'cpu') -> torch.device:
-    """Convert a device string into a torch.device.
+    """Converts a device string into a `torch.device`.
 
-    Parameters
-    ----------
-    device : str, optional
-        A string indicating the device type. Options are 'cpu', 'cuda', or
-        'mps', by default 'cpu'.
+    Args:
+        device (str, optional): A string indicating the device type ('cpu',
+            'cuda', or 'mps'). Defaults to 'cpu'.
 
-    Returns
-    -------
-    torch.device
-        The corresponding torch device.
+    Returns:
+        torch.device: The corresponding `torch.device` object.
 
-    Raises
-    ------
-    ValueError
-        If 'mps' is requested but not available on the system.
+    Raises:
+        ValueError: If 'mps' is requested but is not available.
     """
     # Decide on the device
     device = device.lower()
@@ -320,22 +278,19 @@ def get_torch_device(device: str = 'cpu') -> torch.device:
 def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
                      P: Union[np.ndarray, torch.Tensor, Dict[str, torch.Tensor]],
                      device: str = "cpu") -> Dict[str, torch.Tensor]:
-    """Apply sensor mask(s) `P` to all test tensors and return Y matrices.
+    """Applies sensor masks to test tensors to generate Y matrices.
 
-    Parameters
-    ----------
-    tensors : Dict[str, Union[np.ndarray, torch.Tensor]]
-        A mapping from subject to data tensor.
-    P : Union[np.ndarray, torch.Tensor, Dict[str, torch.Tensor]]
-        A single mask (shared by all subjects) as an ndarray or torch.Tensor,
-        or individual masks as a dictionary from subject to P_subj.
-    device : str, optional
-        The target device, by default "cpu".
+    Args:
+        tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): A dictionary
+            mapping subjects to data tensors.
+        P (Union[np.ndarray, torch.Tensor, Dict[str, torch.Tensor]]): A single
+            mask to be applied to all subjects, or a dictionary of masks per
+            subject.
+        device (str, optional): The target device for the tensors. Defaults to
+            "cpu".
 
-    Returns
-    -------
-    Dict[str, torch.Tensor]
-        A dictionary of Y matrices.
+    Returns:
+        Dict[str, torch.Tensor]: A dictionary of the generated Y matrices.
     """
     # Helper: convert mask to torch once
     def _to_mask(mask):
@@ -366,24 +321,19 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
     return Y_matrices
 
 def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
-    """Create a binary sensor-mask matrix per subject based on well coordinates.
+    """Creates a binary sensor-mask matrix from well coordinates.
 
-    Parameters
-    ----------
-    wells_dict : Dict[str, List[List[int]]]
-        A mapping from subject to a list of well positions, e.g.,
-        `{'subject1': [[i1, j1], [i2, j2], ...]}`.
-    tensor_shape : Tuple[int, int]
-        The spatial shape of the data or basis tensors (H, W).
-    device : str or torch.device, optional
-        The target device for the created tensors, by default 'cpu'.
+    Args:
+        wells_dict (Dict[str, List[List[int]]]): A dictionary mapping subjects
+            to a list of well positions (e.g., `{'subject1': [[i1, j1], ...]}`).
+        tensor_shape (Tuple[int, int]): The spatial shape of the data tensors
+            (H, W).
+        device (str or torch.device, optional): The target device for the
+            created tensors. Defaults to 'cpu'.
 
-    Returns
-    -------
-    Dict[str, torch.Tensor]
-        A dictionary mapping each subject to a binary sensor-mask matrix `P` of
-        shape (H, W), with 1s at well positions and 0s elsewhere. Coordinates
-        that fall outside the spatial extent are silently ignored.
+    Returns:
+        Dict[str, torch.Tensor]: A dictionary mapping each subject to a binary
+        sensor-mask matrix of shape (H, W), with 1s at the well positions.
     """
     H, W = tensor_shape[:2]
     wells_matrices = {}

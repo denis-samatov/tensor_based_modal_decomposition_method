@@ -26,29 +26,23 @@ from skimage.metrics import structural_similarity as _ssim
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
 def _to_numpy(a: ArrayLike) -> np.ndarray:
-    """Detach/clone to CPU if *a* is a torch tensor, else np.asarray.
+    """Detaches a torch tensor and converts it to a NumPy array.
 
-    Parameters
-    ----------
-    a : ArrayLike
-        The array-like object to convert to a NumPy array.
+    Args:
+        a (ArrayLike): The array-like object to convert.
 
-    Returns
-    -------
-    np.ndarray
-        The converted NumPy array.
+    Returns:
+        np.ndarray: The converted NumPy array.
     """
     if torch.is_tensor(a):
         a = a.detach().cpu()
     return np.asarray(a)
 
 def _supports_mask() -> bool:
-    """Return True if the installed skimage.ssims supports the *mask* keyword.
+    """Checks if the installed `skimage.ssims` supports the `mask` keyword.
 
-    Returns
-    -------
-    bool
-        True if the mask keyword is supported, False otherwise.
+    Returns:
+        bool: True if the `mask` keyword is supported, False otherwise.
     """
     from inspect import signature
 
@@ -62,30 +56,29 @@ def compute_metrics(
     mask: Optional[np.ndarray] = None,
     max_val: float | None = None,
 ) -> Tuple[float, float, float, float]:
-    """
-    Parameters
-    ----------
-    A_rec, A_ref
-        Reconstructed and reference volumes (any ndim ≥ 2).  NumPy or PyTorch.
-    background_value
-        Intensity value that represents background.  Voxels equal to this
-        value are excluded **unless** an explicit *mask* is supplied.
-    mask
-        Boolean array selecting the *foreground*; overrides *background_value*.
-    max_val
-        Maximum possible pixel / voxel value used for PSNR.  If ``None``,
-        defaults to ``A_ref.max() – A_ref.min()`` (data range).
+    """Computes quality metrics for reconstructed volumes.
 
-    Returns
-    -------
-    err_norm  : float
-        Normalised Frobenius error (eq. 40, foreground only).
-    mse       : float
-        Mean-squared error on the foreground.
-    ssim_val  : float
-        Structural similarity index (mean across channels if any).
-    psnr      : float
-        PSNR [dB] on the foreground region.
+    This function calculates the normalized Frobenius error, mean-squared
+    error, structural similarity index (SSIM), and peak signal-to-noise ratio
+    (PSNR) for a reconstructed volume, with optional masking of background
+    voxels.
+
+    Args:
+        A_rec (ArrayLike): The reconstructed volume, as a NumPy array or
+            PyTorch tensor.
+        A_ref (ArrayLike): The reference volume, as a NumPy array or PyTorch
+            tensor.
+        background_value (Optional[float]): The intensity value that
+            represents the background. Voxels with this value are excluded
+            unless an explicit `mask` is supplied. Defaults to None.
+        mask (Optional[np.ndarray]): A boolean array selecting the foreground.
+            Overrides `background_value`. Defaults to None.
+        max_val (Optional[float]): The maximum possible pixel/voxel value,
+            used for PSNR. If None, defaults to the data range of `A_ref`.
+
+    Returns:
+        Tuple[float, float, float, float]: A tuple containing the normalized
+        Frobenius error, mean-squared error, SSIM, and PSNR.
     """
     # -- convert & validate -------------------------------------------------
     A_rec = _to_numpy(A_rec)

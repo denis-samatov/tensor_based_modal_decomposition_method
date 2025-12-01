@@ -8,19 +8,16 @@ from tqdm import tqdm
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
 def safe_copy(x: ArrayLike) -> ArrayLike:
-    """Return a detached copy of an array or tensor.
+    """Returns a detached copy of an array or tensor.
 
-    Parameters
-    ----------
-    x : ArrayLike
-        The array or tensor to be copied. If `x` is a ``torch.Tensor``, the
-        function returns ``x.clone()``; otherwise, ``x.copy()`` is used.
+    This function creates a copy of the input array or tensor, ensuring that
+    modifications to the copy do not affect the original data.
 
-    Returns
-    -------
-    ArrayLike
-        An independent copy or clone that can be modified in-place without
-        affecting the original `x`.
+    Args:
+        x (ArrayLike): The array or tensor to be copied.
+
+    Returns:
+        ArrayLike: An independent copy of the input.
     """
     return x.clone() if torch.is_tensor(x) else x.copy()
 
@@ -30,28 +27,23 @@ def foreground_stats(
     mask: Optional[np.ndarray] = None,
     background_value: Optional[float] = None,
 ) -> Tuple[float, float, float, float]:
-    """Compute basic statistics of foreground voxels/pixels.
+    """Computes basic statistics of foreground voxels/pixels.
 
-    The foreground comprises all elements either selected by `mask` or
-    whose value differs from `background_value`.
+    The foreground is defined as all elements selected by `mask` or those whose
+    values differ from `background_value`.
 
-    Parameters
-    ----------
-    arr : np.ndarray
-        The input array.
-    mask : Optional[np.ndarray], optional
-        A boolean mask where `True` denotes foreground. If `None`, the mask is
-        built internally from `background_value`, by default None.
-    background_value : Optional[float], optional
-        If given, all elements equal to this value are considered background
-        and excluded from the statistics, by default None.
+    Args:
+        arr (np.ndarray): The input array.
+        mask (Optional[np.ndarray]): A boolean mask where `True` denotes the
+            foreground. If `None`, the mask is created from `background_value`.
+            Defaults to None.
+        background_value (Optional[float]): A value indicating background
+            elements, which are excluded from statistics. Defaults to None.
 
-    Returns
-    -------
-    Tuple[float, float, float, float]
-        A tuple containing the min, max, mean, and std of the foreground
-        values. If the foreground is empty, the function returns
-        (0.0, 0.0, 0.0, 1.0) so callers can still safely unpack the tuple.
+    Returns:
+        Tuple[float, float, float, float]: A tuple containing the min, max,
+        mean, and std of the foreground values. If the foreground is empty,
+        returns (0.0, 0.0, 0.0, 1.0).
     """
     if mask is None:
         mask = (
@@ -72,42 +64,27 @@ def inverse_normalization(
     mask: Optional[np.ndarray] = None,
     convert_to_grayscale: bool = False,
 ) -> ArrayLike:
-    """Invert a previously applied normalization.
+    """Inverts a previously applied normalization.
 
-    Parameters
-    ----------
-    normalized_tensor : ArrayLike
-        The tensor to be denormalized. A `[..., T]` layout is accepted.
-    normalization_method : {'minmax', 'zscore'}, optional
-        The type of normalization that had been applied, by default "minmax".
-    global_params : Optional[Dict[str, float]], optional
-        The parameters required to perform the inversion. For 'minmax', these
-        are {'min': float, 'max': float}; for 'zscore', they are
-        {'mean': float, 'std': float}, by default None.
-    background_value : Optional[float], optional
-        A value that marks background voxels/pixels which should not be
-        modified. This is useful for sparse medical volumes, by default None.
-    mask : Optional[np.ndarray], optional
-        If given, only positions where `mask` is True are denormalized. This
-        takes precedence over `background_value`, by default None.
-    convert_to_grayscale : bool, optional
-        If `True`, the function assumes that the input tensor had been
-        converted from RGB to grayscale earlier (e.g., via
-        `process_tensor(convert_to_grayscale=True)`) and therefore
-        replicates the single grayscale channel back into three identical
-        channels (RGB). Concretely, a tensor of shape (H, W, T) becomes
-        (H, W, 3, T). Other shapes are left unchanged, by default False.
+    Args:
+        normalized_tensor (ArrayLike): The tensor to be denormalized.
+        normalization_method (str): The type of normalization that was
+            applied. Can be 'minmax' or 'zscore'. Defaults to "minmax".
+        global_params (Optional[Dict[str, float]]): The parameters required for
+            inversion (e.g., {'min': float, 'max': float} for 'minmax').
+        background_value (Optional[float]): A value marking background pixels
+            that should not be modified.
+        mask (Optional[np.ndarray]): A mask where `True` indicates positions
+            to denormalize. Overrides `background_value`.
+        convert_to_grayscale (bool): If `True`, replicates a single grayscale
+            channel into three identical RGB channels.
 
-    Returns
-    -------
-    ArrayLike
-        The tensor in its original value range and distribution.
+    Returns:
+        ArrayLike: The tensor in its original value range.
 
-    Raises
-    ------
-    ValueError
-        If `global_params` is missing or incomplete, or if
-        `normalization_method` is unknown.
+    Raises:
+        ValueError: If `global_params` is missing or incomplete, or if
+            `normalization_method` is unknown.
     """
 
     if global_params is None:
@@ -161,24 +138,18 @@ def calculate_global_minmax_params(
     masks: Optional[Dict[str, np.ndarray] | np.ndarray] = None,
     background_value: Optional[float] = None,
 ) -> Tuple[float, float]:
-    """Determine the global min and max across an entire dataset.
+    """Determines the global min and max across an entire dataset.
 
-    Parameters
-    ----------
-    data : Dict[str, np.ndarray] | np.ndarray
-        Either a mapping from subject ID to volume or a single volume.
-    masks : Optional[Dict[str, np.ndarray] | np.ndarray], optional
-        Matching foreground masks. This is ignored if `background_value` is
-        provided, by default None.
-    background_value : Optional[float], optional
-        If specified, any voxel equal to this value is considered background
-        and excluded from the global extrema calculation, by default None.
+    Args:
+        data (Dict[str, np.ndarray] | np.ndarray): A dictionary mapping subject
+            IDs to volumes, or a single volume.
+        masks (Optional[Dict[str, np.ndarray] | np.ndarray]): Matching
+            foreground masks. Ignored if `background_value` is provided.
+        background_value (Optional[float]): A value indicating background
+            voxels, which are excluded from the calculation.
 
-    Returns
-    -------
-    Tuple[float, float]
-        A tuple containing the global min and max, suitable for min-max
-        normalization.
+    Returns:
+        Tuple[float, float]: A tuple containing the global min and max values.
     """
     global_min, global_max = np.inf, -np.inf
 
@@ -202,26 +173,22 @@ def calculate_global_zscore_params(
     masks: Optional[Dict[str, np.ndarray] | np.ndarray] = None,
     background_value: Optional[float] = None,
 ) -> Tuple[float, float]:
-    """Compute the global mean and std for z-score normalization.
+    """Computes the global mean and std for z-score normalization.
 
     This function concatenates all foreground voxels into a 1D vector and
     calculates statistics on the aggregate.
 
-    Parameters
-    ----------
-    data : Dict[str, np.ndarray] | np.ndarray
-        A dataset with the same conventions as in
-        :py:func:`calculate_global_minmax_params`.
-    masks : Optional[Dict[str, np.ndarray] | np.ndarray], optional
-        Foreground masks corresponding to `data`, by default None.
-    background_value : Optional[float], optional
-        The background marker value, by default None.
+    Args:
+        data (Dict[str, np.ndarray] | np.ndarray): A dataset, either as a
+            dictionary of volumes or a single volume.
+        masks (Optional[Dict[str, np.ndarray] | np.ndarray]): Foreground masks
+            corresponding to the data.
+        background_value (Optional[float]): A value indicating background
+            voxels.
 
-    Returns
-    -------
-    Tuple[float, float]
-        A tuple containing the global mean and std, ready for z-score
-        normalization.
+    Returns:
+        Tuple[float, float]: A tuple containing the global mean and standard
+        deviation.
     """
 
     all_vals: list[np.ndarray] = []
@@ -249,46 +216,31 @@ def process_tensor(
     background_value: Optional[float] = None,
     verbose: bool = False,
 ) -> np.ndarray:
-    """Pre-process a single multi-slice tensor.
+    """Pre-processes a single multi-slice tensor.
 
-    This performs the following steps slice-wise (i.e., independently for each
-    time-frame):
-    1. RGB to grayscale conversion (if `convert_to_grayscale` and `tensor` is 4D).
-    2. Spatial resizing via ``skimage.transform.resize``.
-    3. Normalization (min-max, z-score, or no scaling).
+    This function applies a series of processing steps to each time-frame in
+    the tensor, including grayscale conversion, resizing, and normalization.
 
-    Parameters
-    ----------
-    tensor : np.ndarray
-        A 3D (H, W, T) or 4D (H, W, 3, T) array.
-    resize_shape : Optional[Tuple[int, int]], optional
-        The target spatial size (new_H, new_W). If `None`, the original
-        resolution is preserved, by default None.
-    convert_to_grayscale : bool, optional
-        Whether to collapse RGB channels using ``skimage.color.rgb2gray``, by
-        default False.
-    normalization_method : Optional[str], optional
-        The normalization method to use. Can be 'minmax' (scales values to
-        [0, 1]), 'zscore' (zero-mean, unit-variance), or `None` (skip
-        normalization), by default None.
-    global_params : Optional[Dict[str, float]], optional
-        Statistics pre-computed across the dataset (see functions above). If
-        `None`, slice-local statistics are used, by default None.
-    background_value : Optional[float], optional
-        The background label to be excluded from normalization, by default None.
-    verbose : bool, optional
-        Whether to display visual information about processing parameters, by
-        default False.
+    Args:
+        tensor (np.ndarray): A 3D (H, W, T) or 4D (H, W, 3, T) array.
+        resize_shape (Optional[Tuple[int, int]]): The target spatial size
+            (new_H, new_W). If `None`, no resizing is performed.
+        convert_to_grayscale (bool): If `True`, collapses RGB channels to
+            grayscale.
+        normalization_method (Optional[str]): The normalization method to use
+            ('minmax', 'zscore', or `None`).
+        global_params (Optional[Dict[str, float]]): Pre-computed statistics
+            for normalization. If `None`, statistics are computed per-slice.
+        background_value (Optional[float]): A value to be excluded from
+            normalization.
+        verbose (bool): If `True`, displays information about the processing
+            parameters.
 
-    Returns
-    -------
-    np.ndarray
-        The processed tensor with the same T but potentially different HxW.
+    Returns:
+        np.ndarray: The processed tensor.
 
-    Raises
-    ------
-    ValueError
-        If an unsupported `normalization_method` is specified.
+    Raises:
+        ValueError: If an unsupported `normalization_method` is specified.
     """
     # Display processing parameters if verbose
     if verbose:
@@ -376,37 +328,29 @@ def process_data(
     background_value: Optional[float] = None,
     verbose: bool = True,
 ) -> Dict[str, np.ndarray]:
-    """Apply :py:func:`process_tensor` to every entry in a dataset.
+    """Applies `process_tensor` to every entry in a dataset.
 
-    A `tqdm` progress bar is displayed for convenience, and shape information
-    for each subject is printed to stdout.
+    This function iterates through a dictionary of tensors, applying the same
+    processing steps to each one. A progress bar is displayed, and shape
+    information for each subject is printed.
 
-    Parameters
-    ----------
-    data : Dict[str, np.ndarray]
-        A mapping from subject ID to volume.
-    resize_shape : Optional[Tuple[int, int]], optional
-        The target spatial size (new_H, new_W). If `None`, the original
-        resolution is preserved, by default None.
-    convert_to_grayscale : bool, optional
-        Whether to collapse RGB channels using ``skimage.color.rgb2gray``, by
-        default False.
-    normalization_method : Optional[str], optional
-        The normalization method to use. Can be 'minmax' (scales values to
-        [0, 1]), 'zscore' (zero-mean, unit-variance), or `None` (skip
-        normalization), by default None.
-    global_params : Optional[Dict[str, float]], optional
-        Statistics pre-computed across the dataset, by default None.
-    background_value : Optional[float], optional
-        The background label to be excluded from normalization, by default None.
-    verbose : bool, optional
-        Whether to display visual information about processing parameters, by
-        default True.
+    Args:
+        data (Dict[str, np.ndarray]): A dictionary mapping subject IDs to
+            volumes.
+        resize_shape (Optional[Tuple[int, int]]): The target spatial size
+            (new_H, new_W).
+        convert_to_grayscale (bool): If `True`, collapses RGB channels to
+            grayscale.
+        normalization_method (Optional[str]): The normalization method to use.
+        global_params (Optional[Dict[str, float]]): Pre-computed statistics
+            for normalization.
+        background_value (Optional[float]): A value to be excluded from
+            normalization.
+        verbose (bool): If `True`, displays information about the processing
+            parameters.
 
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        The processed dataset, keyed by the same subject IDs.
+    Returns:
+        Dict[str, np.ndarray]: The processed dataset, with the same subject IDs.
     """
     processed: Dict[str, np.ndarray] = {}
     

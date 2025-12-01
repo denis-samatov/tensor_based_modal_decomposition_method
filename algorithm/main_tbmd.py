@@ -1,3 +1,31 @@
+"""
+This script performs a comprehensive analysis using the Tensor-Based Modal
+Decomposition (TBMD) method. It includes the following steps:
+
+1.  **Data Loading**: Loads tensor data from various sources, such as HDF5
+    files, CSV files, or image directories.
+2.  **Data Preprocessing**: Splits the data into training and testing sets, and
+    applies normalization techniques (e.g., min-max scaling, z-score
+    normalization).
+3.  **Higher-Order Singular Value Decomposition (HOSVD)**: Decomposes the
+    training data into core tensors and factor matrices.
+4.  **Modal Tensor Creation**: Constructs a modal tensor `A` from the HOSVD
+    results.
+5.  **QR Factorization**: Applies QR factorization to the modal tensor to
+    determine optimal sensor locations.
+6.  **Compressive Sensing**: Reconstructs the full data from sparse
+    measurements using the sensor locations.
+7.  **Evaluation**: Compares the reconstructed data with the original data to
+    evaluate the performance of the TBMD method, using metrics such as Mean
+    Squared Error (MSE), Structural Similarity Index (SSIM), and Peak
+    Signal-to-Noise Ratio (PSNR).
+8.  **Visualization**: Generates plots to visualize the original data, sensor
+    placements, and reconstructed data.
+
+The script is highly configurable and supports various data types and
+processing strategies. The main components are organized into modules for
+clarity and reusability.
+"""
 #!/usr/bin/env python
 # coding: utf-8
 

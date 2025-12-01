@@ -95,7 +95,17 @@ class CPUStrategy(ProcessingStrategy):
     
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
-        """Process decomposition using a `ThreadPoolExecutor`."""
+        """Processes the decomposition for multiple tensors.
+
+        Args:
+            tensors (Dict[str, torch.Tensor]): A dictionary of tensors to
+                decompose.
+            decomposer_func: The function to use for decomposition.
+
+        Returns:
+            Dict[str, DecompositionResult]: A dictionary of decomposition
+            results.
+        """
         results = {}
         
         def decompose_single(item: Tuple[str, torch.Tensor]) -> Tuple[str, DecompositionResult]:
@@ -119,7 +129,19 @@ class CPUStrategy(ProcessingStrategy):
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
-        """Process reconstruction using a `ThreadPoolExecutor`."""
+        """Processes the reconstruction for multiple tensors.
+
+        Args:
+            cores (Dict[str, torch.Tensor]): A dictionary of core tensors.
+            factors (Dict[str, List[torch.Tensor]]): A dictionary of factor
+                matrices.
+            original_tensors (Dict[str, torch.Tensor]): A dictionary of the
+                original tensors.
+
+        Returns:
+            Dict[str, ReconstructionResult]: A dictionary of reconstruction
+            results.
+        """
         results = {}
         
         def reconstruct_single(key: str) -> Tuple[str, ReconstructionResult]:
@@ -188,7 +210,20 @@ class GPUStrategy(ProcessingStrategy):
     
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
-        """Process decomposition sequentially on the GPU with a CPU fallback."""
+        """Processes the decomposition sequentially on the GPU.
+
+        If a memory error occurs and `fallback_to_cpu` is `True`, this method
+        will attempt to perform the decomposition on the CPU.
+
+        Args:
+            tensors (Dict[str, torch.Tensor]): A dictionary of tensors to
+                decompose.
+            decomposer_func: The function to use for decomposition.
+
+        Returns:
+            Dict[str, DecompositionResult]: A dictionary of decomposition
+            results.
+        """
         results = {}
         
         for key, tensor in tensors.items():
@@ -218,7 +253,22 @@ class GPUStrategy(ProcessingStrategy):
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
-        """Process reconstruction sequentially on the GPU with a CPU fallback."""
+        """Processes the reconstruction sequentially on the GPU.
+
+        If a memory error occurs and `fallback_to_cpu` is `True`, this method
+        will attempt to perform the reconstruction on the CPU.
+
+        Args:
+            cores (Dict[str, torch.Tensor]): A dictionary of core tensors.
+            factors (Dict[str, List[torch.Tensor]]): A dictionary of factor
+                matrices.
+            original_tensors (Dict[str, torch.Tensor]): A dictionary of the
+                original tensors.
+
+        Returns:
+            Dict[str, ReconstructionResult]: A dictionary of reconstruction
+            results.
+        """
         results = {}
         
         for key in cores.keys():
@@ -547,10 +597,25 @@ class TensorVisualizer:
 
 # Main interface class
 class TuckerDecomposerInterface:
-    """The main interface for Tucker decomposition with an improved architecture.
+    """The main interface for Tucker decomposition.
 
-    This class provides a clean API while delegating responsibilities to
-    specialized components.
+    This class provides a high-level API for performing Tucker decomposition,
+    delegating responsibilities to specialized components for processing,
+    decomposition, and reconstruction.
+
+    Args:
+        tensors (Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str,
+            Union[torch.Tensor, np.ndarray, tl.tensor]]]): The input tensor or
+            a dictionary of tensors to decompose.
+        ranks (Optional[Union[int, List[int]]]): The Tucker ranks. Can be
+            `None` for automatic rank selection, an `int` for a uniform rank,
+            or a `list` for per-mode ranks.
+        epsilon (float): The convergence tolerance.
+        random_state (Optional[int]): The random seed for reproducibility.
+        device (str): The computing device ('cpu', 'cuda', 'mps').
+        dtype (torch.dtype): The tensor data type.
+        max_workers (Optional[int]): The maximum number of workers for parallel
+            processing.
     """
     
     def __init__(self,
@@ -561,27 +626,6 @@ class TuckerDecomposerInterface:
                  device: str = 'cpu',
                  dtype: torch.dtype = torch.float32,
                  max_workers: Optional[int] = None):
-        """Initializes the Tucker decomposer with an improved architecture.
-        
-        Parameters
-        ----------
-        tensors : Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str, Union[torch.Tensor, np.ndarray, tl.tensor]]]
-            The input tensor(s) for decomposition.
-        ranks : Optional[Union[int, List[int]]], optional
-            The Tucker ranks. Can be `None` for auto, an `int` for uniform, or
-            a `list` for per-mode, by default None.
-        epsilon : float, optional
-            The convergence tolerance, by default DEFAULT_EPSILON.
-        random_state : Optional[int], optional
-            The random seed for reproducibility, by default None.
-        device : str, optional
-            The computing device ('cpu', 'cuda', 'mps'), by default 'cpu'.
-        dtype : torch.dtype, optional
-            The tensor data type, by default torch.float32.
-        max_workers : Optional[int], optional
-            The maximum number of workers for parallel processing, by default
-            None.
-        """
         # Initialize components
         self.processor = TensorProcessor(device, dtype)
         self.decomposer = TuckerDecomposerCore(ranks, epsilon, random_state)
@@ -608,7 +652,7 @@ class TuckerDecomposerInterface:
         logger.info(f"TuckerDecomposerInterface initialized in {'collection' if self.is_collection else 'single'} mode")
     
     def decompose(self) -> None:
-        """Perform Tucker decomposition."""
+        """Performs Tucker decomposition on the input tensor(s)."""
         if self.state != DecomposerState.INITIALIZED:
             raise StateError(f"Cannot decompose in state {self.state.value}")
         
@@ -630,7 +674,7 @@ class TuckerDecomposerInterface:
             raise
     
     def reconstruct(self) -> None:
-        """Reconstruct tensors from the decomposition."""
+        """Reconstructs the tensor(s) from the decomposition."""
         if self.state != DecomposerState.DECOMPOSED:
             raise StateError(f"Cannot reconstruct in state {self.state.value}. Call decompose() first.")
         
@@ -656,12 +700,11 @@ class TuckerDecomposerInterface:
             raise
     
     def visualize(self, subjects: Optional[List[str]] = None) -> None:
-        """Visualize the results.
+        """Visualizes the results of the decomposition.
 
-        Parameters
-        ----------
-        subjects : Optional[List[str]], optional
-            A list of subjects to visualize, by default None.
+        Args:
+            subjects (Optional[List[str]]): A list of subjects to visualize. If
+                `None`, all subjects are visualized.
         """
         if self.state != DecomposerState.RECONSTRUCTED:
             raise StateError(f"Cannot visualize in state {self.state.value}. Call reconstruct() first.")
@@ -708,14 +751,12 @@ class TuckerDecomposerInterface:
         return self._errors
     
     def set_ranks(self, ranks: Optional[Union[int, List[int]]]) -> None:
-        """Update the ranks.
+        """Updates the ranks for the decomposition.
 
-        This is only allowed in the INITIALIZED state.
+        This method is only allowed in the `INITIALIZED` state.
 
-        Parameters
-        ----------
-        ranks : Optional[Union[int, List[int]]]
-            The new ranks to set.
+        Args:
+            ranks (Optional[Union[int, List[int]]]): The new ranks to set.
         """
         if self.state != DecomposerState.INITIALIZED:
             raise StateError("Cannot change ranks after decomposition")

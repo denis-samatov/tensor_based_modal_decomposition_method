@@ -15,44 +15,26 @@ from TBMD.config import SEED
 
 @dataclass
 class ExperimentConfig:
-    """Configuration class for experiment parameters.
+    """A class to configure and manage experiment parameters.
 
-    Attributes
-    ----------
-    solver_method : str
-        The solver method to use for compressive sensing.
-    seed : int
-        The random seed for reproducibility.
-    device : str
-        The device to run the computations on (e.g., 'cpu', 'cuda').
-    max_iter : int
-        The maximum number of iterations for the compressive sensing solver.
-    epsilon : float
-        The epsilon value for the L1 regularization term in compressive sensing.
-    lambd : float
-        The relaxation lambda parameter for the compressive sensing solver.
-    delta_0 : float
-        The initial delta value for the compressive sensing solver.
-    delta_max : float
-        The maximum delta value for the compressive sensing solver.
-    noise_level : float
-        The level of noise to add to the measurements.
-    num_noise_samples : int
-        The number of noise samples to generate for each measurement.
-    noise_threshold : float
-        The threshold for determining "zero" values when adding noise.
-    confidence_level : float
-        The confidence level for computing confidence intervals.
-    convergence_tol : float
-        The convergence tolerance for the compressive sensing solver.
-    subject_axis : bool
-        Whether to treat the subject axis as a separate dimension.
-    valid_mask : Optional[np.ndarray]
-        A mask of valid locations for sensor placement.
-    wells : Optional[Dict[str, List[Tuple[int, int]]]]
-        A dictionary of well locations for each subject.
-    verbose : bool
-        Whether to print verbose output.
+    Attributes:
+        solver_method (str): The solver method for compressive sensing.
+        seed (int): The random seed for reproducibility.
+        device (str): The device to run computations on (e.g., 'cpu', 'cuda').
+        max_iter (int): The maximum number of iterations for the compressive sensing solver.
+        epsilon (float): The epsilon value for the L1 regularization term in compressive sensing.
+        lambd (float): The relaxation lambda parameter for the compressive sensing solver.
+        delta_0 (float): The initial delta value for the compressive sensing solver.
+        delta_max (float): The maximum delta value for the compressive sensing solver.
+        noise_level (float): The level of noise to add to the measurements.
+        num_noise_samples (int): The number of noise samples to generate for each measurement.
+        noise_threshold (float): The threshold for determining "zero" values when adding noise.
+        confidence_level (float): The confidence level for computing confidence intervals.
+        convergence_tol (float): The convergence tolerance for the compressive sensing solver.
+        subject_axis (bool): Whether to treat the subject axis as a separate dimension.
+        valid_mask (Optional[np.ndarray]): A mask of valid locations for sensor placement.
+        wells (Optional[Dict[str, List[Tuple[int, int]]]]): A dictionary of well locations for each subject.
+        verbose (bool): Whether to print verbose output.
     """
     
     # Core parameters
@@ -70,7 +52,7 @@ class ExperimentConfig:
     # Noise parameters
     noise_level: float = 0.0
     num_noise_samples: int = 0
-    noise_threshold: float = 1e-6  # Threshold for determining "zero" values when adding noise
+    noise_threshold: float = 1e-6
     
     # Analysis parameters
     confidence_level: float = 0.95
@@ -92,31 +74,20 @@ class ExperimentConfig:
 
 
 class ExperimentRunner:
-    """Unified experiment runner for tensor-based modal decomposition analysis.
-    
+    """Runs experiments for tensor-based modal decomposition analysis.
+
     This class provides a standardized way to run experiments for tensor-based
     modal decomposition analysis. It handles QR decomposition, compressive sensing,
-    and noise injection, and returns results in a pandas DataFrame for easy analysis.
-
-    Methods
-    -------
-    run_full_dataset_experiments(A_tensor, test_tensors, sensor_values)
-        Run experiments across the full dataset with all subjects and slices.
-    run_single_slice_experiments(A_tensor, test_tensors, subject_name, slice_idx, sensor_values)
-        Run experiments for a specific slice of a specific subject.
-    run_single_slice_wells_experiments(A_tensor, test_tensors, subject_name, slice_idx, sensor_values)
-        Run wells experiments for a specific slice of a specific subject.
-    run_full_dataset_wells_experiments(A_tensor, test_tensors, sensor_values)
-        Run wells experiments across the full dataset with all subjects and slices.
+    and noise injection, and returns results in a pandas DataFrame for easy
+    analysis.
     """
     
     def __init__(self, config: ExperimentConfig = None):
-        """Initialize the experiment runner with configuration.
+        """Initializes the ExperimentRunner.
         
-        Parameters
-        ----------
-        config : ExperimentConfig, optional
-            Configuration object. If None, uses default configuration.
+        Args:
+            config (ExperimentConfig, optional): Configuration object. If None,
+                uses default configuration.
         """
         self.config = config if config is not None else ExperimentConfig()
         self._setup_confidence_intervals()
@@ -131,21 +102,16 @@ class ExperimentRunner:
     
     def _compute_confidence_intervals(self, means: List[float], stds: List[float], 
                                     num_samples: int) -> Tuple[List[float], List[float]]:
-        """Compute confidence intervals given means, standard deviations, and number of samples.
+        """Computes confidence intervals for a given set of sample statistics.
         
-        Parameters
-        ----------
-        means : List[float]
-            The means of the samples.
-        stds : List[float]
-            The standard deviations of the samples.
-        num_samples : int
-            The number of samples.
+        Args:
+            means (List[float]): The means of the samples.
+            stds (List[float]): The standard deviations of the samples.
+            num_samples (int): The number of samples.
 
-        Returns
-        -------
-        Tuple[List[float], List[float]]
-            Lower and upper bounds for confidence intervals.
+        Returns:
+            Tuple[List[float], List[float]]: The lower and upper bounds for the
+            confidence intervals.
         """
         z = self.z_scores.get(self.config.confidence_level, 1.96)
         
@@ -160,19 +126,15 @@ class ExperimentRunner:
     
     def _perform_qr_decomposition(self, A_tensor: torch.Tensor, 
                                  number_sensors: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Perform QR decomposition for sensor placement.
+        """Performs QR decomposition for sensor placement.
 
-        Parameters
-        ----------
-        A_tensor : torch.Tensor
-            The basis tensor for decomposition.
-        number_sensors : int
-            The number of sensors to place.
+        Args:
+            A_tensor (torch.Tensor): The basis tensor for decomposition.
+            number_sensors (int): The number of sensors to place.
 
-        Returns
-        -------
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            The Q, R, and P tensors from the decomposition.
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The Q, R, and P
+            tensors from the decomposition.
         """
         # Ensure number_sensors is Python int (not numpy int)
         if hasattr(number_sensors, 'item'):
@@ -191,21 +153,15 @@ class ExperimentRunner:
     
     def _solve_compressive_sensing(self, A_tensor: torch.Tensor, P: torch.Tensor, 
                                   Y: torch.Tensor) -> torch.Tensor:
-        """Solve the compressive sensing problem.
+        """Solves the compressive sensing problem.
 
-        Parameters
-        ----------
-        A_tensor : torch.Tensor
-            The basis tensor.
-        P : torch.Tensor
-            The sensor placement matrix.
-        Y : torch.Tensor
-            The measured data.
+        Args:
+            A_tensor (torch.Tensor): The basis tensor.
+            P (torch.Tensor): The sensor placement matrix.
+            Y (torch.Tensor): The measured data.
 
-        Returns
-        -------
-        torch.Tensor
-            The reconstructed sparse coefficients.
+        Returns:
+            torch.Tensor: The reconstructed sparse coefficients.
         """
         compressive_sensing_config = CompressiveSensingConfig(
             max_iter=self.config.max_iter,
@@ -227,20 +183,16 @@ class ExperimentRunner:
         return cs_solver.solve()
     
     def _add_noise_to_measurements(self, Y: torch.Tensor) -> torch.Tensor:
-        """Add noise to measurements only for non-zero values.
+        """Adds noise to measurements, skipping zero values.
         
-        This is important for reservoir data where 0 values represent
-        the absence of fluid/rock and should not be corrupted with noise.
+        This is important for reservoir data where 0 values represent the
+        absence of fluid/rock and should not be corrupted with noise.
 
-        Parameters
-        ----------
-        Y : torch.Tensor
-            The measurement tensor.
+        Args:
+            Y (torch.Tensor): The measurement tensor.
 
-        Returns
-        -------
-        torch.Tensor
-            The measurement tensor with added noise.
+        Returns:
+            torch.Tensor: The measurement tensor with added noise.
         """
         if self.config.noise_level > 0:
             # Create mask for non-zero values using configurable threshold
@@ -260,24 +212,17 @@ class ExperimentRunner:
                                    A_tensor: Union[np.ndarray, torch.Tensor],
                                    test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
                                    sensor_values: List[int]) -> pd.DataFrame:
-        """
-        Run experiments across full dataset with all subjects and slices.
+        """Runs experiments across the full dataset with all subjects and slices.
         
-        Parameters
-        ----------
-        A_tensor : ndarray | torch.Tensor
-            Basis tensor for decomposition.
-        test_tensors : Dict[str, ndarray | torch.Tensor]
-            Test data per subject.
-        sensor_values : List[int]
-            Range of sensor counts to evaluate.
+        Args:
+            A_tensor (Union[np.ndarray, torch.Tensor]): Basis tensor for
+                decomposition.
+            test_tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): Test
+                data per subject.
+            sensor_values (List[int]): Range of sensor counts to evaluate.
             
-        Returns
-        -------
-        pd.DataFrame
-            Results with columns: ['sensors', 'error_mean', 'error_std', 'ssim_mean', 
-            'ssim_std', 'psnr_mean', 'psnr_std', 'error_ci_lower', 'error_ci_upper',
-            'ssim_ci_lower', 'ssim_ci_upper', 'psnr_ci_lower', 'psnr_ci_upper', 'num_samples']
+        Returns:
+            pd.DataFrame: A table of results with metrics and confidence intervals.
         """
         A_tensor = to_torch_tensor(A_tensor, device=self.config.device, dtype=torch.float32)
         
@@ -363,26 +308,20 @@ class ExperimentRunner:
                                    subject_name: str,
                                    slice_idx: int,
                                    sensor_values: List[int]) -> pd.DataFrame:
-        """
-        Run experiments for a specific slice of a specific subject.
+        """Runs experiments for a specific slice of a specific subject.
         
-        Parameters
-        ----------
-        A_tensor : ndarray | torch.Tensor
-            Basis tensor for decomposition.
-        test_tensors : Dict[str, ndarray | torch.Tensor]
-            Test data per subject.
-        subject_name : str
-            Name of the subject to analyze.
-        slice_idx : int
-            Index of the slice to analyze.
-        sensor_values : List[int]
-            Range of sensor counts to evaluate.
+        Args:
+            A_tensor (Union[np.ndarray, torch.Tensor]): Basis tensor for
+                decomposition.
+            test_tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): Test
+                data per subject.
+            subject_name (str): Name of the subject to analyze.
+            slice_idx (int): Index of the slice to analyze.
+            sensor_values (List[int]): Range of sensor counts to evaluate.
             
-        Returns
-        -------
-        pd.DataFrame
-            Results with statistics and confidence intervals.
+        Returns:
+            pd.DataFrame: A table of results with statistics and confidence
+            intervals.
         """
         A_tensor = to_torch_tensor(A_tensor, device=self.config.device, dtype=torch.float32)
         test_data = to_torch_tensor(test_tensors[subject_name], device=self.config.device, dtype=torch.float32)
@@ -456,30 +395,20 @@ class ExperimentRunner:
                                          subject_name: str,
                                          slice_idx: int,
                                          sensor_values: List[int]) -> pd.DataFrame:
-        """
-        Run wells experiments for a specific slice of a specific subject with statistical analysis.
+        """Runs wells experiments for a specific slice and subject.
         
-        Parameters
-        ----------
-        A_tensor : ndarray | torch.Tensor
-            Basis tensor for decomposition.
-        test_tensors : Dict[str, ndarray | torch.Tensor]
-            Test data per subject.
-        subject_name : str
-            Name of the subject to analyze.
-        slice_idx : int
-            Index of the slice to analyze.
-        sensor_values : List[int]
-            Range of sensor counts to evaluate.
+        Args:
+            A_tensor (Union[np.ndarray, torch.Tensor]): Basis tensor for
+                decomposition.
+            test_tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): Test
+                data per subject.
+            subject_name (str): Name of the subject to analyze.
+            slice_idx (int): Index of the slice to analyze.
+            sensor_values (List[int]): Range of sensor counts to evaluate.
             
-        Returns
-        -------
-        pd.DataFrame
-            Results with statistics and confidence intervals.
-            Columns: ['sensors', 'subject', 'slice_idx', 'error_mean', 'error_std', 
-                     'ssim_mean', 'ssim_std', 'psnr_mean', 'psnr_std', 
-                     'error_ci_lower', 'error_ci_upper', 'ssim_ci_lower', 'ssim_ci_upper',
-                     'psnr_ci_lower', 'psnr_ci_upper', 'num_samples']
+        Returns:
+            pd.DataFrame: A table of results with statistics and confidence
+            intervals.
         """
         if self.config.wells is None:
             raise ValueError("Wells configuration must be provided for wells experiments")
@@ -568,25 +497,17 @@ class ExperimentRunner:
                                          A_tensor: Union[np.ndarray, torch.Tensor],
                                          test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
                                          sensor_values: List[int]) -> pd.DataFrame:
-        """
-        Run wells experiments across full dataset with all subjects and slices.
+        """Runs wells experiments across the full dataset.
         
-        Parameters
-        ----------
-        A_tensor : ndarray | torch.Tensor
-            Basis tensor for decomposition.
-        test_tensors : Dict[str, ndarray | torch.Tensor]
-            Test data per subject.
-        sensor_values : List[int]
-            Range of sensor counts to evaluate.
+        Args:
+            A_tensor (Union[np.ndarray, torch.Tensor]): Basis tensor for
+                decomposition.
+            test_tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): Test
+                data per subject.
+            sensor_values (List[int]): Range of sensor counts to evaluate.
             
-        Returns
-        -------
-        pd.DataFrame
-            Results with columns: ['sensors', 'error_mean', 'error_std', 'mse_mean', 'mse_std',
-            'ssim_mean', 'ssim_std', 'psnr_mean', 'psnr_std', 'error_ci_lower', 'error_ci_upper',
-            'mse_ci_lower', 'mse_ci_upper', 'ssim_ci_lower', 'ssim_ci_upper', 
-            'psnr_ci_lower', 'psnr_ci_upper', 'num_samples']
+        Returns:
+            pd.DataFrame: A table of results with metrics and confidence intervals.
         """
         from TBMD.utils.utils import build_wells_matrix
         if self.config.wells is None:
@@ -695,28 +616,17 @@ class ExperimentRunner:
 
 # Utility functions
 def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
-    """
-    Ensure sensor_values are Python integers.
-    
-    Converts numpy integers or other numeric types to Python int.
-    Useful for avoiding type validation errors.
-    
-    Parameters
-    ----------
-    sensor_values : List
-        List of sensor counts (may contain numpy integers)
-        
-    Returns
-    -------
-    List[int]
-        List of Python integers
-        
-    Examples
-    --------
-    >>> import numpy as np
-    >>> sensor_values = [np.int64(5), np.int32(10), 15]
-    >>> clean_values = ensure_sensor_values_are_int(sensor_values)
-    >>> print(clean_values)  # [5, 10, 15] (all Python int)
+    """Ensures that sensor values are Python integers.
+
+    This function converts numpy integers or other numeric types to Python int,
+    which is useful for avoiding type validation errors.
+
+    Args:
+        sensor_values (List): A list of sensor counts, which may contain
+            numpy integers.
+
+    Returns:
+        List[int]: A list of Python integers.
     """
     result = []
     for val in sensor_values:
@@ -806,32 +716,21 @@ def plot_analytics(df: pd.DataFrame,
                   figsize: Tuple[int, int] = (8, 5),
                   save_path: Optional[str] = None,
                   show_plots: bool = True) -> None:
-    """
-    Plot analytics results from DataFrame with comprehensive visualization options.
-    
-    Replicates the functionality of the original plot_analytics function from plots.py
-    but adapted for DataFrame input format.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Results DataFrame from ExperimentRunner methods.
-    metrics : List[str]
-        Metrics to plot. Default: ['error', 'ssim', 'psnr']
-    plot_type : str
-        Type of plot: 'individual', 'combined', 'normalized', 'all'
-        - 'individual': Separate plots for each metric
-        - 'combined': All metrics on one plot (non-normalized)
-        - 'normalized': Normalized Error (inverted) and SSIM
-        - 'all': All above plot types
-    title_prefix : str
-        Prefix for plot titles.
-    figsize : Tuple[int, int]
-        Figure size for individual plots.
-    save_path : str, optional
-        Base path to save plots (will add suffixes for multiple plots).
-    show_plots : bool
-        Whether to display plots.
+    """Plots analytics results from a DataFrame.
+
+    This function provides comprehensive visualization options and replicates the
+    functionality of the original `plot_analytics` function from `plots.py`, but
+    is adapted for a DataFrame input format.
+
+    Args:
+        df (pd.DataFrame): The results DataFrame from `ExperimentRunner` methods.
+        metrics (List[str]): A list of metrics to plot. Defaults to `['error', 'ssim', 'psnr']`.
+        plot_type (str): The type of plot to generate. Can be one of 'individual',
+            'combined', 'normalized', or 'all'. Defaults to 'individual'.
+        title_prefix (str): A prefix for the plot titles. Defaults to "Experiment Results".
+        figsize (Tuple[int, int]): The figure size for individual plots. Defaults to (8, 5).
+        save_path (Optional[str]): The base path to save plots. Defaults to None.
+        show_plots (bool): Whether to display the plots. Defaults to True.
     """
     import numpy as np
     
@@ -1015,35 +914,23 @@ def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
                          ssim_means, ssim_lower, ssim_upper,
                          psnr_means, psnr_lower, psnr_upper,
                          save_path: Optional[str] = None):
-    """Plot analytics using a legacy function for backward compatibility.
-    
-    This function is the original `plot_analytics` from `plots.py`, adapted for use
-    with separate arrays instead of a DataFrame.
+    """Plots analytics using a legacy function for backward compatibility.
 
-    Parameters
-    ----------
-    sensor_values : array_like
-        The values for the number of sensors.
-    error_means : array_like
-        The mean error values.
-    error_lower : array_like
-        The lower bound of the error confidence interval.
-    error_upper : array_like
-        The upper bound of the error confidence interval.
-    ssim_means : array_like
-        The mean SSIM values.
-    ssim_lower : array_like
-        The lower bound of the SSIM confidence interval.
-    ssim_upper : array_like
-        The upper bound of the SSIM confidence interval.
-    psnr_means : array_like
-        The mean PSNR values.
-    psnr_lower : array_like
-        The lower bound of the PSNR confidence interval.
-    psnr_upper : array_like
-        The upper bound of the PSNR confidence interval.
-    save_path : str, optional
-        The path to save the plot to, by default None.
+    This function is the original `plot_analytics` from `plots.py`, adapted for
+    use with separate arrays instead of a DataFrame.
+
+    Args:
+        sensor_values (array_like): The values for the number of sensors.
+        error_means (array_like): The mean error values.
+        error_lower (array_like): The lower bound of the error confidence interval.
+        error_upper (array_like): The upper bound of the error confidence interval.
+        ssim_means (array_like): The mean SSIM values.
+        ssim_lower (array_like): The lower bound of the SSIM confidence interval.
+        ssim_upper (array_like): The upper bound of the SSIM confidence interval.
+        psnr_means (array_like): The mean PSNR values.
+        psnr_lower (array_like): The lower bound of the PSNR confidence interval.
+        psnr_upper (array_like): The upper bound of the PSNR confidence interval.
+        save_path (str, optional): The path to save the plot to. Defaults to None.
     """
     print("Warning: Using legacy plot function. Consider using plot_analytics with DataFrame.")
     
