@@ -194,10 +194,14 @@ class MetricsHook(Protocol):
 
 
 def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
-    """Factory for a ``LinearSolver`` based on ``cfg.solver``.
+    """Creates a factory for a `LinearSolver` based on `cfg.solver`.
 
-    Returns a callable that solves (lhs)x = rhs. Falls back to SVD if the chosen
-    solver fails with a ``LinAlgError``.
+    Args:
+        cfg (ExtensionCompressiveSensingConfig): The extended configuration object.
+
+    Returns:
+        LinearSolver: A callable that solves (lhs)x = rhs. Falls back to SVD if
+        the chosen solver fails with a `LinAlgError`.
     """
     reg = cfg.reg
 
@@ -234,14 +238,13 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
 
 
 def make_delta_policy(name: str) -> DeltaPolicy:
-    """Factory for δ update rules.
+    """Creates a factory for delta update rules.
 
-    Available
-    ---------
-    "boyd"
-        If primal >> dual, increase δ and scale p downward. If dual >> primal, decrease δ and scale p upward.
-    "cap_only"
-        Keep δ unchanged (only cap is enforced externally).
+    Args:
+        name (str): The name of the policy. Can be 'boyd' or 'cap_only'.
+
+    Returns:
+        DeltaPolicy: A callable that implements the specified delta update rule.
     """
     if name == "boyd":
 
@@ -264,7 +267,15 @@ def make_delta_policy(name: str) -> DeltaPolicy:
 
 
 def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
-    """Factory for stopping rules based on ``ext_cfg.stop_policy``."""
+    """Creates a factory for stopping rules based on `ext_cfg.stop_policy`.
+
+    Args:
+        ext_cfg (ExtensionCompressiveSensingConfig): The extended configuration
+            object.
+
+    Returns:
+        StopPolicy: A callable that implements the specified stopping rule.
+    """
     if ext_cfg.stop_policy == "residual":
 
         def residual_stop(

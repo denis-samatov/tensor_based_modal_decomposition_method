@@ -85,6 +85,7 @@ class GeometryAwareConfig:
     use_generalized_eig: bool = False
     
     def __post_init__(self):
+        """Validates the configuration after initialization."""
         if self.spatial_modes is None:
             self.spatial_modes = [0]
         if self.connectivity_params is None:

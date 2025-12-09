@@ -21,6 +21,14 @@ class LinearForecaster:
     """
     
     def __init__(self, use_torch: bool = False, device: str = None):
+        """Initializes the LinearForecaster.
+
+        Args:
+            use_torch (bool, optional): If `True`, use PyTorch for
+                calculations. Defaults to `False`.
+            device (str, optional): The device to use if `use_torch` is `True`.
+                If `None`, the device is automatically selected.
+        """
         self.M = None
         self.trained = False
         self.use_torch = use_torch

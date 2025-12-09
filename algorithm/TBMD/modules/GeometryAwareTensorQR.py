@@ -344,6 +344,7 @@ class GeometryAwareTensorQR:
                  device: str = "cpu",
                  dtype: torch.dtype = torch.float32,
                  config: Optional[GeometricQRConfig] = None):
+        """Initializes the GeometryAwareTensorQR."""
         self.config = config or GeometricQRConfig()
         self.mesh = mesh
         

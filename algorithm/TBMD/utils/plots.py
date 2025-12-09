@@ -256,26 +256,21 @@ def plot_two_matrices(
     plt.show()
 
 
-def normalize_for_rgb_display(data):
-    """Normalize data for RGB display.
+def normalize_for_rgb_display(data: Union[np.ndarray, 'torch.Tensor']) -> np.ndarray:
+    """Normalizes data for RGB display.
 
-    This is a utility function to normalize data for RGB display to avoid
-    matplotlib warnings.
+    This utility function scales the input data to the range [0, 1] to prevent
+    matplotlib warnings when displaying images.
 
-    Parameters
-    ----------
-    data : numpy.ndarray or torch.Tensor
-        The data to normalize.
+    Args:
+        data (Union[np.ndarray, torch.Tensor]): The data to normalize.
 
-    Returns
-    -------
-    numpy.ndarray
-        The normalized data in the range [0, 1].
+    Returns:
+        np.ndarray: The normalized data in the range [0, 1].
 
-    Examples
-    --------
-    >>> normalized_data = normalize_for_rgb_display(reconstruction_data)
-    >>> plt.imshow(normalized_data)
+    Examples:
+        >>> normalized_data = normalize_for_rgb_display(reconstruction_data)
+        >>> plt.imshow(normalized_data)
     """
     # Convert to numpy if it's a tensor
     array = data.cpu().numpy() if hasattr(data, 'cpu') else np.array(data)

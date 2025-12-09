@@ -21,17 +21,17 @@ class DataLoader:
     
     @staticmethod
     def _read_tabular_file(file_path: Path) -> pd.DataFrame:
-        """Read a CSV or Excel file into a pandas DataFrame.
+        """Reads a CSV or Excel file into a pandas DataFrame.
 
-        Parameters
-        ----------
-        file_path : Path
-            The path to the file to read.
+        Args:
+            file_path (Path): The path to the file to read.
 
-        Returns
-        -------
-        pd.DataFrame
-            The data from the file as a pandas DataFrame.
+        Returns:
+            pd.DataFrame: The data from the file as a pandas DataFrame.
+
+        Raises:
+            ValueError: If the file path is not valid or the file format
+                is not supported.
         """
         if not file_path.is_file():
             raise ValueError(f"The provided path '{file_path}' is not a valid file.")
