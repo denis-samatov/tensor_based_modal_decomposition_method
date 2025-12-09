@@ -79,6 +79,23 @@ class MLPForecaster:
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
                  device: str = None):
+        """Initializes the MLPForecaster.
+
+        Args:
+            in_dim (int): The input dimension.
+            out_dim (int): The output dimension.
+            hidden_dim (int, optional): The hidden layer dimension. Defaults
+                to 256.
+            dropout_rate (float, optional): The dropout rate for
+                regularization. Defaults to 0.3.
+            num_layers (int, optional): The number of hidden layers. Defaults
+                to 2.
+            lr (float, optional): The learning rate. Defaults to 1e-3.
+            weight_decay (float, optional): The L2 regularization parameter.
+                Defaults to 1e-5.
+            device (str, optional): The device to run computations on. If
+                `None`, the device is automatically selected.
+        """
         # Set device
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 

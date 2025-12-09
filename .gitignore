@@ -1,3 +1,7 @@
+# Byte-compiled / cache files
+__pycache__/
+*.pyc
+
 # Virtual environments
 venv/
 .env/
@@ -22,8 +26,6 @@ theory/*.toc
 
 # Algorithm data and outputs
 algorithm/data/
-algorithm/__pycache__/
-algorithm/*.pyc
 
 # Notebooks and checkpoints
 *.ipynb_checkpoints/

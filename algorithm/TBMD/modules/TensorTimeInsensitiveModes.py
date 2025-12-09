@@ -640,10 +640,22 @@ def compute_modal_tensor(core: np.ndarray,
                         factors: List[np.ndarray],
                         device: str = 'cpu',
                         return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
-    """Provide a convenience function for single-subject modal tensor computation.
-    
+    """Computes the modal tensor for a single subject.
+
     .. deprecated:: 0.1.0
        Use :py:meth:`ModalTensorProcessor.process_single_subject` instead.
+
+    Args:
+        core (np.ndarray): The core tensor from the Tucker decomposition.
+        factors (List[np.ndarray]): The factor matrices from the Tucker
+            decomposition.
+        device (str, optional): The device to use for processing. Defaults to
+            'cpu'.
+        return_numpy (bool, optional): If `True`, returns the result as a NumPy
+            array. Defaults to `True`.
+
+    Returns:
+        Union[np.ndarray, torch.Tensor]: The computed modal tensor.
     """
     warnings.warn(
         "compute_modal_tensor is deprecated. Use ModalTensorProcessor.process_single_subject() instead.",
@@ -662,10 +674,25 @@ def process_all_subjects(cores: Union[Dict[str, Union[np.ndarray, torch.Tensor]]
                                      List[Union[np.ndarray, torch.Tensor]]],
                         device: str = 'cpu',
                         return_numpy: bool = True) -> Dict[str, Union[np.ndarray, torch.Tensor]]:
-    """Provide a convenience function for processing multiple subjects.
-    
+    """Processes multiple subjects to compute their modal tensors.
+
     .. deprecated:: 0.1.0
        Use :py:meth:`BatchModalProcessor.process_multiple_subjects` instead.
+
+    Args:
+        cores (Union[Dict[str, Union[np.ndarray, torch.Tensor]], Union[np.ndarray,
+            torch.Tensor]]): The core tensors for the subjects.
+        factors (Union[Dict[str, List[Union[np.ndarray, torch.Tensor]]],
+            List[Union[np.ndarray, torch.Tensor]]]): The factor matrices for the
+            subjects.
+        device (str, optional): The device to use for processing. Defaults to
+            'cpu'.
+        return_numpy (bool, optional): If `True`, returns the result as a NumPy
+            array. Defaults to `True`.
+
+    Returns:
+        Dict[str, Union[np.ndarray, torch.Tensor]]: A dictionary of the
+        computed modal tensors.
     """
     warnings.warn(
         "process_all_subjects is deprecated. Use BatchModalProcessor.process_multiple_subjects() instead.",
@@ -681,10 +708,22 @@ def process_all_subjects(cores: Union[Dict[str, Union[np.ndarray, torch.Tensor]]
 def stack_all_modes(modal_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
                    device: str = 'cpu',
                    return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
-    """Provide a convenience function for stacking modal tensors.
-    
+    """Stacks modal tensors from multiple subjects.
+
     .. deprecated:: 0.1.0
        Use :py:meth:`ModalTensorStacker.stack_modal_tensors` instead.
+
+    Args:
+        modal_tensors (Dict[str, Union[np.ndarray, torch.Tensor]]): A dictionary
+            of modal tensors from multiple subjects.
+        device (str, optional): The device to use for processing. Defaults to
+            'cpu'.
+        return_numpy (bool, optional): If `True`, returns the result as a NumPy
+            array. Defaults to `True`.
+
+    Returns:
+        Union[np.ndarray, torch.Tensor]: A stacked tensor containing all time
+        slices.
     """
     warnings.warn(
         "stack_all_modes is deprecated. Use ModalTensorStacker.stack_modal_tensors() instead.",

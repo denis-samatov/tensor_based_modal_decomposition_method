@@ -639,26 +639,20 @@ def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
 
 # Backward compatibility functions (deprecated)
 def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95):
-    """Compute confidence intervals.
+    """Computes confidence intervals.
 
     .. deprecated:: 0.1.0
        Use :class:`ExperimentRunner` instead.
 
-    Parameters
-    ----------
-    means : list
-        The means of the samples.
-    stds : list
-        The standard deviations of the samples.
-    num_samples : int
-        The number of samples.
-    confidence_level : float, optional
-        The confidence level for the interval, by default 0.95.
+    Args:
+        means (list): The means of the samples.
+        stds (list): The standard deviations of the samples.
+        num_samples (int): The number of samples.
+        confidence_level (float, optional): The confidence level for the
+            interval. Defaults to 0.95.
 
-    Returns
-    -------
-    tuple
-        The lower and upper bounds of the confidence intervals.
+    Returns:
+        tuple: The lower and upper bounds of the confidence intervals.
     """
     print("Warning: This function is deprecated. Use ExperimentRunner class instead.")
     config = ExperimentConfig(confidence_level=confidence_level)
@@ -667,7 +661,7 @@ def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95
 
 
 def run_experiments(*args, **kwargs):
-    """Run experiments.
+    """Runs experiments.
 
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_full_dataset_experiments` instead.
@@ -680,7 +674,7 @@ def run_experiments(*args, **kwargs):
 
 
 def run_experiments_single_slice(*args, **kwargs):
-    """Run experiments for a single slice.
+    """Runs experiments for a single slice.
 
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_single_slice_experiments` instead.
@@ -690,7 +684,7 @@ def run_experiments_single_slice(*args, **kwargs):
 
 
 def run_experiments_df(*args, **kwargs):
-    """Run experiments and return a DataFrame.
+    """Runs experiments and returns a DataFrame.
 
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_experiments` instead.
@@ -700,7 +694,7 @@ def run_experiments_df(*args, **kwargs):
 
 
 def run_experiments_wells_df(*args, **kwargs):
-    """Run experiments with wells and return a DataFrame.
+    """Runs experiments with wells and returns a DataFrame.
 
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_wells_experiments` instead.

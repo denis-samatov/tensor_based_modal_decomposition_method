@@ -92,6 +92,25 @@ class LSTMForecaster:
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
                  device: str = None):
+        """Initializes the LSTMForecaster.
+
+        Args:
+            in_dim (int): The input dimension.
+            out_dim (int): The output dimension.
+            seq_length (int, optional): The length of the input sequence.
+                Defaults to 5.
+            hidden_dim (int, optional): The hidden state dimension. Defaults to
+                64.
+            num_layers (int, optional): The number of LSTM layers. Defaults to
+                1.
+            dropout_rate (float, optional): The dropout rate for
+                regularization. Defaults to 0.0.
+            lr (float, optional): The learning rate. Defaults to 1e-3.
+            weight_decay (float, optional): The L2 regularization parameter.
+                Defaults to 1e-5.
+            device (str, optional): The device to run computations on. If
+                `None`, the device is automatically selected.
+        """
         # Set device
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 
