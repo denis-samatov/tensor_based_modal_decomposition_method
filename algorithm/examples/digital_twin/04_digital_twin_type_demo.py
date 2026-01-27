@@ -27,10 +27,23 @@ import matplotlib.pyplot as plt
 from typing import List
 
 # Ensure algorithm is in path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'algorithm')))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# algorithm is 3 levels up: digital_twin -> examples -> algorithm
+algorithm_path = os.path.abspath(os.path.join(current_dir, '..', '..'))
+if algorithm_path not in sys.path:
+    sys.path.append(algorithm_path)
 
-from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
-from algorithm.TBMD.models.ReservoirProxyModel import ReservoirState
+# from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
+from TBMD.core.digital_twin import DigitalTwin as DigitalTwinTBMD
+from TBMD.config import (
+    DecompositionConfig,
+    SensorPlacementConfig,
+    DigitalTwinConfig,
+    LinearForecasterConfig,
+    MLPForecasterConfig,
+    LSTMForecasterConfig
+)
+from TBMD.models.ReservoirProxyModel import WellControl, ReservoirState
 
 def generate_synthetic_data(spatial_shape=(20, 20), n_time_steps=50):
     """
@@ -121,9 +134,12 @@ def run_demo():
         n_spatial_modes=10,
         n_temporal_modes=10,
         n_sensors=20,
-        proxy_model_type='physics_informed', # Uses simplified hydrodynamic constraints
-        reconstruction_method='admm',
-        update_frequency=5,
+        # proxy_model_type='physics_informed', # Uses simplified hydrodynamic constraints
+        # New config uses 'forecaster_type' and 'proxy_model_type'
+        proxy_model_type='physics_informed', # Enable proxy for controls
+        forecaster_type='lstm',
+        # reconstruction_method='admm', # Now part of cs_config internal defaults
+        # update_frequency=5, # Logic moved to explicit calls or params
         device='cpu'
     )
     
@@ -131,7 +147,17 @@ def run_demo():
     
     # 3. Train
     print("\nTraining Digital Twin...")
-    summary = twin.train(train_data, train_controls)
+    print("\nTraining Digital Twin...")
+    # Core workflow:
+    # 1. Train twin (TBMD + Forecaster)
+    twin.train(train_data)
+    
+    # 2. Calibrate proxy (if using one for controls)
+    if config.proxy_model_type:
+        dummy_states = [twin.create_reservoir_state(p, time=float(i)) for i, p in enumerate(train_data.unbind(-1))]
+        twin.calibrate_proxy_model(dummy_states, train_controls)
+        
+    summary = twin.get_statistics()
     print("Training Summary:")
     for k, v in summary.items():
         print(f"  {k}: {v}")
@@ -158,23 +184,46 @@ def run_demo():
         # We need controls for the NEXT step
         next_ctrls = test_controls[t]
         
+        # A. Predict Next State (using simplified model)
+        # We need controls for the NEXT step
+        next_ctrls = test_controls[t]
+        
         # This updates twin.state.reservoir_state with prediction
-        twin.predict_next_state(twin.state.reservoir_state, next_ctrls)
+        # Core: predict_with_controls returns list of states
+        predicted_states = twin.predict_with_controls(
+            twin.state.reservoir_state or current_state, 
+            next_ctrls, 
+            time_horizon=1.0, 
+            time_steps=1
+        )
+        # Update internal state manually if needed, or rely on update_from_sensors
+        if predicted_states:
+            twin.state.reservoir_state = predicted_states[-1]
+            twin.state.current_time = predicted_states[-1].time
         
         # B. "Measure" Data (Simulate incoming sensor data)
         true_field = test_data[..., t]
         
         # Extract readings at sensor locations
+        # Extract readings at sensor locations
         # Note: sensor_locations is flattened, so we flatten field
-        sensor_mask = twin.sensor_locations.bool()
+        if hasattr(twin, 'sensor_mask') and twin.sensor_mask is not None:
+             sensor_mask = twin.sensor_mask.flatten().bool()
+        elif hasattr(twin, 'sensor_indices') and twin.sensor_indices is not None:
+             sensor_mask = torch.zeros(twin._spatial_shape).flatten().bool()
+             sensor_mask[twin.sensor_indices] = True
+        else:
+             raise ValueError("Sensors not placed yet")
+             
         sensor_readings = true_field.flatten()[sensor_mask]
         
         # C. Update Twin (Reconstruct & Compare)
-        result = twin.update_from_sensors(sensor_readings)
+        reconstructed = twin.update_from_sensors(sensor_readings, timestamp=n_train+t)
         
         # Log
-        error = result['metrics'].get('relative_error', 0.0) * 100
-        status = result['alert_status']
+        error = twin.state.prediction_error * 100
+        # Alert status is in state
+        status = twin.state.alert_status
         history_errors.append(error)
         
         action = "None"

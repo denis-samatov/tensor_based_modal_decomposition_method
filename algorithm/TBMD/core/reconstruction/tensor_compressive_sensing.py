@@ -34,7 +34,7 @@ from TBMD.utils.tbmd_utils import get_torch_device, to_torch_tensor
 # 1. Configs
 # ------------------------------------------------------------------
 
-from TBMD.config.reconstruction_config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
+from TBMD.config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
 
 
 # ------------------------------------------------------------------

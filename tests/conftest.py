@@ -1,11 +1,51 @@
-"""
-PyTest конфигурация и общие fixtures
-"""
+import sys
+import os
 import pytest
+import random
 import numpy as np
 import torch
 from pathlib import Path
 
+# Add 'algorithm' to sys.path to allow imports like 'from TBMD...'
+# Assuming structure: /.../algorithm/TBMD
+# We want to add /.../algorithm
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "algorithm"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+@pytest.fixture(autouse=True)
+def set_global_determinism():
+    """Enforce determinism for every test."""
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    # torch.use_deterministic_algorithms(True) # Uncomment if strictly required, but might be brittle on some ops
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+# --- Fixtures from original tests/audit ---
+
+@pytest.fixture
+def synthetic_tensor():
+    """Generates a consistent random tensor for testing."""
+    shape = (8, 6, 4)
+    return torch.rand(shape, dtype=torch.float32)
+
+@pytest.fixture
+def synthetic_mesh_laplacian():
+    """Generates a synthetic Laplacian for an 8-node line graph."""
+    # Simple 1D Laplacian for size 8
+    size = 8
+    L = np.zeros((size, size))
+    for i in range(size):
+        L[i, i] = 2
+        if i > 0: L[i, i-1] = -1
+        if i < size - 1: L[i, i+1] = -1
+    return torch.tensor(L, dtype=torch.float32)
+
+# --- Fixtures from original algorithm/tests/unit ---
 
 @pytest.fixture
 def sample_tensor_small():
@@ -80,7 +120,7 @@ def decomposition_config():
     """Базовая конфигурация декомпозиции"""
     from TBMD.config import DecompositionConfig
     return DecompositionConfig(
-        ranks=[20, 10],
+        ranks=[20, 10, 5],
         energy_threshold=0.95,
         verbose=False
     )
@@ -92,7 +132,6 @@ def sensor_config():
     from TBMD.config import SensorPlacementConfig
     return SensorPlacementConfig(
         n_sensors=30,
-        method='qr_pivoting',
         verbose=False
     )
 
@@ -107,13 +146,3 @@ def reconstruction_config():
         convergence_eps=1e-2,
         verbose=False
     )
-
-
-@pytest.fixture(autouse=True)
-def set_random_seed():
-    """Установить random seed для воспроизводимости"""
-    np.random.seed(42)
-    torch.manual_seed(42)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
-

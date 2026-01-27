@@ -52,7 +52,7 @@ from TBMD.core.sensor_placement.tensor_qr_factorization import (
     TensorValidator,
     NumericallyStableOperations
 )
-from TBMD.config.sensor_placement_config import SensorPlacementConfig
+from TBMD.config import SensorPlacementConfig
 from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
 from TBMD.core.geometry import (
     MeshGeometry,

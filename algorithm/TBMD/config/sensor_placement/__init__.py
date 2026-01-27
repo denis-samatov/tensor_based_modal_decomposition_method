@@ -11,7 +11,7 @@ References:
 """
 from dataclasses import dataclass
 from typing import Optional, Literal
-from .base_config import BaseConfig
+from ..base import BaseConfig
 
 
 @dataclass
@@ -194,4 +194,3 @@ class GeometricSensorConfig(SensorPlacementConfig):
         
         if self.k_neighbors < 1:
             raise ValueError("k_neighbors должен быть >= 1")
-

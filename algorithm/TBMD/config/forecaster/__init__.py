@@ -3,7 +3,7 @@
 """
 from dataclasses import dataclass, field
 from typing import Literal, Optional
-from .base_config import BaseConfig
+from ..base import BaseConfig
 
 
 @dataclass
@@ -130,4 +130,3 @@ def create_forecaster_config_from_dict(config_dict: dict, model_type: str = 'lst
         return LSTMForecasterConfig(**config_dict)
     else:
         return ForecasterConfig(**config_dict)
-

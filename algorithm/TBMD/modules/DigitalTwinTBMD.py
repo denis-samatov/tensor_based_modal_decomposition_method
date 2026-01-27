@@ -1,3 +1,6 @@
+import warnings
+warnings.warn("The 'modules' package is deprecated. Use 'TBMD.core' instead.", DeprecationWarning, stacklevel=2)
+
 """
 Digital Twin for Reservoir Monitoring and Forecasting using TBMD
 
@@ -37,6 +40,15 @@ from datetime import datetime
 import logging
 import json
 from pathlib import Path
+
+import warnings
+
+warnings.warn(
+    "The 'modules' package is deprecated and will be removed in a future version. "
+    "Please use 'TBMD.core' instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # TBMD components
 from TBMD.modules.TensorHOSVD import TuckerDecomposer

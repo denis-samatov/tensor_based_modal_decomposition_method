@@ -4,23 +4,34 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import logging
 
+import sys
+import os
+
 # TBMD imports
-from TBMD.utils.data_loader import DataLoader
-from TBMD.utils.split_data import split_data_in_memory_ordered
-from TBMD.utils.geometry import MeshGraphBuilder
+# Ensure algorithm is in path (3 levels up: geometry_aware -> examples -> algorithm)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+algorithm_path = os.path.abspath(os.path.join(current_dir, '..', '..'))
+if algorithm_path not in sys.path:
+    sys.path.append(algorithm_path)
+
+from TBMD.config import DecompositionConfig
+from TBMD.data_utils.loaders import DataLoader
+from TBMD.data_utils.splitters import split_data_in_memory_ordered
+from TBMD.core.geometry import MeshGraphBuilder
 from TBMD.utils.tbmd_utils import get_torch_device
 
 # Geometry-Aware Modules
+# Using deprecated modules for now to ensure functionality as they are verified to exist.
 from TBMD.modules.GeometryAwareTensorHOSVD import (
-    GeometryAwareTuckerDecomposer, 
+    GeometryAwareTuckerDecomposer,
     GeometryAwareConfig as HOSVDConfig
 )
 from TBMD.modules.GeometryAwareTensorQR import (
-    GeometryAwareTensorQR, 
+    GeometryAwareTensorQR,
     GeometricQRConfig as QRConfig
 )
 from TBMD.modules.GeometryAwareTensorCS import (
-    GeometryAwareTensorCS, 
+    GeometryAwareTensorCS,
     GeometryAwareCSConfig as CSConfig
 )
 
@@ -30,8 +41,12 @@ logger = logging.getLogger(__name__)
 
 def main():
     # --- 1. Load Data ---
-    data_path = Path("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/data_exp_4_.h5")
-    wells_path = Path("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/all_wells_exp_4.json")
+    # Construct distinct path relative to algorithm location
+    project_root = os.path.dirname(algorithm_path)
+    data_dir = os.path.join(project_root, "data", "Brugge data")
+    
+    data_path = Path(os.path.join(data_dir, "data_exp_4_.h5"))
+    wells_path = Path(os.path.join(data_dir, "all_wells_exp_4.json"))
     
     logger.info("Loading data...")
     tensors = DataLoader.load_h5_tensors(data_path)
@@ -80,25 +95,24 @@ def main():
         laplacian_type='normalized'
     )
     
-    # Flatten spatial dimensions for decomposition if needed, or keep as is
-    # The GeometryAwareTuckerDecomposer handles reshaping internally if we pass the mesh
-    # But typically for TBMD we treat spatial as one mode (flattened) or multiple modes.
-    # Let's check how the decomposer expects it.
-    # The decomposer expects the input tensor to match the mesh. 
-    # If mesh is built from shape (X,Y,Z), it has N_cells = X*Y*Z.
-    # If we pass the raw (X,Y,Z,T) tensor, TensorProcessor might flatten it?
-    # Let's manually flatten spatial dims to be safe and consistent with TBMD usually working on (Space, Time) or (X, Y, Z, T)
-    # The GeometryAwareTuckerDecomposer docstring says:
-    # "Tensor can be 2D (spatial_cells, time) or 3D+ (spatial_x, spatial_y, ..., time)"
-    # So we can pass the original tensor.
+    # Flatten spatial dimensions to match Mesh (N_cells)
+    # The MeshGraphBuilder builds a graph of size N_cells = prod(spatial_shape).
+    # The Laplacian will be (N_cells, N_cells).
+    # We must flatten the tensor to (N_cells, Time) so that Mode 0 matches Laplacian size.
     
-    # Ranks: We need to specify ranks. 
-    # If tensor is (X, Y, Z, T), ranks should be [Rx, Ry, Rz, Rt]
-    # Let's pick some reasonable ranks or use a fraction of dimensions
-    ranks = [min(s, 20) for s in train_tensor.shape]
+    logger.info("Reshaping to (Space, Time) for consistent TBMD pipeline...")
+    spatial_dim_prod = int(np.prod(spatial_shape))
+    time_dim = train_tensor.shape[-1]
+    
+    train_matrix = train_tensor.reshape(spatial_dim_prod, time_dim)
+    logger.info(f"Reshaped tensor: {train_matrix.shape}")
+    
+    # Ranks: [Spatial_Rank, Temporal_Rank]
+    # Keep e.g. 50 spatial modes (if possible) and 20 temporal
+    ranks = [min(spatial_dim_prod, 50), min(time_dim, 20)]
     
     decomposer = GeometryAwareTuckerDecomposer(
-        tensor=train_tensor,
+        tensor=train_matrix,
         mesh=mesh,
         geo_config=hosvd_config,
         ranks=ranks,
@@ -120,28 +134,15 @@ def main():
     # If we have separated spatial modes, we might need the Kronecker product of them?
     # Let's simplify: Reshape data to (Space, Time) for the whole pipeline to be consistent with "Mode 0 is spatial".
     
-    logger.info("Reshaping to (Space, Time) for consistent TBMD pipeline...")
-    spatial_dim_prod = np.prod(spatial_shape)
-    time_dim = train_tensor.shape[-1]
-    
-    train_matrix = train_tensor.reshape(spatial_dim_prod, time_dim)
-    # Re-build mesh is fine (it's the same N_cells)
-    
-    # Re-run HOSVD on matrix (Space, Time) -> SVD essentially, but with Laplacian on Mode 0
-    hosvd_config.spatial_modes = [0]
-    ranks_2d = [min(spatial_dim_prod, 50), min(time_dim, 20)] # Keep 50 spatial modes, 20 temporal
-    
-    decomposer_2d = GeometryAwareTuckerDecomposer(
-        tensor=train_matrix,
-        mesh=mesh,
-        geo_config=hosvd_config,
-        ranks=ranks_2d
-    )
-    decomposer_2d.decompose()
-    
     # The spatial basis is the factor for mode 0
-    spatial_basis = decomposer_2d.factors[0] # Shape (N_cells, R_spatial)
+    spatial_basis = decomposer.factors[0] # Shape (N_cells, R_spatial)
+    # Ensure it's on CPU and numpy/tensor consistent
+    if hasattr(spatial_basis, 'cpu'):
+        spatial_basis = spatial_basis.cpu()
+        
     logger.info(f"Spatial basis shape: {spatial_basis.shape}")
+    
+
     
     # --- 5. Geometry-Aware QR (Sensor Placement) ---
     logger.info("Running Geometry-Aware QR for Sensor Placement...")
@@ -200,8 +201,7 @@ def main():
     # Measurements
     # P is (N_cells,) mask or (N_cells, 1)?
     # GeometryAwareTensorQR returns P as (N_cells,) or (X,Y,Z) tensor of 0/1
-    P_flat = P.flatten().bool()
-    y_measurements = test_snapshot_t[P_flat]
+    # GeometryAwareTensorCS expects Y to be the FULL tensor (values at non-P are ignored)
     
     # Construct A = U (full basis)
     # The CS solver takes A (full), P (mask), Y (measurements)
@@ -215,7 +215,7 @@ def main():
     cs_solver = GeometryAwareTensorCS(
         A=spatial_basis,     # The basis (N_cells, R_spatial)
         P=P,                 # The sensor mask (N_cells,) or shaped
-        Y=y_measurements,    # The measurements (N_sensors,)
+        Y=test_snapshot_t,   # The FULL measurements (solver applies P mask internally)
         mesh=mesh,
         core_cfg=cs_config
     )

@@ -14,7 +14,7 @@ References:
 from dataclasses import dataclass, field
 from typing import Literal, Optional, List, Union
 import torch
-from .base_config import BaseConfig
+from ..base import BaseConfig
 
 
 def _resolve_dtype(dtype: Union[str, torch.dtype, None]) -> torch.dtype:
@@ -239,4 +239,3 @@ class GeometryAwareReconstructionConfig(ReconstructionConfig):
 # Aliases for backward compatibility
 TensorCSConfig = CompressiveSensingConfig
 CSConfig = CompressiveSensingConfig
-

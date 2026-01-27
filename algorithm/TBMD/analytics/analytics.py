@@ -11,7 +11,7 @@ from TBMD.core.reconstruction.tensor_compressive_sensing import (
     TensorCompressiveSensing,
     CompressiveSensingMetrics
 )
-from TBMD.config.reconstruction_config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
+from TBMD.config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
 from TBMD.utils.metrics import compute_metrics
 from TBMD.utils.tbmd_utils import reconstruct_tensor, to_torch_tensor, build_Y_matrices, build_wells_matrix
 from TBMD.config import SEED

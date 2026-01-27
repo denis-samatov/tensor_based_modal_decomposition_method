@@ -7,14 +7,27 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'algorithm'))
+# Add project root to path
+# We need 'algorithm' in path to import TBMD
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Path to algorithm: brugge_field -> applications -> examples -> algorithm
+algorithm_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+if algorithm_path not in sys.path:
+    sys.path.append(algorithm_path)
 
 # Import TBMD modules
-from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
-from algorithm.TBMD.models.ReservoirProxyModel import ReservoirState
-from algorithm.TBMD.data_utils.loaders import DataLoader
-from algorithm.TBMD.data_utils.processors import process_data, calculate_global_minmax_params
+# Import TBMD modules
+from TBMD.core.digital_twin.digital_twin import DigitalTwin as DigitalTwinTBMD
+from TBMD.config import (
+    DecompositionConfig,
+    SensorPlacementConfig,
+    ReconstructionConfig,
+    DigitalTwinConfig,
+    ProcessingStrategy
+)
+from TBMD.models.ReservoirProxyModel import ReservoirState, WellControl
+from TBMD.data_utils.loaders import DataLoader
+from TBMD.data_utils.processors import process_data, calculate_global_minmax_params
 
 def main():
     print("="*60)
@@ -23,8 +36,12 @@ def main():
 
     # 1. Load Data
     print("\n[1/5] Loading Data...")
-    data_path = "/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/data_exp_4_.h5"
-    wells_path = "/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/all_wells_exp_4.json"
+    print("\n[1/5] Loading Data...")
+    project_root = os.path.dirname(algorithm_path)
+    data_dir = os.path.join(project_root, "data", "Brugge data")
+    
+    data_path = os.path.join(data_dir, "data_exp_4_.h5")
+    wells_path = os.path.join(data_dir, "all_wells_exp_4.json")
     
     try:
         tensors = DataLoader.load_h5_tensors(data_path)

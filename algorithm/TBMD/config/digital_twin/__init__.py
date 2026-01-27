@@ -3,7 +3,7 @@
 """
 from dataclasses import dataclass, field
 from typing import Literal, Optional, Dict, Any, List
-from .base_config import BaseConfig
+from ..base import BaseConfig
 
 
 @dataclass
@@ -94,4 +94,3 @@ class DigitalTwinConfig(BaseConfig):
         
         if self.epochs <= 0:
             raise ValueError("epochs должен быть положительным")
-

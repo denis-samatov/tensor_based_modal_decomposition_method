@@ -59,7 +59,7 @@ class ValidationError(TensorDecompositionError):
 DEFAULT_EPSILON = 1e-2
 DEFAULT_MIDDLE_SLICE_INDEX = lambda shape: shape[2] // 2
 
-from TBMD.config.decomposition_config import DecompositionConfig
+from TBMD.config import DecompositionConfig
 
 # State management
 class DecomposerState(Enum):

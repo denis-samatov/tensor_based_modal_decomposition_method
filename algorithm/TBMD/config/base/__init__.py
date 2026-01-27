@@ -80,4 +80,3 @@ class BaseConfig:
             'verbose': self.verbose,
             'log_level': self.log_level
         }
-

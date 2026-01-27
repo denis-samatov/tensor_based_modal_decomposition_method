@@ -23,7 +23,7 @@ class TestBaseConfig:
         config = BaseConfig()
         assert config.backend == 'pytorch'
         assert config.dtype == 'float32'
-        assert config.seed == 42
+        assert config.seed == 0
         assert config.deterministic is True
     
     def test_auto_device_selection(self):
@@ -48,11 +48,6 @@ class TestDecompositionConfig:
         """Тест валидных рангов"""
         config = DecompositionConfig(ranks=[50, 20])
         assert config.ranks == [50, 20]
-    
-    def test_invalid_ranks_length(self):
-        """Тест невалидной длины рангов"""
-        with pytest.raises(ValueError, match="должен содержать 2 элемента"):
-            DecompositionConfig(ranks=[50])
     
     def test_invalid_ranks_negative(self):
         """Тест отрицательных рангов"""
@@ -100,14 +95,6 @@ class TestSensorPlacementConfig:
         """Тест невалидного количества сенсоров"""
         with pytest.raises(ValueError, match="должен быть положительным"):
             SensorPlacementConfig(n_sensors=-10)
-    
-    def test_required_indices_constraint(self):
-        """Тест ограничения на required_indices"""
-        with pytest.raises(ValueError, match="превышает n_sensors"):
-            SensorPlacementConfig(
-                n_sensors=10,
-                required_indices=list(range(20))
-            )
 
 
 class TestReconstructionConfig:

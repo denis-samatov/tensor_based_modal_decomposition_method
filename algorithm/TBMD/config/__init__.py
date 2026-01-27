@@ -4,10 +4,11 @@ TBMD Configuration Module
 Модульные конфигурации для всех компонентов TBMD v2.0
 """
 
-from .base_config import BaseConfig
-from .decomposition_config import DecompositionConfig, GeometryAwareDecompositionConfig
-from .sensor_placement_config import SensorPlacementConfig, GeometricSensorConfig
-from .reconstruction_config import (
+from .base import BaseConfig
+from .decomposition import DecompositionConfig, GeometryAwareDecompositionConfig
+from .modal_processor import ModalProcessorConfig, ProcessingStrategy
+from .sensor_placement import SensorPlacementConfig, GeometricSensorConfig
+from .reconstruction import (
     CompressiveSensingConfig,
     ExtensionCompressiveSensingConfig,
     ReconstructionConfig,
@@ -15,8 +16,8 @@ from .reconstruction_config import (
     TensorCSConfig,
     CSConfig
 )
-from .digital_twin_config import DigitalTwinConfig
-from .forecaster_config import (
+from .digital_twin import DigitalTwinConfig
+from .forecaster import (
     ForecasterConfig,
     LinearForecasterConfig,
     MLPForecasterConfig,
@@ -28,6 +29,8 @@ __all__ = [
     'BaseConfig',
     'DecompositionConfig',
     'GeometryAwareDecompositionConfig',
+    'ModalProcessorConfig',
+    'ProcessingStrategy',
     'SensorPlacementConfig',
     'GeometricSensorConfig',
     # New CS configs (primary)

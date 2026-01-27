@@ -18,10 +18,15 @@ from enum import Enum
 import logging
 
 # Config imports
-from TBMD.config.digital_twin_config import DigitalTwinConfig
-from TBMD.config.decomposition_config import DecompositionConfig, ModalProcessorConfig
-from TBMD.config.sensor_placement_config import SensorPlacementConfig
-from TBMD.config.reconstruction_config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
+from TBMD.config import DigitalTwinConfig
+from TBMD.config import (
+    DecompositionConfig, 
+    DigitalTwinConfig, 
+    ModalProcessorConfig,
+    ProcessingStrategy
+)
+from TBMD.config import SensorPlacementConfig
+from TBMD.config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
 
 # Core TBMD imports
 from TBMD.core.decomposition.hosvd import TuckerDecomposer
@@ -45,7 +50,7 @@ from TBMD.models.ReservoirProxyModel import (
 )
 
 # Forecaster Configs
-from TBMD.config.forecaster_config import (
+from TBMD.config import (
     LinearForecasterConfig,
     MLPForecasterConfig,
     LSTMForecasterConfig
@@ -169,6 +174,9 @@ class DigitalTwin:
         # Статистика
         self.mean = None
         self.std = None
+        
+        # Monitor
+        self.monitor = None
         
         if config.verbose:
             logger.info(f"Digital Twin инициализирован: {config.n_spatial_modes} мод, {config.n_sensors} сенсоров")
@@ -373,59 +381,52 @@ class DigitalTwin:
         # ========================================================================
         # Step 4: Обучение прогнозной модели (Forecaster)
         # ========================================================================
-        self._train_forecaster(data_dict, sample_tensor)
+        # Prepare summary
+        summary = {
+            "ranks": effective_ranks,
+            "modal_dim": modal_dim,
+            "n_sensors": self.config.n_sensors,
+            "qr_valid": is_valid,
+            "qr_error": error,
+            "qr_metrics": metrics
+        }
         
-        # ========================================================================
-        # Step 5: Инициализация Proxy Model (если указан, как в system.py)
-        # ========================================================================
-        if self.proxy_model_type is not None:
-            self._init_proxy_model()
-            try:
-                hist_states, hist_controls = self._build_proxy_training_sets(data_dict)
-                self.calibrate_proxy_model(
-                    hist_states,
-                    hist_controls,
-                    **getattr(self.config, "proxy_config", {})
-                )
-            except Exception as e:
-                logger.warning(f"Proxy calibration skipped/failed: {e}")
-        
-        # Обновить состояние
+        # Add forecaster metrics
+        forecaster_metrics = self._train_forecaster(data_dict, sample_tensor)
+        if forecaster_metrics:
+            summary.update(forecaster_metrics)
+            
+        # Update state
         self.state.is_calibrated = True
         self.state.current_time = 0.0
-        
+
         if self.config.verbose:
             logger.info("✅ Digital Twin обучен успешно")
+            
+        return summary
     
     def _train_forecaster(
         self,
         data_dict: Dict[str, torch.Tensor],
         sample_tensor: torch.Tensor
-    ):
+    ) -> Dict[str, Any]:
         """
         Обучить прогнозную модель на модальных коэффициентах.
         
-        Модели работают в модальном пространстве:
-        - Вход: x(t) - модальные коэффициенты в момент t
-        - Выход: x(t+1) - модальные коэффициенты в момент t+1
-        
-        Args:
-            data_dict: Словарь с нормализованными данными
-            sample_tensor: Пример тензора для определения размерностей
+        Returns:
+             Dict with training metrics
         """
+        metrics = {}
         if self.forecaster_type == ForecasterType.PERSISTENCE:
             if self.config.verbose:
                 logger.info("📊 Forecaster: persistence (без обучения)")
-            return
+            return {"forecaster": "persistence"}
         
         if self.config.verbose:
             logger.info(f"📊 Обучение forecaster ({self.forecaster_type.value})...")
         
         # Проецировать данные в модальное пространство.
-        # Используем только одного субъекта, чтобы не склеивать разные траектории.
         first_key = next(iter(data_dict))
-        if self.config.verbose and len(data_dict) > 1:
-            logger.info(f"Forecaster обучается только на subject '{first_key}' (без склейки траекторий).")
         data = data_dict[first_key]
         T = data.shape[-1]
         modal_seq = []
@@ -438,26 +439,29 @@ class DigitalTwin:
         self._modal_history_subject = first_key
         
         n_modes = modal_history.shape[1]
-        
-        # Получить параметры из config
         forecaster_config = getattr(self.config, 'forecaster_config', {})
         
         # Создать и обучить forecaster
         if self.forecaster_type == ForecasterType.LINEAR:
-            self._train_linear_forecaster(modal_history, forecaster_config)
+            m = self._train_linear_forecaster(modal_history, forecaster_config)
+            metrics.update(m)
         elif self.forecaster_type == ForecasterType.MLP:
-            self._train_mlp_forecaster(modal_history, n_modes, forecaster_config)
+            m = self._train_mlp_forecaster(modal_history, n_modes, forecaster_config)
+            metrics.update(m)
         elif self.forecaster_type == ForecasterType.LSTM:
-            self._train_lstm_forecaster(modal_history, n_modes, forecaster_config)
+            m = self._train_lstm_forecaster(modal_history, n_modes, forecaster_config)
+            metrics.update(m)
         
         if self.config.verbose:
             logger.info(f"✅ Forecaster ({self.forecaster_type.value}) обучен")
+            
+        return metrics
     
     def _train_linear_forecaster(
         self,
         modal_history: torch.Tensor,
         config: Dict[str, Any]
-    ):
+    ) -> Dict[str, Any]:
         """Обучить линейный forecaster: x(t+1) = A @ x(t)"""
         # LinearForecaster работает с numpy
         x_history = modal_history.cpu().numpy()
@@ -471,13 +475,14 @@ class DigitalTwin:
                 logger.info(f"   Linear forecaster R²: {r2:.4f}")
             else:
                 logger.info(f"   Linear forecaster R²: {r2}")
+        return metrics
     
     def _train_mlp_forecaster(
         self,
         modal_history: torch.Tensor,
         n_modes: int,
         config: Dict[str, Any]
-    ):
+    ) -> Dict[str, Any]:
         """Обучить MLP forecaster"""
         x_history = modal_history.cpu().numpy()
         
@@ -509,16 +514,18 @@ class DigitalTwin:
             verbose=self.config.verbose
         )
         
+        final_loss = history.get('train_losses', [0])[-1] if history else 0
         if self.config.verbose:
-            final_loss = history.get('train_losses', [0])[-1] if history else 0
             logger.info(f"   MLP forecaster final loss: {final_loss:.6f}")
+            
+        return {"mlp_history": history, "final_loss": final_loss}
     
     def _train_lstm_forecaster(
         self,
         modal_history: torch.Tensor,
         n_modes: int,
         config: Dict[str, Any]
-    ):
+    ) -> Dict[str, Any]:
         """Обучить LSTM forecaster"""
         x_history = modal_history.cpu().numpy()
         
@@ -552,9 +559,11 @@ class DigitalTwin:
             verbose=self.config.verbose
         )
         
+        final_loss = history.get('train_losses', [0])[-1] if history else 0
         if self.config.verbose:
-            final_loss = history.get('train_losses', [0])[-1] if history else 0
             logger.info(f"   LSTM forecaster final loss: {final_loss:.6f}")
+            
+        return {"lstm_history": history, "final_loss": final_loss}
     
     def _project_to_modal_space(self, state: torch.Tensor) -> torch.Tensor:
         """
@@ -650,6 +659,80 @@ class DigitalTwin:
             reconstructed = torch.stack(reconstructed_list, dim=-1)
         
         return reconstructed
+    
+    def predict_next_state(self, current_state: torch.Tensor, controls: Any) -> torch.Tensor:
+        """
+        Предсказать следующее состояние с учетом управляющих воздействий.
+        Delegates to proxy_model if available, otherwise uses internal forecaster (ignoring controls).
+        """
+        if self.proxy_model is not None:
+             # Proxy model works with full state
+             # Ensure state is tensor
+             if not isinstance(current_state, torch.Tensor):
+                 current_state = to_torch_tensor(current_state, device=self.device, dtype=self.dtype)
+             
+             prediction = self.proxy_model.predict_step(current_state, controls)
+             return prediction
+        else:
+             # Fallback to internal forecaster (ignores controls)
+             # Handle ReservoirState wrapper
+             is_reservoir_state = isinstance(current_state, ReservoirState)
+             if is_reservoir_state:
+                 if current_state.saturation is not None:
+                     # Stack pressure and saturation if separated
+                     state_tensor = torch.stack([current_state.pressure, current_state.saturation], dim=-1)
+                 else:
+                     # Assume pressure holds the full state (e.g. multi-channel tensor)
+                     state_tensor = current_state.pressure
+             else:
+                 state_tensor = current_state
+
+             prediction = self.predict(state_tensor, n_steps=1, return_full_field=True)
+             
+             # Prediction is (spatial..., 1) if n_steps=1
+             if prediction.ndim == state_tensor.ndim + 1:
+                 prediction = prediction.squeeze(-1)
+                 
+             if is_reservoir_state:
+                 # Unpack back to ReservoirState
+                 if current_state.saturation is not None:
+                     # Split back
+                     return [ReservoirState(
+                         pressure=prediction[..., 0],
+                         saturation=prediction[..., 1]
+                     )]
+                 else:
+                     # Keep combined
+                     return [ReservoirState(pressure=prediction)]
+             return [prediction]
+
+    @property
+    def sensor_locations(self) -> torch.Tensor:
+        """
+        Return sensor locations as a spatial mask.
+        Used by compatibility scripts.
+        """
+        if self.sensor_indices is None:
+            spatial_shape = self._spatial_shape if self._spatial_shape else self.config.spatial_shape
+            return torch.zeros(spatial_shape, dtype=torch.bool, device=self.device)
+            
+        # Create mask
+        # Flattened shape size
+        # Use helper
+        if self._spatial_shape is not None:
+             dims = self._spatial_shape
+        elif hasattr(self.config, 'spatial_shape'):
+             dims = self.config.spatial_shape
+        else:
+             # Fallback: infer from sensor indices max? No.
+             # Assume it was set during training
+             raise ValueError("Spatial shape not defined. Digital Twin not trained?")
+
+        n_points = int(np.prod(dims))
+        mask_flat = torch.zeros(n_points, dtype=torch.bool, device=self.device)
+        mask_flat[self.sensor_indices] = True
+        
+        return mask_flat
     
     def predict(
         self,
@@ -1019,7 +1102,23 @@ class DigitalTwin:
             except Exception as e:
                 logger.warning(f"Proxy update failed: {e}")
         
-        return reconstructed
+        # Determine status
+        status = 'normal'
+        if self.monitor:
+             try:
+                 check = self.monitor.check(reconstructed)
+                 if isinstance(check, dict):
+                     status = check.get('status', 'normal')
+                 else:
+                     status = str(check)
+             except Exception:
+                 pass
+
+        return {
+            "reconstructed_field": reconstructed,
+            "alert_status": status,
+            "sensor_errors": sensor_errors
+        }
     
     def evaluate_scenarios(
         self,

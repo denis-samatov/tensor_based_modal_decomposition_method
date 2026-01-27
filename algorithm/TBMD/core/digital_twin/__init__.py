@@ -14,15 +14,12 @@ Digital Twin Module
 from .digital_twin import DigitalTwin, DigitalTwinState, ForecasterType, ProxyModelType
 
 # Extended system with monitoring components (optional)
-# Extended system with monitoring components (optional)
-# from .system import (
-#     DigitalTwinTBMD,
-#     DigitalTwinConfig as SystemDigitalTwinConfig,
-#     DigitalTwinState as SystemDigitalTwinState,
-#     RealtimeMonitor,
-#     ScenarioAnalyzer,
-#     ModelCalibrator,
-# )
+# Extended system components from compat (for backward compatibility)
+from .compat import (
+    RealtimeMonitor,
+    ScenarioAnalyzer,
+    ModelCalibrator,
+)
 
 # Re-export data classes and proxy models from models
 from TBMD.models.ReservoirProxyModel import (
@@ -40,14 +37,14 @@ __all__ = [
     'DigitalTwinState',
     'ForecasterType',
     'ProxyModelType',
-    # 'DigitalTwinTBMD',
+    'DigitalTwinTBMD',
     
     # System components
     # 'SystemDigitalTwinConfig',
     # 'SystemDigitalTwinState', 
-    # 'RealtimeMonitor',
-    # 'ScenarioAnalyzer',
-    # 'ModelCalibrator',
+    'RealtimeMonitor',
+    'ScenarioAnalyzer',
+    'ModelCalibrator',
     
     # Data classes
     'WellControl',

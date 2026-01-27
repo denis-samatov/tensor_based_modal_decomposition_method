@@ -3,7 +3,16 @@ TBMD Modules
 
 Core tensor decomposition and sensor placement algorithms,
 including standard and geometry-aware variants.
+
+.. deprecated:: 2.0.0
+   Use 'TBMD.core' and 'TBMD.config' instead.
 """
+import warnings
+warnings.warn(
+    "The 'TBMD.modules' package is deprecated. Use 'TBMD.core' instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Standard modules
 from .TensorHOSVD import (

@@ -57,7 +57,7 @@ class DimensionMismatchError(ValidationError):
     pass
 
 
-from TBMD.config.decomposition_config import ModalProcessorConfig, ProcessingStrategy
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
 
 
 class TensorValidator:

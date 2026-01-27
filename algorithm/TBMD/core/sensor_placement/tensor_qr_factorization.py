@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
-from TBMD.config.sensor_placement_config import SensorPlacementConfig
+from TBMD.config import SensorPlacementConfig
 
 
 class TensorValidator:

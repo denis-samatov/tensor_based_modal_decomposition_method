@@ -70,13 +70,18 @@ from TBMD.modules.TensorBasedCompressiveSensing import (
     LinearSolver,
     DeltaPolicy,
     StopPolicy,
+    make_linear_solver,
+    make_delta_policy,
+    make_stop_policy,
+    noop_metrics_hook,
+    MetricsHook,
 )
 from TBMD.core.reconstruction.tensor_compressive_sensing import (
     TensorCompressiveSensing,
     TensorCSReconstructor,
     TensorCSConfig
 )
-from TBMD.utils.tbmd_utils import to_torch_tensor
+from TBMD.utils.tbmd_utils import to_torch_tensor, get_torch_device
 from TBMD.core.geometry import MeshGeometry
 
 logger = logging.getLogger(__name__)
