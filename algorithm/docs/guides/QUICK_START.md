@@ -12,9 +12,6 @@ cd tensor-based-modal-decomposition-method
 # Установить зависимости
 pip install -r requirements.txt
 
-# Или с conda
-conda env create -f environment.yml
-conda activate tbmd
 ```
 
 ## 🚀 Первые шаги
@@ -24,33 +21,34 @@ conda activate tbmd
 ```python
 import torch
 from TBMD.config import DecompositionConfig
-from TBMD.core.decomposition import TuckerDecomposer
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
 
 # Ваши данные (I × J × T)
 data = torch.randn(100, 3, 50)
 
 # Конфигурация
 config = DecompositionConfig(
-    ranks=[20, 10],  # [spatial_rank, temporal_rank]
+    ranks=[20, 3, 10],  # (I, J, T) -> три ранга
     verbose=True
 )
 
 # Декомпозиция
-decomposer = TuckerDecomposer(config)
-result = decomposer.decompose(data)
+decomposer = TuckerDecomposer(tensors=data, config=config)
+decomposer.decompose()
 
-print(f"Energy retained: {result.energy_retained:.2%}")
-print(f"Reconstruction error: {result.reconstruction_error:.4f}")
+print(f"Core shape: {decomposer.cores.shape}")
+print(f"Factors shapes: {[f.shape for f in decomposer.factors]}")
 
 # Реконструкция
-reconstructed = result.reconstruct()
+decomposer.reconstruct()
+reconstructed = decomposer.reconstructed_tensors
 ```
 
 ### 2. Размещение сенсоров
 
 ```python
 from TBMD.config import SensorPlacementConfig
-from TBMD.core.sensor_placement import TensorTubeQRDecomposition
+from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
 
 # Конфигурация
 config = SensorPlacementConfig(
@@ -58,40 +56,61 @@ config = SensorPlacementConfig(
     verbose=True
 )
 
-# Размещение
-placer = TensorTubeQRDecomposition(config)
-sensor_result = placer.place_sensors(result.spatial_modes)
+# Правильный поток: Modal Processor -> Modal Stacker -> A_tensor
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
+from TBMD.core.modal_processor.modes import BatchModalProcessor, ModalTensorStacker
+
+modal_config = ModalProcessorConfig(
+    device=config.device,
+    processing_strategy=ProcessingStrategy.BATCH,
+    return_numpy=False
+)
+processor = BatchModalProcessor(modal_config)
+stacker = ModalTensorStacker(modal_config)
+
+modal_tensors = processor.process_multiple_subjects(decomposer.cores, decomposer.factors)
+A_tensor = stacker.stack_modal_tensors(modal_tensors)
+
+# Размещение сенсоров по A_tensor
+placer = TensorTubeQRDecomposition(
+    tensor=A_tensor,
+    config=config
+)
+P, Q, R = placer.factorize()
 
 # Индексы сенсоров
-sensor_indices = sensor_result.sensor_indices
-print(f"Placed {len(sensor_indices)} sensors")
+print(f"Measurement matrix P shape: {P.shape}")
 ```
 
 ### 3. Реконструкция из измерений
 
 ```python
-from TBMD.config import ReconstructionConfig
-from TBMD.core.reconstruction import TensorCompressiveSensing
+from TBMD.config import CompressiveSensingConfig
+from TBMD.core.reconstruction.tensor_compressive_sensing import TensorCompressiveSensing
 
-# Измерения с сенсоров
-measurements = sensor_result.measurement_matrix @ your_field.reshape(-1)
+# Измерения с сенсоров (симуляция)
+# P - бинарная маска, Y - полный тензор измерений с нулями вне сенсоров
+true_field = data[..., -1]
+Y = torch.zeros_like(true_field)
+Y[P.bool()] = true_field[P.bool()]
 
 # Конфигурация
-config = ReconstructionConfig(
-    solver='admm',
-    max_iterations=100,
-    verbose=True
+config = CompressiveSensingConfig(
+    max_iter=100,
+    tol=1e-4,
+    epsilon_l1=1e-2,
+    relax_lambda=0.95
 )
 
 # Реконструкция
-reconstructor = TensorCompressiveSensing(config)
-recon_result = reconstructor.reconstruct(
-    dictionary=result.spatial_modes,
-    measurements=measurements.unsqueeze(1),
-    measurement_matrix=sensor_result.measurement_matrix
+reconstructor = TensorCompressiveSensing(
+    A=A_tensor,  # Modal basis (Dictionary)
+    P=P,         # Sensor Mask
+    Y=Y,         # Full-size measurements
+    core_cfg=config
 )
 
-reconstructed_field = recon_result.reconstructed_field
+x_hat, metrics = reconstructor.solve()
 ```
 
 ### 4. Полный пайплайн
@@ -100,54 +119,73 @@ reconstructed_field = recon_result.reconstructed_field
 from TBMD.config import (
     DecompositionConfig,
     SensorPlacementConfig,
-    ReconstructionConfig
+    CompressiveSensingConfig
 )
-from TBMD.core import (
-    TuckerDecomposer,
-    TensorTubeQRDecomposition,
-    TensorCompressiveSensing
-)
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
+from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
+from TBMD.core.reconstruction.tensor_compressive_sensing import TensorCompressiveSensing
 
 # Исторические данные
-historical_data = load_your_data()  # (I, J, T)
+historical_data = torch.randn(50, 50, 100)  # (Spatial, Time)
 
 # 1. Декомпозиция
 decomposer = TuckerDecomposer(
-    DecompositionConfig(ranks=[40, 20])
+    tensors=historical_data,
+    ranks=[20, 20, 10]
 )
-decomp = decomposer.decompose(historical_data)
+decomposer.decompose()
+
+# 1.1 Modal Processor -> A_tensor
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
+from TBMD.core.modal_processor.modes import BatchModalProcessor, ModalTensorStacker
+
+modal_config = ModalProcessorConfig(
+    device='cpu',
+    processing_strategy=ProcessingStrategy.BATCH,
+    return_numpy=False
+)
+processor = BatchModalProcessor(modal_config)
+stacker = ModalTensorStacker(modal_config)
+modal_tensors = processor.process_multiple_subjects(decomposer.cores, decomposer.factors)
+A_tensor = stacker.stack_modal_tensors(modal_tensors)
 
 # 2. Размещение сенсоров
 placer = TensorTubeQRDecomposition(
-    SensorPlacementConfig(n_sensors=50)
+    tensor=A_tensor,
+    config=SensorPlacementConfig(n_sensors=30)
 )
-sensors = placer.place_sensors(decomp.spatial_modes)
+P, Q, R = placer.factorize()
 
 # 3. В реальном времени: измерения -> реконструкция
-current_measurements = get_sensor_readings()
+# Simulate readings
+true_field = historical_data[..., -1] # Last time step
+Y = torch.zeros_like(true_field)
+Y[P.bool()] = true_field[P.bool()]
 
 reconstructor = TensorCompressiveSensing(
-    ReconstructionConfig(solver='admm')
+    A=A_tensor,
+    P=P,
+    Y=Y,
+    core_cfg=CompressiveSensingConfig(max_iter=100, tol=1e-4, epsilon_l1=1e-2, relax_lambda=0.95)
 )
-recon = reconstructor.reconstruct(
-    dictionary=decomp.spatial_modes,
-    measurements=current_measurements,
-    measurement_matrix=sensors.measurement_matrix
-)
+x_hat, metrics = reconstructor.solve()
 
-current_field = recon.reconstructed_field
+# Reconstruct full field from coefficients
+from TBMD.core.utils.misc import reconstruct_tensor
+reconstructed = reconstruct_tensor(A_tensor=A_tensor, x_hat=x_hat)
 ```
 
 ### 5. Digital Twin
 
 ```python
 from TBMD.config import DigitalTwinConfig
-from TBMD.digital_twin import DigitalTwin
+from TBMD.digital_twin.digital_twin import DigitalTwin
 
 # Конфигурация
 config = DigitalTwinConfig(
     n_spatial_modes=40,
     n_sensors=30,
+    forecaster_type='linear',
     verbose=True
 )
 
@@ -155,25 +193,10 @@ config = DigitalTwinConfig(
 twin = DigitalTwin(config)
 
 # Обучить на исторических данных
-twin.train(historical_data, normalize=True)
+twin.train(data, normalize=False)
 
 # Прогноз
-forecast = twin.predict(current_state, n_steps=10)
-
-# Обновление из сенсоров
-sensor_readings = get_current_readings()
-reconstructed = twin.update_from_sensors(sensor_readings)
-
-# Сценарный анализ
-scenarios = [
-    {'name': 'baseline'},
-    {'name': 'optimistic'},
-    {'name': 'pessimistic'}
-]
-results = twin.evaluate_scenarios(scenarios, n_steps=10)
-
-# Детекция аномалий
-anomalies = twin.detect_anomalies(sensor_data, threshold=3.0)
+forecast = twin.predict(data[..., -1], n_steps=10)
 ```
 
 ## 📂 Примеры
@@ -207,13 +230,12 @@ python examples/digital_twin/01_digital_twin_basic.py
 from TBMD.config import DecompositionConfig
 
 config = DecompositionConfig(
-    ranks=[40, 20],          # Ранги декомпозиции
-    backend='torch',         # 'torch' или 'numpy'
-    device='cuda',           # 'cpu', 'cuda', 'mps'
-    dtype='float32',         # 'float32' или 'float64'
-    normalize=True,          # Нормализовать данные
-    verbose=True,            # Вывод информации
-    eps=1e-8                 # Точность
+    ranks=[40, 3, 20],        # Ранги декомпозиции (пример для (I, J, T))
+    device='cuda',            # 'cpu', 'cuda', 'mps'
+    dtype='float32',          # 'float32' или 'float64'
+    normalize=True,           # Нормализовать данные
+    verbose=True,             # Вывод информации
+    epsilon=1e-8              # Точность
 )
 ```
 
@@ -224,8 +246,8 @@ from TBMD.config import SensorPlacementConfig
 
 config = SensorPlacementConfig(
     n_sensors=50,            # Количество сенсоров
-    backend='torch',
-    device='cpu',
+    check_orthogonality=True,
+    uniform_distribution=False,
     verbose=True
 )
 ```
@@ -233,16 +255,14 @@ config = SensorPlacementConfig(
 ### Настройка реконструкции
 
 ```python
-from TBMD.config import ReconstructionConfig
+from TBMD.config import CompressiveSensingConfig
 
-config = ReconstructionConfig(
-    solver='admm',           # 'least_squares', 'admm', 'ista'
-    max_iterations=100,      # Максимум итераций
-    tolerance=1e-4,          # Точность сходимости
-    lambda_reg=0.01,         # Регуляризация
-    rho=1.0,                 # ADMM параметр
-    backend='torch',
-    verbose=True
+config = CompressiveSensingConfig(
+    max_iter=100,            # Максимум итераций
+    tol=1e-4,                # Точность сходимости
+    delta_init=1.0,          # ADMM параметр
+    epsilon_l1=1e-2,         # L1 регуляризация
+    relax_lambda=0.95        # ADMM relaxation
 )
 ```
 
@@ -254,83 +274,51 @@ config = ReconstructionConfig(
 # Данные: 1000 × 10 × 500 = 5M элементов
 large_data = torch.randn(1000, 10, 500)
 
-# Декомпозиция с рангом 50
+# Декомпозиция
 decomposer = TuckerDecomposer(
-    DecompositionConfig(ranks=[50, 25])
+    tensors=large_data,
+    ranks=[50, 25]
 )
-result = decomposer.decompose(large_data)
+decomposer.decompose()
 
-# Размер после сжатия: ~76K элементов
-# Коэффициент сжатия: ~65x
-compression_ratio = large_data.numel() / (
-    result.spatial_modes.numel() +
-    result.temporal_modes.numel() +
-    result.core.numel()
-)
+# Получаем сжатые факторы и ядра
+core = decomposer.cores
+factors = decomposer.factors
 ```
 
 ### 2. Оптимальное размещение сенсоров
 
 ```python
 # Исторические данные
-data = load_field_data()  # (200, 5, 100)
-
 # Найти моды
 decomposer = TuckerDecomposer(
-    DecompositionConfig(ranks=[40, 20])
+    tensors=data,
+    ranks=[40, 20, 10]
 )
-result = decomposer.decompose(data)
+decomposer.decompose()
+
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
+from TBMD.core.modal_processor.modes import BatchModalProcessor, ModalTensorStacker
+
+modal_config = ModalProcessorConfig(
+    device='cpu',
+    processing_strategy=ProcessingStrategy.BATCH,
+    return_numpy=False
+)
+processor = BatchModalProcessor(modal_config)
+stacker = ModalTensorStacker(modal_config)
+modal_tensors = processor.process_multiple_subjects(decomposer.cores, decomposer.factors)
+A_tensor = stacker.stack_modal_tensors(modal_tensors)
 
 # Разместить 30 сенсоров
 placer = TensorTubeQRDecomposition(
-    SensorPlacementConfig(n_sensors=30)
+    tensor=A_tensor,
+    config=SensorPlacementConfig(n_sensors=30)
 )
-sensors = placer.place_sensors(result.spatial_modes)
+P, Q, R = placer.factorize()
 
 # Вместо 1000 точек измерений нужно только 30!
 print(f"Reduction: {(1 - 30 / 1000) * 100:.1f}%")
-```
-
-### 3. Реконструкция в реальном времени
-
-```python
-# Подготовка (один раз)
-decomposer = TuckerDecomposer(...)
-placer = TensorTubeQRDecomposition(...)
-reconstructor = TensorCompressiveSensing(...)
-
-# В реальном времени (много раз)
-while monitoring:
-    # Получить измерения
-    measurements = read_sensors()
-    
-    # Реконструировать полное поле
-    field = reconstructor.reconstruct(
-        dictionary=spatial_modes,
-        measurements=measurements,
-        measurement_matrix=measurement_matrix
-    )
-    
-    # Анализ и принятие решений
-    analyze_field(field.reconstructed_field)
-```
-
-### 4. Прогнозирование с Digital Twin
-
-```python
-# Обучение (один раз)
-twin = DigitalTwin(config)
-twin.train(historical_data)
-
-# Эксплуатация
-current_state = get_current_state()
-
-# Прогноз на 10 шагов вперед
-forecast = twin.predict(current_state, n_steps=10)
-
-# Оценка разных сценариев
-scenarios = [...]
-results = twin.evaluate_scenarios(scenarios)
 ```
 
 ## 📊 Типичная производительность
@@ -341,43 +329,10 @@ results = twin.evaluate_scenarios(scenarios)
 | Размещение | 30 сенсоров | 5% от полных | - | <0.1s |
 | Реконструкция | ADMM, 100 iter | - | <5% ошибка | ~1s |
 
-## 🔧 Устранение неполадок
-
-### Ошибка: "Out of memory"
-```python
-# Решение 1: Уменьшить ранг
-config = DecompositionConfig(ranks=[20, 10])  # вместо [50, 25]
-
-# Решение 2: Использовать CPU
-config = DecompositionConfig(device='cpu')
-
-# Решение 3: Обрабатывать по частям
-for chunk in data_chunks:
-    result = decomposer.decompose(chunk)
-```
-
-### Ошибка: "Reconstruction not converging"
-```python
-# Решение 1: Увеличить итерации
-config = ReconstructionConfig(max_iterations=200)
-
-# Решение 2: Изменить solver
-config = ReconstructionConfig(solver='least_squares')
-
-# Решение 3: Настроить регуляризацию
-config = ReconstructionConfig(lambda_reg=0.1)
-```
-
-### Ошибка: "Poor energy retention"
-```python
-# Решение: Увеличить ранг
-config = DecompositionConfig(ranks=[60, 30])  # вместо [20, 10]
-```
-
 ## 📚 Дополнительная документация
 
-- [Core Modules](TBMD_CORE_MODULES.md) - Детали реализации
-- [Configuration Guide](TBMD_CONFIGURATION.md) - Все параметры конфигурации
+- [Core Concepts](tbmd_core.md) - Детали реализации
+- [API Reference](API_REFERENCE.md) - Конфигурация и API
 - [Examples](../../examples/README.md) - Больше примеров
 - [API Reference](API_REFERENCE.md) - Полный API
 
@@ -399,4 +354,3 @@ config = DecompositionConfig(ranks=[60, 30])  # вместо [20, 10]
   year={2024}
 }
 ```
-

@@ -25,7 +25,7 @@ from TBMD.modules.TensorBasedCompressiveSensing import (
 from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition,
 )
-from TBMD.utils.metrics import compute_metrics
+from TBMD.core.metrics.metrics import compute_metrics
 
 
 def make_synthetic_dataset(

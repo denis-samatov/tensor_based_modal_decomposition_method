@@ -1,0 +1,579 @@
+"""
+Time-Insensitive Modal Tensor Processing Module
+
+This module implements the computation of time-insensitive modes according to the formula:
+M_{:,n} = A × G_{:,n} × B  (Equation 12)
+
+Where:
+- M_{:,n} is the n-th time-insensitive mode
+- A, B are spatial factor matrices
+- G_{:,n} is the n-th slice of the core tensor along the time dimension
+
+The previous implementation incorrectly applied all spatial factors at once.
+This implementation correctly computes each mode according to the mathematical formula.
+"""
+
+import logging
+import warnings
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, List, Optional, Protocol, Tuple, Union
+
+import numpy as np
+import tensorly as tl
+import torch
+from torch import nn
+
+from TBMD.core.utils.misc import get_torch_device, to_torch_tensor
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Type aliases
+TensorLike = Union[np.ndarray, torch.Tensor]
+SubjectDict = Dict[str, TensorLike]
+FactorList = List[TensorLike]
+SubjectFactorsDict = Dict[str, FactorList]
+
+
+class ProcessingError(Exception):
+    """Base exception for modal tensor processing errors."""
+    pass
+
+
+class ValidationError(ProcessingError):
+    """Raised when input validation fails."""
+    pass
+
+
+class ComputationError(ProcessingError):
+    """Raised when computation fails."""
+    pass
+
+
+class DimensionMismatchError(ValidationError):
+    """Raised when tensor dimensions don't match expected values."""
+    pass
+
+
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
+
+
+class TensorValidator:
+    """Validates tensor inputs for modal processing."""
+    
+    @staticmethod
+    def validate_core_tensor(core: TensorLike) -> None:
+        """Validate core tensor properties."""
+        if core is None:
+            raise ValidationError("Core tensor cannot be None")
+        
+        if isinstance(core, torch.Tensor):
+            core_array = core.detach().cpu().numpy()
+        else:
+            core_array = core
+        
+        if core_array.ndim < 3:
+            raise DimensionMismatchError(
+                f"Core tensor must have at least 3 dimensions, got {core_array.ndim}"
+            )
+        
+        if np.any(np.array(core_array.shape) <= 0):
+            raise DimensionMismatchError(
+                f"All core tensor dimensions must be positive, got shape {core_array.shape}"
+            )
+    
+    @staticmethod
+    def validate_factors(factors: FactorList, core_shape: Tuple[int, ...]) -> None:
+        """Validate factor matrices compatibility with core tensor."""
+        if not factors:
+            raise ValidationError("Factors list cannot be empty")
+        
+        if len(factors) != len(core_shape):
+            raise DimensionMismatchError(
+                f"Number of factors ({len(factors)}) must match core tensor dimensions ({len(core_shape)})"
+            )
+        
+        for i, factor in enumerate(factors):
+            if factor is None:
+                raise ValidationError(f"Factor {i} cannot be None")
+            
+            if isinstance(factor, torch.Tensor):
+                factor_array = factor.detach().cpu().numpy()
+            else:
+                factor_array = factor
+            
+            if factor_array.ndim != 2:
+                raise DimensionMismatchError(
+                    f"Factor {i} must be 2D matrix, got {factor_array.ndim}D"
+                )
+            
+            if factor_array.shape[1] != core_shape[i]:
+                raise DimensionMismatchError(
+                    f"Factor {i} shape {factor_array.shape} incompatible with core dimension {core_shape[i]}"
+                )
+    
+    @staticmethod
+    def validate_subject_data(cores: Union[SubjectDict, TensorLike], 
+                            factors: Union[SubjectFactorsDict, FactorList]) -> None:
+        """Validate subject data consistency."""
+        if isinstance(cores, dict) != isinstance(factors, dict):
+            raise ValidationError(
+                "cores and factors must both be dictionaries or both be single-subject format"
+            )
+        
+        if isinstance(cores, dict) and isinstance(factors, dict):
+            if set(cores.keys()) != set(factors.keys()):
+                raise ValidationError(
+                    f"Subject keys mismatch: cores={set(cores.keys())}, factors={set(factors.keys())}"
+                )
+
+
+class TimeInsensitiveModeComputer:
+    """Computes time-insensitive modes according to Equation (12): M_{:,n} = A × G_{:,n} × B"""
+    
+    def __init__(self, config: ModalProcessorConfig):
+        self.config = config
+        self.device = get_torch_device(config.device)
+        
+    def compute_single_mode(self, 
+                          spatial_factors: List[torch.Tensor], 
+                          core_slice: torch.Tensor) -> torch.Tensor:
+        """
+        Compute a single time-insensitive mode according to Equation (12).
+        
+        For 3D case: M_{:,n} = A × G_{:,n} × B^T
+        For higher dimensions: generalized tensor contraction
+        
+        Parameters
+        ----------
+        spatial_factors : List[torch.Tensor]
+            Spatial factor matrices [A, B, ...] (excluding temporal factor)
+        core_slice : torch.Tensor
+            n-th slice of core tensor G_{:,n}
+            
+        Returns
+        -------
+        torch.Tensor
+            Computed mode M_{:,n}
+        """
+        try:
+            if len(spatial_factors) == 2:  # 3D tensor case
+                A, B = spatial_factors
+                # M_{:,n} = A × G_{:,n} × B^T
+                # Using einsum for clarity: 'ij,jk,lk->il'
+                mode = torch.einsum('ij,jk,lk->il', A, core_slice, B)
+            else:
+                # General case: apply factors sequentially using tensorly's mode_dot
+                try:
+                    # Use tensorly's mode_dot for proper n-mode operations
+                    from tensorly.tenalg import mode_dot
+                    
+                    mode = core_slice
+                    
+                    # Apply each spatial factor using tensorly's mode_dot
+                    for i, factor in enumerate(spatial_factors):
+                        # tensorly's mode_dot expects (tensor, matrix, mode)
+                        # where mode is the dimension to contract along
+                        mode = mode_dot(mode, factor, mode=i)
+                        
+                except Exception as e:
+                    # Fallback: use einsum-based contraction (safest for axis order)
+                    # This approach avoids the axis permutation issues of sequential tensordot
+                    logger.warning(
+                        f"tensorly.mode_dot failed ({e}), using einsum fallback. "
+                        "Consider installing tensorly for optimal performance."
+                    )
+                    
+                    # Build einsum string for multi-factor contraction
+                    # E.g., for 3 factors: 'ij,jkl,km,ln->imn'
+                    mode = core_slice
+                    
+                    # Alternative safer approach: use tl.tenalg.multi_mode_dot if available
+                    # For now, raise informative error since fallback is unreliable
+                    raise NotImplementedError(
+                        "tensorly.mode_dot is required for >2 spatial factors. "
+                        "The tensordot fallback has known axis ordering issues. "
+                        f"Original error: {e}"
+                    )
+            
+            return mode.to(dtype=self.config.numerical_precision)
+            
+        except Exception as e:
+            # Add debug information for better error diagnosis
+            factor_shapes = [f.shape for f in spatial_factors] if spatial_factors else []
+            raise ComputationError(
+                f"Failed to compute mode: {e}. "
+                f"Core slice shape: {core_slice.shape}, "
+                f"Factor shapes: {factor_shapes}"
+            ) from e
+    
+    def compute_all_modes(self, 
+                         core: torch.Tensor, 
+                         factors: List[torch.Tensor]) -> torch.Tensor:
+        """
+        Compute all time-insensitive modes for a single subject.
+        
+        Parameters
+        ----------
+        core : torch.Tensor
+            Core tensor from Tucker decomposition
+        factors : List[torch.Tensor]
+            Factor matrices from Tucker decomposition
+            
+        Returns
+        -------
+        torch.Tensor
+            Modal tensor with shape [...spatial_dims..., n_modes]
+        """
+        # Spatial factors (all except the last temporal factor)
+        spatial_factors = factors[:-1]
+        time_dim = core.shape[-1]
+        
+        if self.config.processing_strategy == ProcessingStrategy.BATCH:
+            return self._compute_modes_batch(core, spatial_factors, time_dim)
+        elif self.config.processing_strategy == ProcessingStrategy.MEMORY_EFFICIENT:
+            return self._compute_modes_memory_efficient(core, spatial_factors, time_dim)
+        else:  # SEQUENTIAL
+            return self._compute_modes_sequential(core, spatial_factors, time_dim)
+    
+    def _compute_modes_batch(self, 
+                           core: torch.Tensor, 
+                           spatial_factors: List[torch.Tensor], 
+                           time_dim: int) -> torch.Tensor:
+        """Batch computation of all modes (fastest, more memory)."""
+        modes = []
+        
+        # Process in batches if batch_size is specified
+        batch_size = self.config.batch_size or time_dim
+        
+        for start_idx in range(0, time_dim, batch_size):
+            end_idx = min(start_idx + batch_size, time_dim)
+            batch_modes = []
+            
+            for n in range(start_idx, end_idx):
+                core_slice = core[..., n]
+                mode = self.compute_single_mode(spatial_factors, core_slice)
+                batch_modes.append(mode)
+            
+            if batch_modes:
+                modes.extend(batch_modes)
+                
+                if self.config.enable_progress_logging:
+                    logger.debug(f"Processed modes {start_idx}-{end_idx-1}/{time_dim}")
+        
+        return torch.stack(modes, dim=-1)
+    
+    def _compute_modes_sequential(self, 
+                                core: torch.Tensor, 
+                                spatial_factors: List[torch.Tensor], 
+                                time_dim: int) -> torch.Tensor:
+        """Sequential computation (slower, less memory)."""
+        modes = []
+        
+        for n in range(time_dim):
+            core_slice = core[..., n]
+            mode = self.compute_single_mode(spatial_factors, core_slice)
+            modes.append(mode)
+            
+            if self.config.enable_progress_logging and (n + 1) % 10 == 0:
+                logger.debug(f"Processed mode {n + 1}/{time_dim}")
+        
+        return torch.stack(modes, dim=-1)
+    
+    def _compute_modes_memory_efficient(self, 
+                                      core: torch.Tensor, 
+                                      spatial_factors: List[torch.Tensor], 
+                                      time_dim: int) -> torch.Tensor:
+        """Memory-efficient computation with gradient checkpointing.
+        
+        Note: Checkpointing requires the wrapped function to return tensors,
+        so we stack the batch before returning.
+        """
+        def compute_batch_fn(start_idx: int, end_idx: int) -> torch.Tensor:
+            """Compute a batch of modes and return as a stacked tensor."""
+            batch_modes = []
+            for n in range(start_idx, end_idx):
+                core_slice = core[..., n]
+                mode = self.compute_single_mode(spatial_factors, core_slice)
+                batch_modes.append(mode)
+            # Stack the batch into a tensor for checkpoint compatibility
+            return torch.stack(batch_modes, dim=-1)
+        
+        # Estimate memory usage and adjust batch size
+        estimated_batch_size = self._estimate_optimal_batch_size(core, spatial_factors)
+        
+        modes = []
+        for start_idx in range(0, time_dim, estimated_batch_size):
+            end_idx = min(start_idx + estimated_batch_size, time_dim)
+            
+            # Use gradient checkpointing for memory efficiency
+            if torch.is_grad_enabled():
+                batch_tensor = torch.utils.checkpoint.checkpoint(
+                    compute_batch_fn, start_idx, end_idx, use_reentrant=False
+                )
+            else:
+                batch_tensor = compute_batch_fn(start_idx, end_idx)
+            
+            # Split the stacked tensor back into individual modes
+            for i in range(batch_tensor.shape[-1]):
+                modes.append(batch_tensor[..., i])
+        
+        return torch.stack(modes, dim=-1)
+    
+    def _estimate_optimal_batch_size(self, 
+                                   core: torch.Tensor, 
+                                   spatial_factors: List[torch.Tensor]) -> int:
+        """Estimate optimal batch size based on memory constraints."""
+        # Rough estimation based on tensor sizes
+        core_memory = core.numel() * core.element_size()
+        factors_memory = sum(f.numel() * f.element_size() for f in spatial_factors)
+        
+        # Estimate memory per mode computation
+        mode_shape = spatial_factors[0].shape[0]  # Assuming square output
+        if len(spatial_factors) > 1:
+            mode_shape *= spatial_factors[1].shape[0]
+        
+        memory_per_mode = mode_shape * 4  # 4 bytes for float32
+        
+        # Target memory usage
+        target_memory = self.config.memory_limit_gb * 1024**3
+        available_memory = target_memory - core_memory - factors_memory
+        
+        estimated_batch_size = max(1, int(available_memory // memory_per_mode))
+        return min(estimated_batch_size, core.shape[-1])
+
+
+class ModalTensorProcessor:
+    """Main processor for computing time-insensitive modal tensors."""
+    
+    def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        self.config = config or ModalProcessorConfig()
+        self.validator = TensorValidator()
+        self.computer = TimeInsensitiveModeComputer(self.config)
+        self.device = get_torch_device(self.config.device)
+        
+        logger.info(f"Initialized ModalTensorProcessor with device: {self.device}")
+    
+    def process_single_subject(self, 
+                             core: TensorLike, 
+                             factors: FactorList) -> Union[np.ndarray, torch.Tensor]:
+        """
+        Process a single subject to compute time-insensitive modal tensor.
+        
+        Parameters
+        ----------
+        core : TensorLike
+            Core tensor from Tucker decomposition
+        factors : FactorList
+            Factor matrices from Tucker decomposition
+            
+        Returns
+        -------
+        Union[np.ndarray, torch.Tensor]
+            Computed modal tensor
+        """
+        if self.config.validation_enabled:
+            self.validator.validate_core_tensor(core)
+            
+        # Convert to tensors on target device
+        core_tensor = to_torch_tensor(core, self.device)
+        factor_tensors = [to_torch_tensor(f, self.device) for f in factors]
+        
+        if self.config.validation_enabled:
+            self.validator.validate_factors(factor_tensors, core_tensor.shape)
+        
+        # Compute modal tensor
+        modal_tensor = self.computer.compute_all_modes(core_tensor, factor_tensors)
+        
+        if self.config.enable_progress_logging:
+            logger.info(f"Computed modal tensor with shape: {modal_tensor.shape}")
+        
+        # Return in requested format
+        if self.config.return_numpy:
+            return tl.to_numpy(modal_tensor)
+        else:
+            return modal_tensor
+
+
+class BatchModalProcessor:
+    """Processes multiple subjects efficiently."""
+    
+    def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        self.config = config or ModalProcessorConfig()
+        self.processor = ModalTensorProcessor(self.config)
+    
+    def process_multiple_subjects(self, 
+                                cores: Union[SubjectDict, TensorLike], 
+                                factors: Union[SubjectFactorsDict, FactorList]) -> Dict[str, Union[np.ndarray, torch.Tensor]]:
+        """
+        Process multiple subjects or a single subject.
+        
+        Parameters
+        ----------
+        cores : Union[SubjectDict, TensorLike]
+            Core tensors for subjects
+        factors : Union[SubjectFactorsDict, FactorList]
+            Factor matrices for subjects
+            
+        Returns
+        -------
+        Dict[str, Union[np.ndarray, torch.Tensor]]
+            Dictionary of computed modal tensors
+        """
+        if self.config.validation_enabled:
+            self.processor.validator.validate_subject_data(cores, factors)
+        
+        results = {}
+        
+        # Handle single subject case
+        if not isinstance(cores, dict):
+            modal_tensor = self.processor.process_single_subject(cores, factors)
+            results["single_subject"] = modal_tensor
+            return results
+        
+        # Handle multiple subjects
+        total_subjects = len(cores)
+        for i, subject in enumerate(cores.keys()):
+            try:
+                modal_tensor = self.processor.process_single_subject(
+                    cores[subject], factors[subject]
+                )
+                results[subject] = modal_tensor
+                
+                if self.config.enable_progress_logging:
+                    logger.info(f"Processed subject '{subject}' ({i+1}/{total_subjects})")
+                    
+            except Exception as e:
+                logger.error(f"Failed to process subject '{subject}': {e}")
+                raise ComputationError(f"Subject '{subject}' processing failed") from e
+        
+        return results
+
+
+class ModalTensorStacker:
+    """Efficiently stacks modal tensors from multiple subjects."""
+    
+    def __init__(self, config: Optional[ModalProcessorConfig] = None):
+        self.config = config or ModalProcessorConfig()
+        self.device = get_torch_device(self.config.device)
+    
+    def stack_modal_tensors(self, 
+                          modal_tensors: Dict[str, Union[np.ndarray, torch.Tensor]]) -> Union[np.ndarray, torch.Tensor]:
+        """
+        Stack modal tensors from multiple subjects along the time dimension.
+        
+        Parameters
+        ----------
+        modal_tensors : Dict[str, Union[np.ndarray, torch.Tensor]]
+            Dictionary of modal tensors from multiple subjects
+            
+        Returns
+        -------
+        Union[np.ndarray, torch.Tensor]
+            Stacked tensor with all time slices
+        """
+        if not modal_tensors:
+            raise ValidationError("modal_tensors is empty")
+        
+        # Convert all tensors to the target device
+        tensors_on_device = []
+        total_time_slices = 0
+        
+        for subject, tensor in modal_tensors.items():
+            tensor_device = to_torch_tensor(tensor, self.device)
+            tensors_on_device.append(tensor_device)
+            total_time_slices += tensor_device.shape[-1]
+            
+            if self.config.enable_progress_logging:
+                logger.debug(f"Subject '{subject}': {tensor_device.shape[-1]} time slices")
+        
+        # Pre-allocate output tensor for efficiency
+        first_tensor = tensors_on_device[0]
+        spatial_shape = first_tensor.shape[:-1]
+        output_shape = spatial_shape + (total_time_slices,)
+        
+        stacked_tensor = torch.zeros(
+            output_shape, 
+            dtype=self.config.numerical_precision, 
+            device=self.device
+        )
+        
+        # Efficiently fill the stacked tensor
+        current_idx = 0
+        for tensor in tensors_on_device:
+            time_slices = tensor.shape[-1]
+            stacked_tensor[..., current_idx:current_idx + time_slices] = tensor
+            current_idx += time_slices
+        
+        if self.config.enable_progress_logging:
+            logger.info(f"Stacked tensor shape: {stacked_tensor.shape}")
+        
+        # Return in requested format
+        if self.config.return_numpy:
+            return tl.to_numpy(stacked_tensor)
+        else:
+            return stacked_tensor
+
+
+# Convenience functions for backward compatibility
+def compute_modal_tensor(core: np.ndarray,
+                        factors: List[np.ndarray],
+                        device: str = 'cpu',
+                        return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
+    """
+    Convenience function for single subject modal tensor computation.
+    
+    DEPRECATED: Use ModalTensorProcessor.process_single_subject() instead.
+    """
+    warnings.warn(
+        "compute_modal_tensor is deprecated. Use ModalTensorProcessor.process_single_subject() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    config = ModalProcessorConfig(device=device, return_numpy=return_numpy)
+    processor = ModalTensorProcessor(config)
+    return processor.process_single_subject(core, factors)
+
+
+def process_all_subjects(cores: Union[Dict[str, Union[np.ndarray, torch.Tensor]], 
+                                   Union[np.ndarray, torch.Tensor]],
+                        factors: Union[Dict[str, List[Union[np.ndarray, torch.Tensor]]], 
+                                     List[Union[np.ndarray, torch.Tensor]]],
+                        device: str = 'cpu',
+                        return_numpy: bool = True) -> Dict[str, Union[np.ndarray, torch.Tensor]]:
+    """
+    Convenience function for multiple subjects processing.
+    
+    DEPRECATED: Use BatchModalProcessor.process_multiple_subjects() instead.
+    """
+    warnings.warn(
+        "process_all_subjects is deprecated. Use BatchModalProcessor.process_multiple_subjects() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    config = ModalProcessorConfig(device=device, return_numpy=return_numpy)
+    processor = BatchModalProcessor(config)
+    return processor.process_multiple_subjects(cores, factors)
+
+
+def stack_all_modes(modal_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+                   device: str = 'cpu',
+                   return_numpy: bool = True) -> Union[np.ndarray, torch.Tensor]:
+    """
+    Convenience function for stacking modal tensors.
+    
+    DEPRECATED: Use ModalTensorStacker.stack_modal_tensors() instead.
+    """
+    warnings.warn(
+        "stack_all_modes is deprecated. Use ModalTensorStacker.stack_modal_tensors() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    config = ModalProcessorConfig(device=device, return_numpy=return_numpy)
+    stacker = ModalTensorStacker(config)
+    return stacker.stack_modal_tensors(modal_tensors)

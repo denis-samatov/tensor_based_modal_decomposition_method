@@ -30,7 +30,7 @@ from TBMD.modules.DigitalTwinTBMD import (
     ReservoirState,
     WellControl
 )
-from TBMD.utils.tbmd_utils import set_seed
+from TBMD.core.utils.misc import set_seed
 from TBMD.config import SEED
 
 # Set random seed for reproducibility

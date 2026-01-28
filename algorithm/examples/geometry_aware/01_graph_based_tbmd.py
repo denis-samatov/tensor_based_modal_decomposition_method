@@ -32,23 +32,23 @@ import time
 # Добавить путь к TBMD модулям
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from TBMD.modules.TensorHOSVD import TuckerDecomposer
-from TBMD.modules.GeometryAwareTensorHOSVD import (
+from TBMD.core.decomposition import TuckerDecomposer
+from TBMD.core.decomposition import (
     GeometryAwareTuckerDecomposer,
-    GeometryAwareConfig
+    GeometryAwareDecompositionConfig as GeometryAwareConfig
 )
-from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import TensorTubeQRDecomposition
-from TBMD.modules.GeometryAwareTensorQR import GeometryAwareTensorQR, GeometricQRConfig
-from TBMD.modules.TensorBasedCompressiveSensing import (
+from TBMD.core.sensor_placement import TensorTubeQRDecomposition
+from TBMD.core.sensor_placement import GeometryAwareTensorQR, GeometricQRConfig
+from TBMD.core.reconstruction import (
     TensorCompressiveSensing,
     CompressiveSensingConfig,
     ExtensionCompressiveSensingConfig
 )
-from TBMD.modules.GeometryAwareTensorCS import (
+from TBMD.core.reconstruction import (
     GeometryAwareTensorCS,
     GeometryAwareCSConfig
 )
-from TBMD.utils.geometry import MeshGraphBuilder, MeshGeometry
+from TBMD.core.geometry import MeshGraphBuilder, MeshGeometry
 from TBMD.utils.tbmd_utils import set_seed, compute_reconstruction_metrics
 from TBMD.config import SEED
 

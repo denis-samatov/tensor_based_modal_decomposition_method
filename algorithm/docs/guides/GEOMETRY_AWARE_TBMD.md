@@ -47,7 +47,7 @@ $$ \mathcal{L} = I - D^{-1/2} A D^{-1/2} $$
 - Высокочастотные моды (большие $\lambda$) — локальные детали
 
 ### 4. Интеграция с TBMD
-Вместо стандартного SVD/HOSVD по пространственным модам, мы используем проекцию на собственные векторы графа или регуляризацию с учетом $L$.
+Вместо стандартного SVD/HOSVD по пространственным модам, мы используем регуляризацию Лапласианом (Laplacian Regularization) в процессе ALS (Alternating Least Squares) для получения пространственно гладких мод, уважающих геометрию.
 
 ---
 
@@ -55,21 +55,18 @@ $$ \mathcal{L} = I - D^{-1/2} A D^{-1/2} $$
 
 ### Основные компоненты
 
-1. **`GeometryAwareTBMD`**
-   - Главный класс
-   - Строит граф по сетке
-   - Вычисляет собственные векторы Лапласиана
-   - Выполняет декомпозицию и реконструкцию
+1. **`GeometryAwareTuckerDecomposer`**
+   - Главный класс для декомпозиции
+   - Принимает тензор и геометрию сетки (MeshGeometry)
+   - Выполняет HOSVD с регуляризацией Лапласианом
 
-2. **`UnstructuredMesh`**
-   - Утилита для работы с неструктурированными сетками
-   - Импорт из GRDECL / EGRID (через `opm` или парсеры)
-   - Определение соседей
+2. **`GeometryAwareConfig`**
+   - Конфигурация параметров регуляризации
+   - Параметры: `alpha` (сила регуляризации), `spatial_modes`, `laplacian_type`
 
-3. **`GraphLaplacian`**
-   - Построение матрицы смежности
-   - Разреженные вычисления (scipy.sparse)
-   - Вычисление собственных чисел/векторов
+3. **`MeshGraphBuilder`** и **`MeshGeometry`**
+   - Утилиты для построения графов смежности из сеток
+   - Поддержка регулярных сеток, KNN, radius-based графов
 
 ---
 
@@ -78,120 +75,139 @@ $$ \mathcal{L} = I - D^{-1/2} A D^{-1/2} $$
 ### Инициализация
 
 ```python
-from algorithm.TBMD.core.geometry_aware import GeometryAwareTBMD, MeshConfig
+from TBMD.core.decomposition.geometry_aware import (
+    GeometryAwareTuckerDecomposer,
+    GeometryAwareConfig
+)
+from TBMD.core.geometry import MeshGraphBuilder
 
-# Конфигурация сетки
-mesh_config = MeshConfig(
-    nx=60, ny=60, nz=1,
-    active_cells_mask=mask_2d  # Бинарная маска активных ячеек
+# 1. Построение геометрии сетки
+builder = MeshGraphBuilder(connectivity_type='grid')
+# Для 2D данных (100x100)
+mesh = builder.build_from_shape(spatial_shape=(100, 100))
+
+# 2. Конфигурация
+geo_config = GeometryAwareConfig(
+    alpha=0.1,             # Сила сглаживания
+    spatial_modes=[0],     # Индекс пространственной моды (в тензоре)
+    laplacian_type='normalized'
 )
 
-# Создание модели
-geo_tbmd = GeometryAwareTBMD(
-    n_modes=50,
-    mesh_config=mesh_config
+# 3. Создание декомпозитора
+decomposer = GeometryAwareTuckerDecomposer(
+    tensor=data_tensor,    # (Spatial, Time) or (X, Y, Time)
+    mesh=mesh,
+    geo_config=geo_config,
+    ranks=[20, 10]         # [spatial_rank, temporal_rank]
 )
 ```
 
-### Обучение
+### Декомпозиция
 
 ```python
-# data: (n_cells, n_timesteps) - данные только в активных ячейках
-# или (nx, ny, nt) - полные данные с нулями
+decomposer.decompose()
 
-geo_tbmd.fit(data)
+# Доступ к результатам
+core = decomposer.cores
+factors = decomposer.factors
+spatial_modes = factors[0]
 ```
 
 ### Реконструкция
 
 ```python
-reconstructed = geo_tbmd.reconstruct(reduced_state)
+reconstructed = decomposer.reconstruct()
 ```
 
 ---
 
 ## API Reference
 
-### `GeometryAwareTBMD`
+### `GeometryAwareTuckerDecomposer`
 
-#### `__init__(n_modes, mesh_config, method='spectral')`
-- `n_modes`: Количество сохраняемых мод
-- `mesh_config`: Конфигурация сетки
-- `method`: 'spectral' (через Лапласиан) или 'regularized' (TBMD с регуляризацией)
+#### `__init__(tensor, mesh, geo_config, ranks, ...)`
+- `tensor`: Входной тензор
+- `mesh`: `MeshGeometry` или tuple размеров (для авто-генерации сетки)
+- `geo_config`: Экземпляр `GeometryAwareConfig`
+- `ranks`: Целевые ранги Таккера
 
-#### `fit(data)`
-Обучает модель.
-- Строит граф смежности
-- Вычисляет собственные векторы
-- Проецирует данные на базис
+#### `decompose()`
+Запускает процесс декомпозиции с ALS и регуляризацией. Сохраняет результаты в свойствах `cores` и `factors`.
 
-#### `transform(data)`
-Сжимает данные в модальное пространство.
+#### `reconstruct()` -> `torch.Tensor`
+Восстанавливает тензор из разложения.
 
-#### `inverse_transform(reduced_data)`
-Восстанавливает исходные данные.
-
-### `MeshConfig`
+### `GeometryAwareConfig`
 
 ```python
 @dataclass
-class MeshConfig:
-    nx: int
-    ny: int
-    nz: int = 1
-    dx: float = 1.0
-    dy: float = 1.0
-    dz: float = 1.0
-    active_cells_mask: Optional[np.ndarray] = None
-    connectivity_matrix: Optional[sp.spmatrix] = None
+class GeometryAwareConfig:
+    alpha: float = 0.01                 # Коэффициент регуляризации
+    spatial_modes: List[int] = [0]      # Индексы мод для применения Лапласиана
+    laplacian_type: str = 'normalized'  # 'standard' или 'normalized'
+    connectivity_type: str = 'grid'     # Метод построения графа
+    connectivity_params: Dict = {}      # Параметры графа
 ```
 
 ---
 
 ## Примеры
 
-### Пример 1: L-образный домен
+### Пример 1: L-образный домен (с маской)
 
 ```python
 import numpy as np
-from algorithm.TBMD.core.geometry_aware import GeometryAwareTBMD, MeshConfig
+from TBMD.core.decomposition.geometry_aware import GeometryAwareTuckerDecomposer, GeometryAwareConfig
+from TBMD.core.geometry import MeshGraphBuilder
 
 # 1. Создаем маску (L-shape)
 mask = np.ones((20, 20))
 mask[10:, 10:] = 0  # Вырезаем угол
 
-# 2. Данные (симуляция диффузии)
-data = generate_diffusion_data(mask, n_steps=100)
+# 2. Строим граф с учетом маски
+builder = MeshGraphBuilder(connectivity_type='grid')
+# Предполагаем, что есть метод build_from_mask или передаем active_cells_mask (зависит от API MeshGraphBuilder)
+# В текущей реализации MeshGraphBuilder может принимать параметры в build_from_shape или конструкторе
+# Для сложных масок лучше создать adjacency matrix вручную или использовать спец. методы
+mesh = builder.build_from_shape((20, 20)) 
+# TODO: Уточнить передачу маски в MeshGraphBuilder API если поддерживается напрямую
 
-# 3. Модель
-config = MeshConfig(20, 20, active_cells_mask=mask)
-model = GeometryAwareTBMD(n_modes=10, mesh_config=config)
-
-# 4. Обучение
-model.fit(data)
-
-# 5. Проверка
-rec = model.inverse_transform(model.transform(data))
-print(f"Reconstruction Error: {np.linalg.norm(data - rec) / np.linalg.norm(data):.4f}")
-```
-
-### Пример 2: Brugge Field
-
-Для реальных месторождений используется маска активных ячеек (`ACTNUM`).
-
-```python
-# Загрузка маски Brugge
-actnum = load_brugge_actnum()  # (nx, ny, nz)
-
-# Конфиг
-config = MeshConfig(
-    nx=139, ny=48, nz=9,
-    active_cells_mask=actnum
+# 3. Декомпозиция
+config = GeometryAwareConfig(alpha=0.5)
+decomposer = GeometryAwareTuckerDecomposer(
+    tensor=data_l_shape, 
+    mesh=mesh, 
+    geo_config=config,
+    ranks=[10, 5]
 )
 
+decomposer.decompose()
+```
+
+### Пример 2: Brugge Field (3D)
+
+Для реальных месторождений данные часто линеаризуются (Active Cells).
+
+```python
+# data shape: (N_active_cells, T)
+
+# Предположим у нас есть матрица смежности для активных ячеек
+adjacency_matrix = load_brugge_adjacency() 
+
+from TBMD.core.geometry import MeshGeometry
+mesh = MeshGeometry(adjacency_matrix=adjacency_matrix)
+
+# Конфиг
+config = GeometryAwareConfig(alpha=0.1)
+
 # TBMD
-model = GeometryAwareTBMD(n_modes=100, mesh_config=config)
-model.fit(pressure_history)
+decomposer = GeometryAwareTuckerDecomposer(
+    tensor=data,
+    mesh=mesh,
+    geo_config=config,
+    ranks=[100, 20] # [spatial, temporal]
+)
+decomposer.decompose()
 ```
 
 ---
@@ -208,6 +224,6 @@ model.fit(pressure_history)
 
 ---
 
-**Версия**: 1.0  
-**Дата**: Ноябрь 2025  
+**Версия**: 2.0
+**Дата**: Январь 2026
 **Автор**: TBMD Team

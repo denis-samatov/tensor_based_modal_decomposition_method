@@ -15,7 +15,7 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
-from TBMD.utils.geometry import (
+from TBMD.core.geometry import (
     GeometricWeightComputer,
     MeshGraphBuilder,
     estimate_characteristic_length,

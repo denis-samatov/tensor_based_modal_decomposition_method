@@ -17,7 +17,7 @@ if algorithm_path not in sys.path:
 
 # Import TBMD modules
 # Import TBMD modules
-from TBMD.core.digital_twin.digital_twin import DigitalTwin as DigitalTwinTBMD
+from TBMD.digital_twin.digital_twin import DigitalTwin as DigitalTwinTBMD
 from TBMD.config import (
     DecompositionConfig,
     SensorPlacementConfig,
@@ -25,9 +25,9 @@ from TBMD.config import (
     DigitalTwinConfig,
     ProcessingStrategy
 )
-from TBMD.models.ReservoirProxyModel import ReservoirState, WellControl
-from TBMD.data_utils.loaders import DataLoader
-from TBMD.data_utils.processors import process_data, calculate_global_minmax_params
+from TBMD.core.forecasting.ReservoirProxyModel import ReservoirState, WellControl
+from TBMD.core.data.loaders import DataLoader
+from TBMD.core.data.processors import process_data, calculate_global_minmax_params
 
 def main():
     print("="*60)

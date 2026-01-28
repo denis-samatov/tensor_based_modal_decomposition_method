@@ -15,22 +15,22 @@ if algorithm_path not in sys.path:
     sys.path.append(algorithm_path)
 
 from TBMD.config import DecompositionConfig
-from TBMD.data_utils.loaders import DataLoader
-from TBMD.data_utils.splitters import split_data_in_memory_ordered
+from TBMD.core.data.loaders import DataLoader
+from TBMD.core.data.splitters import split_data_in_memory_ordered
 from TBMD.core.geometry import MeshGraphBuilder
-from TBMD.utils.tbmd_utils import get_torch_device
+from TBMD.core.utils.misc import get_torch_device
 
 # Geometry-Aware Modules
-# Using deprecated modules for now to ensure functionality as they are verified to exist.
-from TBMD.modules.GeometryAwareTensorHOSVD import (
+# Using core modules instead of deprecated ones
+from TBMD.core.decomposition import (
     GeometryAwareTuckerDecomposer,
-    GeometryAwareConfig as HOSVDConfig
+    GeometryAwareDecompositionConfig as HOSVDConfig
 )
-from TBMD.modules.GeometryAwareTensorQR import (
+from TBMD.core.sensor_placement import (
     GeometryAwareTensorQR,
     GeometricQRConfig as QRConfig
 )
-from TBMD.modules.GeometryAwareTensorCS import (
+from TBMD.core.reconstruction import (
     GeometryAwareTensorCS,
     GeometryAwareCSConfig as CSConfig
 )

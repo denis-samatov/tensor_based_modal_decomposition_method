@@ -42,17 +42,19 @@ print(f"Размер данных: {data.shape}")  # (50, 50, 100)
 Настроим параметры двойника.
 
 ```python
-from algorithm.TBMD.modules.DigitalTwinTBMD import DigitalTwinTBMD, DigitalTwinConfig
+from TBMD.config import DigitalTwinConfig
+from TBMD.digital_twin.digital_twin import DigitalTwin
 
 config = DigitalTwinConfig(
     n_spatial_modes=20,    # Количество пространственных мод
     n_temporal_modes=10,   # Количество временных мод
     n_sensors=15,          # Количество сенсоров для размещения
-    proxy_model_type='linear', # Тип модели прогноза
-    device='cpu'
+    forecaster_type='linear', # Тип модели прогноза
+    device='cpu',
+    verbose=True
 )
 
-twin = DigitalTwinTBMD(config)
+twin = DigitalTwin(config)
 ```
 
 ## Шаг 3: Обучение (Training)
@@ -64,19 +66,17 @@ twin = DigitalTwinTBMD(config)
 train_data = data[..., :80]
 test_data = data[..., 80:]
 
-# Создаем фиктивные контроли (для примера)
-# В реальности здесь будут дебиты скважин
-controls = [] 
-
 # Запуск обучения
 print("Начинаем обучение...")
 summary = twin.train(
     historical_data=train_data,
-    historical_controls=controls
+    normalize=False
 )
 
-print(f"Ошибка реконструкции: {summary['decomposition']['reconstruction_error']:.4f}")
-print(f"Выбрано сенсоров: {summary['sensor_placement']['n_sensors']}")
+# summary содержит метрики обучения
+print(f"Выбрано сенсоров: {summary['n_sensors']}")
+if 'qr_error' in summary:
+    print(f"Ошибка QR факторизации: {summary['qr_error']:.4f}")
 ```
 
 ## Шаг 4: Прогноз (Forecasting)
@@ -84,23 +84,18 @@ print(f"Выбрано сенсоров: {summary['sensor_placement']['n_sensors
 Теперь попробуем предсказать следующие 20 шагов.
 
 ```python
-from algorithm.TBMD.models.ReservoirProxyModel import ReservoirState
-
 # Текущее состояние (последний шаг обучения)
-current_state = ReservoirState(
-    pressure=train_data[..., -1],
-    time=80.0
-)
+current_state = train_data[..., -1]
 
 # Прогноз
-forecast = twin.predict_next_state(
+# predict_next_state используется для одного шага с controls
+# Для многошагового прогноза используем predict
+forecast = twin.predict(
     current_state=current_state,
-    well_controls=[],
-    time_horizon=20.0,
-    time_steps=20
+    n_steps=20
 )
 
-print(f"Сгенерировано прогнозов: {len(forecast)}")
+print(f"Сгенерирован прогноз формы: {forecast.shape}")
 ```
 
 ## Шаг 5: Валидация и Мониторинг
@@ -111,7 +106,12 @@ print(f"Сгенерировано прогнозов: {len(forecast)}")
 import matplotlib.pyplot as plt
 
 # Берем последний прогноз
-predicted_field = forecast[-1].pressure
+# forecast имеет форму (spatial..., n_steps)
+if forecast.ndim > 2:
+    predicted_field = forecast[..., -1]
+else:
+    predicted_field = forecast
+
 true_field = test_data[..., -1]
 
 # Визуализация
@@ -140,24 +140,26 @@ plt.show()
 Симулируем получение данных с датчиков и обновление состояния.
 
 ```python
-# Получаем маску сенсоров (где они стоят)
-sensor_mask = twin.sensor_placement.get_mask() # (nx, ny)
+# Получаем маску сенсоров (spatial mask)
+sensor_mask = twin.sensor_mask
 
 # Симулируем "реальные" измерения в момент t=90
 t_idx = 10 # 80 + 10 = 90
 real_field_t90 = test_data[..., t_idx]
 
 # Извлекаем значения только в точках сенсоров
-sensor_readings = real_field_t90[sensor_mask > 0]
+# В реальности это придет с физических датчиков
+sensor_readings = real_field_t90[sensor_mask]
 
 # Обновляем состояние двойника
 update_result = twin.update_from_sensors(
     sensor_readings=sensor_readings,
-    current_time=90.0
+    timestamp=90.0
 )
 
 print(f"Статус системы: {update_result['alert_status']}")
-print(f"Ошибка восстановления по сенсорам: {update_result['metrics']['relative_error']:.4f}")
+if update_result['sensor_errors']:
+    print(f"Ошибка восстановления по сенсорам: {update_result['sensor_errors'][-1]:.4f}")
 ```
 
 ---
@@ -165,5 +167,5 @@ print(f"Ошибка восстановления по сенсорам: {update
 ## Что дальше?
 
 - Попробуйте изменить `n_spatial_modes` и посмотрите на ошибку.
-- Используйте `proxy_model_type='lstm'` для более сложных данных.
+- Используйте `forecaster_type='lstm'` для более сложных данных.
 - Изучите [Geometry-Aware TBMD](../guides/geometry_aware_tbmd.md) для работы с реальными картами.

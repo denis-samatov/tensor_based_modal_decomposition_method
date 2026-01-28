@@ -21,15 +21,16 @@
 Базовый класс конфигурации.
 
 ```python
-from algorithm.TBMD.config import BaseConfig
+from TBMD.config import BaseConfig
 
 class BaseConfig:
-    device: str = 'cpu'              # 'cpu', 'cuda', 'mps'
+    backend: str = 'pytorch'         # 'pytorch', 'numpy'
     dtype: str = 'float32'           # 'float32', 'float64'
-    backend: str = 'torch'           # 'torch', 'numpy'
-    random_state: Optional[int] = None
-    verbose: bool = False
-    eps: float = 1e-8
+    device: Optional[str] = None     # 'cpu', 'cuda', 'mps' (auto if None)
+    seed: Optional[int] = 0
+    deterministic: bool = True
+    verbose: bool = True
+    log_level: str = 'INFO'
 ```
 
 ### `DecompositionConfig`
@@ -37,14 +38,14 @@ class BaseConfig:
 Конфигурация для Tucker декомпозиции.
 
 ```python
-from algorithm.TBMD.config import DecompositionConfig
+from TBMD.config import DecompositionConfig
 
 config = DecompositionConfig(
-    ranks: List[int] = [20, 10],     # [spatial_rank, temporal_rank]
-    normalize: bool = True,           # Нормализовать данные
-    center: bool = True,              # Центрировать данные
-    max_iterations: int = 100,        # Максимум итераций
-    tolerance: float = 1e-4,          # Точность сходимости
+    ranks: Optional[Union[int, List[int]]] = None,  # Tucker ranks
+    method: str = 'hosvd',
+    epsilon: float = 1e-2,            # Convergence tolerance
+    min_rank: int = 1,                # Minimum rank
+    max_workers: Optional[int] = None, # For parallel processing
     **base_config_params
 )
 ```
@@ -54,31 +55,32 @@ config = DecompositionConfig(
 Конфигурация для размещения сенсоров.
 
 ```python
-from algorithm.TBMD.config import SensorPlacementConfig
+from TBMD.config import SensorPlacementConfig
 
 config = SensorPlacementConfig(
     n_sensors: int,                   # Количество сенсоров (обязательно)
-    min_distance: float = 0.0,        # Минимальное расстояние между сенсорами
-    coverage_threshold: float = 0.9,  # Порог покрытия
+    check_orthogonality: bool = False, # Проверять ортогональность
+    uniform_distribution: bool = False, # Равномерное распределение
     **base_config_params
 )
 ```
 
-### `ReconstructionConfig`
+### `CompressiveSensingConfig`
 
 Конфигурация для реконструкции.
 
 ```python
-from algorithm.TBMD.config import ReconstructionConfig
+from TBMD.config import CompressiveSensingConfig
 
-config = ReconstructionConfig(
-    solver: str = 'admm',             # 'least_squares', 'admm', 'ista'
-    max_iterations: int = 100,
-    tolerance: float = 1e-4,
-    lambda_reg: float = 0.01,         # Регуляризация
-    rho: float = 1.0,                 # ADMM параметр
-    alpha: float = 1.0,               # ISTA step size
-    **base_config_params
+config = CompressiveSensingConfig(
+    max_iter: int = 1000,
+    tol: float = 1e-4,
+    epsilon_l1: float = 1e-2,         # L1 regularization
+    delta_init: float = 1.0,          # ADMM delta parameter
+    delta_max: float = 1.0,
+    relax_lambda: float = 0.95,       # ADMM relaxation (0 < relax_lambda < 1)
+    device: str = 'cpu',
+    dtype: str = 'float32'
 )
 ```
 
@@ -87,14 +89,14 @@ config = ReconstructionConfig(
 Конфигурация для цифрового двойника.
 
 ```python
-from algorithm.TBMD.core.digital_twin.system import DigitalTwinConfig
+from TBMD.config import DigitalTwinConfig
 
 config = DigitalTwinConfig(
     n_spatial_modes: int = 40,
     n_temporal_modes: int = 20,
     n_sensors: int = 30,
-    solver: str = 'admm',
-    max_iterations: int = 100,
+    forecaster_type: str = 'lstm', # 'linear', 'mlp', 'lstm', 'persistence'
+    proxy_model_type: Optional[str] = None, # 'linear_dynamics', 'neural', 'physics_informed'
     **base_config_params
 )
 ```
@@ -110,91 +112,107 @@ config = DigitalTwinConfig(
 Tucker (HOSVD) декомпозиция.
 
 ```python
-from algorithm.TBMD.core.decomposition import TuckerDecomposer
-from algorithm.TBMD.config import DecompositionConfig
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
 
-decomposer = TuckerDecomposer(config: DecompositionConfig)
+decomposer = TuckerDecomposer(
+    tensors: Union[torch.Tensor, Dict[str, torch.Tensor]],
+    config: Optional[DecompositionConfig] = None,
+    # Или параметры напрямую:
+    ranks=[20, 10, 5],
+    device='cpu'
+)
 ```
 
-**Методы:**
+**Методы и Свойства:**
 
 ##### `decompose()`
 
 Выполнить декомпозицию.
 
 ```python
-result = decomposer.decompose(
-    tensor: torch.Tensor,              # (I, J, T)
-    ranks: Optional[List[int]] = None  # Переопределить ранги
-) -> DecompositionResult
+decomposer.decompose()
+```
+
+##### Результаты
+
+После вызова `decompose()`:
+
+```python
+cores = decomposer.cores       # Core tensors
+factors = decomposer.factors   # Factor matrices
 ```
 
 ### Sensor Placement
 
 #### `TensorTubeQRDecomposition`
 
-QR-based sensor placement.
+QR-based sensor placement (Algorithm 2).
 
 ```python
-from algorithm.TBMD.core.sensor_placement import TensorTubeQRDecomposition
-from algorithm.TBMD.config import SensorPlacementConfig
+from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
+from TBMD.config import SensorPlacementConfig
 
-placer = TensorTubeQRDecomposition(config: SensorPlacementConfig)
+placer = TensorTubeQRDecomposition(
+    tensor: torch.Tensor,           # Input tensor (e.g. spatial modes)
+    config: SensorPlacementConfig
+)
 ```
 
 **Методы:**
 
-##### `place_sensors()`
+##### `factorize()`
 
-Разместить сенсоры на основе пространственных мод.
+Выполнить факторизацию и размещение сенсоров.
 
 ```python
-result = placer.place_sensors(
-    spatial_modes: torch.Tensor,       # (I*J, R)
-    constraints: Optional[Dict] = None # Ограничения размещения
-) -> SensorPlacementResult
+P, Q, R = placer.factorize()
+# P: Binary mask of sensor locations
+# Q: Orthogonal basis
+# R: Upper triangular matrix
 ```
 
 ### Reconstruction
 
 #### `TensorCompressiveSensing`
 
-Compressive sensing reconstruction.
+Compressive sensing reconstruction (Algorithm 3).
 
 ```python
-from algorithm.TBMD.core.reconstruction import TensorCompressiveSensing
-from algorithm.TBMD.config import ReconstructionConfig
+from TBMD.core.reconstruction.tensor_compressive_sensing import TensorCompressiveSensing
 
-reconstructor = TensorCompressiveSensing(config: ReconstructionConfig)
+reconstructor = TensorCompressiveSensing(
+    A: torch.Tensor,                # Dictionary (spatial modes)
+    P: torch.Tensor,                # Sensor mask
+    Y: torch.Tensor,                # Measurements
+    core_cfg: Optional[CompressiveSensingConfig] = None
+)
 ```
 
 **Методы:**
 
-##### `reconstruct()`
+##### `solve()`
 
-Реконструировать поле из измерений.
+Реконструировать модальные коэффициенты.
 
 ```python
-result = reconstructor.reconstruct(
-    dictionary: torch.Tensor,           # (I*J, R) - Пространственные моды
-    measurements: torch.Tensor,         # (N, 1) - Измерения
-    measurement_matrix: torch.Tensor,   # (N, I*J) - Матрица измерений
-    initial_guess: Optional[torch.Tensor] = None
-) -> ReconstructionResult
+x_hat, metrics = reconstructor.solve()
+# x_hat: Reconstructed coefficients
+# metrics: Reconstruction statistics
 ```
 
 ---
 
 ## Digital Twin
 
-### `DigitalTwinTBMD`
+### `DigitalTwin`
 
 Цифровой двойник с TBMD.
 
 ```python
-from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig
+from TBMD.digital_twin.digital_twin import DigitalTwin
+from TBMD.config import DigitalTwinConfig
 
-twin = DigitalTwinTBMD(config: DigitalTwinConfig)
+twin = DigitalTwin(config: DigitalTwinConfig)
 ```
 
 **Методы:**
@@ -204,34 +222,35 @@ twin = DigitalTwinTBMD(config: DigitalTwinConfig)
 Обучить digital twin на исторических данных.
 
 ```python
-twin.train(
-    historical_data: torch.Tensor,  # (I, J, T)
-    normalize: bool = True
-) -> None
+summary = twin.train(
+    historical_data: Union[torch.Tensor, Dict[str, torch.Tensor]],
+    normalize: bool = False,
+    ranks: Optional[List[int]] = None
+) -> Dict[str, Any]
+```
+
+##### `predict()`
+
+Прогнозировать будущие состояния (автономный режим).
+
+```python
+forecast = twin.predict(
+    current_state: torch.Tensor,
+    n_steps: int = 1,
+    return_full_field: bool = True
+) -> torch.Tensor
+# Returns: (spatial..., n_steps)
 ```
 
 ##### `predict_next_state()`
 
-Прогнозировать будущие состояния.
+Прогнозировать следующее состояние с учетом управлений (для сценарного анализа).
 
 ```python
-forecast = twin.predict_next_state(
-    current_state: ReservoirState,
-    well_controls: List[WellControl],
-    time_horizon: float,
-    time_steps: int
+prediction = twin.predict_next_state(
+    current_state: Union[torch.Tensor, ReservoirState],
+    controls: Any
 ) -> List[ReservoirState]
-```
-
-##### `update_from_sensors()`
-
-Обновить состояние из измерений.
-
-```python
-result = twin.update_from_sensors(
-    sensor_readings: torch.Tensor,  # (N,)
-    current_time: float
-) -> Dict[str, Any]
 ```
 
 ---
@@ -240,17 +259,12 @@ result = twin.update_from_sensors(
 
 ### Tensor helpers
 ```python
-from algorithm.TBMD.utils import (
+from TBMD.core.utils.misc import (
     get_torch_device, to_torch_tensor,
     reconstruct_tensor
 )
 ```
 
-### Metrics
-```python
-from algorithm.TBMD.utils.metrics import compute_metrics
-```
-
 ---
 
-**Версия API**: 1.0
+**Версия API**: 2.0.0

@@ -18,19 +18,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from TBMD.modules.GeometryAwareTensorHOSVD import (
-    GeometryAwareConfig,
+from TBMD.core.decomposition import (
     GeometryAwareTuckerDecomposer,
+    GeometryAwareDecompositionConfig as GeometryAwareConfig,
 )
-from TBMD.modules.GeometryAwareTensorQR import (
-    GeometricQRConfig,
+from TBMD.core.sensor_placement import (
     GeometryAwareTensorQR,
+    GeometricQRConfig,
 )
-from TBMD.modules.TensorBasedCompressiveSensing import (
+from TBMD.core.reconstruction import (
     CompressiveSensingConfig,
     TensorCompressiveSensing,
 )
-from TBMD.utils.geometry import MeshGraphBuilder
+from TBMD.core.geometry import MeshGraphBuilder
 from TBMD.utils.metrics import compute_metrics
 
 

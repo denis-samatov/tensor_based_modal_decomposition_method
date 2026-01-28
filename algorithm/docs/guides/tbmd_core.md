@@ -51,17 +51,16 @@ $$ \mathcal{X} \approx \mathcal{G} \times_1 \mathbf{U}_1 \times_2 \mathbf{U}_2 \
 Выполняет базовое разложение Такера.
 
 ```python
-from algorithm.TBMD.core.decomposition import TuckerDecomposer
+from TBMD.core.decomposition import TuckerDecomposer
+from TBMD.config import DecompositionConfig
 
-decomposer = TuckerDecomposer(ranks=[20, 20, 10])
-core, factors = decomposer.fit_transform(tensor_data)
+config = DecompositionConfig(ranks=[20, 20, 10])
+decomposer = TuckerDecomposer(tensors=tensor_data, config=config)
+decomposer.decompose()
+
+core = decomposer.cores
+factors = decomposer.factors
 ```
-
-### 2. `ModalProcessor`
-Обрабатывает моды, вычисляет энергии и выбирает оптимальное количество компонент.
-
-### 3. `ModalTensorStacker`
-Собирает результаты декомпозиции в удобную структуру для дальнейшего анализа или обучения суррогатных моделей.
 
 ---
 
@@ -79,21 +78,25 @@ core, factors = decomposer.fit_transform(tensor_data)
 
 ### `TuckerDecomposer`
 
-#### `__init__(ranks=None, relative_error=None)`
-- `ranks`: Список желаемых рангов для каждой моды `[r1, r2, r3, r4]`.
-- `relative_error`: Целевая ошибка реконструкции (если ранги не заданы).
+#### `__init__(tensors, config=None, ranks=None)`
+- `tensors`: Входной тензор или список тензоров.
+- `config`: Экземпляр `DecompositionConfig`.
+- `ranks`: Список желаемых рангов (альтернатива config).
 
-#### `fit(tensor)`
-Вычисляет разложение.
+#### `decompose()`
+Выполняет HOSVD разложение. Результаты сохраняются в `cores` и `factors`.
 
-#### `reconstruct()`
+#### `reconstruct()` -> `Tensor`
 Восстанавливает тензор из текущих факторов и ядра.
 
-#### `get_modal_energy()`
-Возвращает долю энергии, объясняемую каждой модой.
+#### `cores` -> `Tensor`
+Возвращает тензор ядра (Core Tensor).
+
+#### `factors` -> `List[Tensor]`
+Возвращает список факторных матриц для каждой моды.
 
 ---
 
-**Версия**: 1.0  
-**Дата**: Ноябрь 2025  
+**Версия**: 2.0
+**Дата**: Январь 2026
 **Автор**: TBMD Team

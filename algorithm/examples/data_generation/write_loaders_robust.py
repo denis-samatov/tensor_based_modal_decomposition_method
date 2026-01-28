@@ -13,7 +13,7 @@ from PIL import Image
 from tqdm import tqdm
 
 # Import helper from utils (assuming it stays there for now)
-from TBMD.utils.tbmd_utils import extract_step_number
+from TBMD.core.utils.misc import extract_step_number
 
 logger = logging.getLogger(__name__)
 

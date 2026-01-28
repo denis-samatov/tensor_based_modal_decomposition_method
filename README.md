@@ -1,6 +1,6 @@
 # Tensor-Based Modal Decomposition (TBMD)
 
-**Tensor-Based Modal Decomposition** is a library for reduced-order modeling, sensor placement, and field reconstruction of spatiotemporal data (e.g., reservoir simulation results). It enables the creation of **Digital Twins** that operate in real-time.
+**Tensor-Based Modal Decomposition** — это библиотека для моделирования пониженного порядка (ROM), оптимального размещения сенсоров и реконструкции полей пространственно-временных данных (например, результатов гидродинамического моделирования). Она позволяет создавать **Цифровые Двойники (Digital Twins)**, работающие в реальном времени.
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
@@ -8,20 +8,20 @@
 
 ---
 
-## 📚 Documentation
+## 📚 Документация
 
-The full documentation is available in the **[`algorithm/docs/`](algorithm/docs/README.md)** directory.
+Полная документация доступна в директории **[`algorithm/docs/`](algorithm/docs/README.md)**.
 
-- **🚀 [Digital Twin Guide](algorithm/docs/guides/digital_twin.md)**: Build real-time reservoir models.
-- **📐 [Geometry-Aware TBMD](algorithm/docs/guides/geometry_aware_tbmd.md)**: Handle complex unstructured meshes.
-- **🧠 [Core Concepts](algorithm/docs/guides/tbmd_core.md)**: Learn about Tucker Decomposition and HOSVD.
-- **🎓 [Tutorials](algorithm/docs/tutorials/digital_twin_tutorial.md)**: Step-by-step guides.
+- **🚀 [Руководство по Цифровым Двойникам](algorithm/docs/guides/digital_twin.md)**: Создание моделей резервуаров в реальном времени.
+- **📐 [Geometry-Aware TBMD](algorithm/docs/guides/GEOMETRY_AWARE_TBMD.md)**: Работа со сложными неструктурированными сетками.
+- **🧠 [Основные концепции](algorithm/docs/guides/tbmd_core.md)**: Изучите разложение Такера и HOSVD.
+- **🎓 [Уроки](algorithm/docs/tutorials/digital_twin_tutorial.md)**: Пошаговые руководства.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Быстрый старт
 
-### Installation
+### Установка
 
 ```bash
 git clone https://github.com/your-repo/tensor-based-modal-decomposition-method.git
@@ -29,69 +29,73 @@ cd tensor-based-modal-decomposition-method
 pip install -r requirements.txt
 ```
 
-### Basic Usage
+### Базовое использование
 
 ```python
-from algorithm.TBMD.core.decomposition import TuckerDecomposer
-from algorithm.TBMD.config import DecompositionConfig
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
+from TBMD.config import DecompositionConfig
 
-# 1. Configure
+# 1. Конфигурация
 config = DecompositionConfig(ranks=[20, 20, 10])
 
-# 2. Decompose
-decomposer = TuckerDecomposer(config)
-result = decomposer.decompose(data_tensor)
+# 2. Декомпозиция
+decomposer = TuckerDecomposer(tensors=data_tensor, config=config)
+decomposer.decompose()
 
-# 3. Reconstruct
-reconstructed = result.reconstruct()
+# 3. Доступ к результатам
+core = decomposer.cores
+factors = decomposer.factors
+
+# 4. Реконструкция
+decomposer.reconstruct()
+reconstructed = decomposer.reconstructed_tensors
 ```
 
-### Digital Twin Demo
+### Демонстрация Цифрового Двойника
 
 ```python
-from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig
+from TBMD.digital_twin import DigitalTwin
+from TBMD.config import DigitalTwinConfig
 
-# Initialize
-twin = DigitalTwinTBMD(DigitalTwinConfig(n_sensors=30))
+# Инициализация
+twin = DigitalTwin(DigitalTwinConfig(n_sensors=30))
 
-# Train
-twin.train(historical_data)
+# Обучение
+twin.train(historical_data, normalize=False)
 
-# Forecast
-forecast = twin.predict_next_state(current_state, time_horizon=10)
+# Прогноз
+forecast = twin.predict(current_state, n_steps=10)
 ```
 
 ---
 
-## 📂 Project Structure
+## 📂 Структура проекта
 
 ```
 algorithm/
-├── TBMD/                        # Core Library
-│   ├── core/                    # Decomposition, Sensor Placement, Reconstruction
-│   ├── models/                  # Forecasting Models (LSTM, MLP)
-│   ├── config/                  # Configuration classes
-│   └── utils/                   # Utilities
-├── docs/                        # 📚 Documentation
-├── examples/                    # 💡 Example scripts (Basic, Advanced)
-├── scripts/                     # 🏃 Runnable demos
-└── experiments/                 # 📓 Jupyter Notebooks
+├── src/TBMD/                    # Основная библиотека
+│   ├── core/                    # Декомпозиция, Сенсоры, Реконструкция
+│   ├── config/                  # Классы конфигурации
+│   └── utils/                   # Утилиты
+├── docs/                        # 📚 Документация
+├── examples/                    # 💡 Примеры скриптов (Базовые, Продвинутые)
+└── notebooks/                   # 📓 Jupyter Ноутбуки
 ```
 
-## 🧪 Experiments & Examples
+## 🧪 Эксперименты и Примеры
 
-- **Run the Digital Twin demo**:
+- **Запуск демо Цифрового Двойника**:
   ```bash
-  python algorithm/scripts/run_digital_twin_demo.py
+  python algorithm/examples/digital_twin/01_digital_twin_basic.py
   ```
 
-- **Explore the notebooks**:
-  Check `algorithm/experiments/` for Jupyter notebooks covering various experiments and visualizations.
+- **Изучение ноутбуков**:
+  Проверьте `algorithm/notebooks/experiments/` для Jupyter ноутбуков, охватывающих различные эксперименты и визуализации.
 
-## 🤝 Contributing
+## 🤝 Вклад в разработку
 
-Contributions are welcome! Please read the documentation and check existing issues before submitting a PR.
+Мы приветствуем ваш вклад! Пожалуйста, прочитайте документацию и проверьте существующие issues перед отправкой PR.
 
-## 📄 License
+## 📄 Лицензия
 
-This project is licensed under the MIT License.
+Этот проект лицензирован под MIT License.

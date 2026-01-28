@@ -5,6 +5,7 @@ venv/
 
 # Data and outputs
 data/
+!algorithm/TBMD/core/data/
 report/
 output_plots/
 *.npy

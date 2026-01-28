@@ -18,17 +18,17 @@ import matplotlib.pyplot as plt
 from typing import Tuple
 
 # Import components to test
-from TBMD.utils.geometry import (
+from TBMD.core.geometry import (
     MeshGraphBuilder,
     MeshGeometry,
     GeometricWeightComputer,
     estimate_characteristic_length
 )
-from TBMD.modules.GeometryAwareTensorHOSVD import (
+from TBMD.core.decomposition import (
     GeometryAwareTuckerDecomposer,
-    GeometryAwareConfig
+    GeometryAwareDecompositionConfig as GeometryAwareConfig
 )
-from TBMD.modules.GeometryAwareTensorQR import (
+from TBMD.core.sensor_placement import (
     GeometryAwareTensorQR,
     GeometricQRConfig
 )

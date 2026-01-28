@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from TBMD.config import DigitalTwinConfig
-from TBMD.core.digital_twin import DigitalTwin
+from TBMD.digital_twin import DigitalTwin
 
 
 print("=" * 60)

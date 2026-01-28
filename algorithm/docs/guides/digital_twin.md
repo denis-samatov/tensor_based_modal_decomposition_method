@@ -78,7 +78,7 @@
 3. **TensorTubeQRDecomposition** — выбор сенсоров (DEIM-подобный QR, маска `P`, индексы).
 4. **Forecasters** — Linear / MLP / LSTM (auto-regress) в модальном пространстве.
 5. **TensorCompressiveSensing** — ADMM-решатель для реконструкции поля по сенсорам.
-6. **Proxy Model** (опционально, в ноутбуке выключено) — linear/neural/physics-informed.
+6. **Proxy Model** (опционально) — physics-informed proxy для сценариев.
 7. **Мониторинг/валидация** — метрики MSE/RMSE/MAE/R², относительная ошибка, baseline persistence.
 
 ---
@@ -112,7 +112,8 @@ pip install -r requirements.txt
 ### Быстрый тест
 
 ```python
-from algorithm.TBMD.modules.DigitalTwinTBMD import DigitalTwinTBMD, DigitalTwinConfig
+from TBMD.digital_twin.digital_twin import DigitalTwin
+from TBMD.config import DigitalTwinConfig
 
 # Создать конфигурацию
 config = DigitalTwinConfig(
@@ -122,7 +123,7 @@ config = DigitalTwinConfig(
 )
 
 # Создать цифровой двойник
-twin = DigitalTwinTBMD(config)
+twin = DigitalTwin(config)
 print("✅ Digital Twin готов к работе!")
 ```
 
@@ -133,7 +134,7 @@ print("✅ Digital Twin готов к работе!")
 ### Этап 1: Обучение (детально)
 1. **Загрузка/нормализация**  
    - Данные: тензоры `(H, W[, D], T)` по субъектам.  
-   - Нормализация (MinMax/Z-score) с глобальными параметрами train, сплит по времени (ordered).
+   - Если требуется нормализация (MinMax/Z-score), выполните её заранее и передайте данные уже нормализованными.
 2. **TBMD-декомпозиция**  
    - Tucker/HOSVD: `X ≈ G ×₁ U₁ ×₂ U₂ ×₃ … ×ₙ Uₙ`, ранги ограничены `n_spatial_modes`, `n_temporal_modes`.  
    - Modal Processor: для каждого временного среза core + spatial factors → модальные срезы.  
@@ -147,7 +148,7 @@ print("✅ Digital Twin готов к работе!")
    - Обучение переходов `x(t) → x(t+1)` (auto-regressive).  
    - Hyperparams: `hidden_size`, `num_layers`, `seq_length`, `dropout`, `lr`, gradient clipping (LSTM).
 5. **(Опционально) Proxy model**  
-   - Linear/Neural/Physics-informed для сценариев со скважинами; в ноутбуке отключена (`proxy=None`).
+   - Linear/Neural/Physics-informed для сценариев со скважинами.
 
 ### Этап 2: Работа / прогноз / реконструкция (детально)
 1. **Прогноз**  
@@ -173,7 +174,7 @@ print("✅ Digital Twin готов к работе!")
 
 ## Компоненты системы
 
-### 1. DigitalTwinTBMD - Главный класс
+### 1. DigitalTwin - Главный класс
 
 **Назначение**: Оркестрация всех компонентов цифрового двойника
 
@@ -185,193 +186,52 @@ print("✅ Digital Twin готов к работе!")
 ```python
 summary = twin.train(
     historical_data=data,           # torch.Tensor (spatial_dims, time)
-    historical_controls=controls,   # List[List[WellControl]]
-    mesh=mesh,                      # Optional[MeshGeometry]
-    rejection_domain=mask           # Optional[torch.Tensor]
+    normalize=False                 # Нормализуйте данные заранее при необходимости
 )
 ```
 
 **Возвращает**:
 ```python
 {
-    'decomposition': {
-        'reconstruction_error': float,
-        'n_modes': (n_spatial, n_temporal)
-    },
-    'sensor_placement': {
-        'n_sensors': int,
-        'locations': torch.Tensor
-    },
-    'calibration': {
-        'mse': float,
-        'relative_error': float
-    }
+    'ranks': [...],           # Эффективные ранги Tucker
+    'modal_dim': int,         # Число мод
+    'n_sensors': int,         # Число сенсоров
+    'qr_valid': bool,
+    'qr_error': float,
+    'qr_metrics': {...},      # Метрики QR
+    # + опционально метрики обучения forecaster
 }
 ```
 
+#### `predict()`
+Прогноз будущего состояния (автономный)
+
+```python
+forecast = twin.predict(
+    current_state=state_tensor,
+    n_steps=10
+)
+# Returns: Tensor shape (spatial..., n_steps)
+```
+
 #### `predict_next_state()`
-Прогноз будущего состояния
+Прогноз одного шага с учетом управлений (для сценариев)
 
 ```python
 predictions = twin.predict_next_state(
-    current_state=ReservoirState(...),
-    well_controls=[WellControl(...)],
-    time_horizon=10.0,     # Горизонт прогноза
-    time_steps=10          # Количество шагов
+    current_state=state_tensor,
+    controls=controls
 )
 ```
 
 #### `update_from_sensors()`
-Обновление состояния из измерений
+Обновление состояния из измерений сенсоров (использует Compressive Sensing).
 
 ```python
 result = twin.update_from_sensors(
-    sensor_readings=readings,      # torch.Tensor (n_sensors,)
-    sensor_locations=locations,    # Optional
-    current_time=t
+    sensor_readings: torch.Tensor,
+    timestamp: Optional[float] = None
 )
-
-# result содержит:
-{
-    'reconstructed_field': torch.Tensor,  # Восстановленное поле
-    'metrics': {
-        'mse': float,
-        'relative_error': float,
-        'max_error': float
-    },
-    'alert_status': str  # 'normal', 'warning', 'critical'
-}
-```
-
-#### `evaluate_scenarios()`
-Сценарный анализ
-
-```python
-scenarios = {
-    'Scenario1': [controls1...],
-    'Scenario2': [controls2...],
-}
-
-results = twin.evaluate_scenarios(
-    scenarios=scenarios,
-    time_horizon=20.0,
-    time_steps=20
-)
-```
-
-### 2. ReservoirProxyModel - Упрощенные модели
-
-#### 2.1 LinearDynamicsProxyModel
-
-**Описание**: Линейная модель динамики
-
-```
-x(t+1) = A·x(t) + B·u(t)
-```
-
-**Когда использовать**:
-- ✅ Простая/слабо нелинейная динамика
-- ✅ Нужна максимальная скорость
-- ✅ Мало обучающих данных
-
-**Пример**:
-```python
-from algorithm.TBMD.models.ReservoirProxyModel import LinearDynamicsProxyModel
-
-proxy = LinearDynamicsProxyModel(
-    spatial_shape=(100, 100),
-    modal_basis=decomposer.factors[0],
-    device='cpu'
-)
-
-# Калибровка
-metrics = proxy.calibrate(
-    historical_states=states,
-    historical_controls=controls
-)
-```
-
-#### 2.2 NeuralProxyModel
-
-**Описание**: Нейросетевая модель для сложной динамики
-
-**Когда использовать**:
-- ✅ Сильно нелинейная динамика
-- ✅ Много обучающих данных
-- ✅ Нужна высокая точность
-
-**Пример**:
-```python
-from algorithm.TBMD.models.ReservoirProxyModel import NeuralProxyModel
-
-proxy = NeuralProxyModel(
-    spatial_shape=(100, 100),
-    modal_basis=modal_basis,
-    hidden_layers=[128, 64, 32],
-    device='cpu'
-)
-```
-
-#### 2.3 PhysicsInformedProxyModel
-
-**Описание**: Модель с физическими ограничениями
-
-**Особенности**:
-- Учет законов сохранения массы
-- Учет энергетического баланса
-- Физически осмысленные прогнозы
-
-**Когда использовать**:
-- ✅ Важно соблюдение физики
-- ✅ Мало данных
-- ✅ Нужна надежность
-
-### 3. RealtimeMonitor - Мониторинг
-
-**Назначение**: Отслеживание качества прогнозов
-
-```python
-from algorithm.TBMD.core.digital_twin.system import RealtimeMonitor
-
-monitor = RealtimeMonitor(alert_threshold=0.15)
-
-# Сравнение
-metrics = monitor.compare_prediction_observation(
-    predicted=predicted_field,
-    observed=observed_field,
-    sensor_locations=sensor_mask
-)
-
-# Проверка статуса
-status = monitor.check_alert_status(metrics)
-# 'normal', 'warning', 'critical'
-```
-
-### 4. ScenarioAnalyzer - Сценарный анализ
-
-**Назначение**: What-if анализ
-
-```python
-from algorithm.TBMD.core.digital_twin.system import ScenarioAnalyzer
-
-analyzer = ScenarioAnalyzer(proxy_model)
-
-# Оценка сценария
-result = analyzer.evaluate_scenario(
-    scenario_name='High Production',
-    initial_state=state,
-    well_controls=controls,
-    time_horizon=30.0,
-    time_steps=30
-)
-
-# KPI
-kpis = result['kpis']
-# {
-#     'avg_pressure': float,
-#     'total_production': float,
-#     'max_drawdown': float
-# }
 ```
 
 ---
@@ -382,62 +242,30 @@ kpis = result['kpis']
 
 ```python
 import torch
-from algorithm.TBMD.modules.DigitalTwinTBMD import (
-    DigitalTwinTBMD, DigitalTwinConfig
-)
-from algorithm.TBMD.models.ReservoirProxyModel import (
-    WellControl, ReservoirState
-)
+from TBMD.digital_twin.digital_twin import DigitalTwin
+from TBMD.config import DigitalTwinConfig
 
 # 1. Конфигурация
 config = DigitalTwinConfig(
     n_spatial_modes=40,
     n_temporal_modes=20,
-    n_sensors=30
+    n_sensors=30,
+    forecaster_type='linear'
 )
 
 # 2. Создание
-twin = DigitalTwinTBMD(config)
+twin = DigitalTwin(config)
 
 # 3. Обучение
-twin.train(historical_data, historical_controls)
+twin.train(historical_data)
 
-# 4. Использование
-current = ReservoirState(pressure=field, time=100.0)
-controls = [WellControl('WELL1', 'rate', 1000, (10, 20))]
-
-# Прогноз
-forecast = twin.predict_next_state(current, controls)
-
-# Обновление
-sensor_data = get_measurements()
-twin.update_from_sensors(sensor_data)
+# 4. Прогноз
+forecast = twin.predict(current_state, n_steps=20)
 ```
 
 ### Пример 2: Интеграция с Brugge данными
 
-См. полный пример: [`algorithm/scripts/run_brugge_enhanced.py`](algorithm/scripts/run_brugge_enhanced.py)
-
-### Пример 3: Пользовательская proxy модель
-
-```python
-from algorithm.TBMD.models.ReservoirProxyModel import ReservoirProxyModelBase
-
-class CustomProxy(ReservoirProxyModelBase):
-    def forecast(self, current_state, well_controls, time_horizon, time_steps):
-        # Ваша логика
-        predictions = []
-        # ...
-        return predictions
-    
-    def calibrate(self, states, controls):
-        # Ваша калибровка
-        return metrics
-
-# Использование
-twin = DigitalTwinTBMD(config)
-twin.proxy_model = CustomProxy(...)
-```
+См. полный пример: `algorithm/examples/applications/brugge_field/run_brugge_enhanced.py`
 
 ---
 
@@ -445,40 +273,22 @@ twin.proxy_model = CustomProxy(...)
 
 ### Классы данных
 
-#### ReservoirState
-```python
-@dataclass
-class ReservoirState:
-    pressure: torch.Tensor          # Поле давления
-    saturation: Optional[torch.Tensor] = None  # Насыщенность
-    time: float = 0.0              # Временная метка
-    well_rates: Optional[Dict] = None  # Дебиты скважин
-```
-
-#### WellControl
-```python
-@dataclass
-class WellControl:
-    well_name: str                 # Название скважины
-    control_type: str              # 'rate', 'pressure', 'bhp'
-    value: float                   # Значение
-    location: Tuple[int, ...]      # Координаты (x, y) или (x, y, z)
-```
-
 #### DigitalTwinConfig
 ```python
 @dataclass
-class DigitalTwinConfig:
-    n_spatial_modes: int = 50
+class DigitalTwinConfig(BaseConfig):
+    n_spatial_modes: int = 40
     n_temporal_modes: int = 20
     n_sensors: int = 30
-    proxy_model_type: str = 'linear'  # 'linear', 'neural', 'physics_informed'
-    use_geometry_aware: bool = False
-    reconstruction_method: str = 'admm'  # 'admm', 'ista', 'least_squares'
-    update_frequency: int = 10
-    alert_threshold: float = 0.15
-    device: str = 'cpu'
-    dtype: str = 'float32'
+    forecaster_type: str = 'lstm'
+    proxy_model_type: Optional[str] = None
+    forecaster_config: Dict[str, Any] = {...}
+    proxy_config: Dict[str, Any] = {...}
+    train_test_split: float = 0.8
+    validation_split: float = 0.2
+    batch_size: int = 32
+    epochs: int = 300
+    early_stopping_patience: int = 20
 ```
 
 ---
@@ -489,9 +299,6 @@ class DigitalTwinConfig:
 
 **A**: Минимально:
 - Временной ряд полей (nx, ny, [nz,] nt)
-- Информация о скважинах (опционально, но рекомендуется)
-
-Рекомендуется 50-100 временных снимков для линейной модели, 200+ для нейросетевой.
 
 ### Q: Как выбрать количество мод?
 
@@ -500,28 +307,6 @@ class DigitalTwinConfig:
 2. Проверьте reconstruction error после обучения
 3. Если error > 0.1, увеличьте количество мод
 4. Обычно `n_temporal_modes = n_spatial_modes / 2`
-
-### Q: Какую proxy-модель выбрать?
-
-**A**:
-- **Linear**: простая динамика, быстро, мало данных
-- **Neural**: сложная динамика, много данных
-- **Physics-informed**: важна физическая корректность
-
-### Q: Как часто обновлять модель?
-
-**A**:
-- Реальное время мониторинг: каждые 1-5 минут
-- Оперативное планирование: каждые 1-6 часов
-- Стратегическое: каждые 1-7 дней
-
-### Q: Что делать при высоких ошибках?
-
-**A**: Проверьте:
-1. Достаточно ли мод? (увеличьте `n_spatial_modes`)
-2. Достаточно ли сенсоров? (увеличьте `n_sensors`)
-3. Правильно ли размещены сенсоры?
-4. Качество исходных данных
 
 ### Q: Можно ли использовать GPU?
 
@@ -533,19 +318,15 @@ class DigitalTwinConfig:
 
 ### Документация
 - [TBMD Overview](tbmd_core.md)
-- [Geometry-Aware TBMD](geometry_aware_tbmd.md)
+- [Geometry-Aware TBMD](GEOMETRY_AWARE_TBMD.md)
 - [Основной README](../README.md)
 
 ### Примеры
-- Базовый: `algorithm/scripts/run_digital_twin_demo.py`
-- Brugge: `algorithm/scripts/run_brugge_enhanced.py`
-- Notebook: `algorithm/experiments/exp_tbmd_4_digital_twin.ipynb`
-
-### Анализ
-- [Brugge Digital Twin Analysis](../examples/brugge_digital_twin_analysis.md)
+- Базовый: `algorithm/examples/digital_twin/01_digital_twin_basic.py`
+- Brugge: `algorithm/examples/applications/brugge_field/run_brugge_enhanced.py`
 
 ---
 
-**Версия**: 1.0  
-**Дата**: Ноябрь 2025  
+**Версия**: 2.0.0
+**Дата**: Январь 2026
 **Автор**: TBMD Team

@@ -17,13 +17,13 @@ import torch
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from TBMD.modules import (
+from TBMD.core.reconstruction import (
     TensorCompressiveSensing,
     CompressiveSensingConfig,
     GeometryAwareTensorCS,
     GeometryAwareCSConfig
 )
-from TBMD.utils.geometry import MeshGraphBuilder
+from TBMD.core.geometry import MeshGraphBuilder
 
 
 def generate_test_problem(n_spatial: int = 100, n_modes: int = 20, 
@@ -134,7 +134,7 @@ def compare_reconstructions(A, P, Y, x_true, spatial_shape, mesh,
         device='cpu'
     )
     
-    solver_std = TensorCompressiveSensing(A, P, Y, core_cfg=config_std)
+    solver_std = TensorCompressiveSensing(A, P.flatten(), Y.flatten(), core_cfg=config_std)
     x_std, metrics_std = solver_std.solve()
     
     results['standard'] = {
@@ -167,7 +167,7 @@ def compare_reconstructions(A, P, Y, x_true, spatial_shape, mesh,
             device='cpu'
         )
         
-        solver_geo = GeometryAwareTensorCS(A, P, Y, mesh, core_cfg=config_geo)
+        solver_geo = GeometryAwareTensorCS(A, P.flatten(), Y.flatten(), mesh, core_cfg=config_geo)
         x_geo, metrics_geo = solver_geo.solve()
         
         results[f'geometry_alpha_{alpha}'] = {

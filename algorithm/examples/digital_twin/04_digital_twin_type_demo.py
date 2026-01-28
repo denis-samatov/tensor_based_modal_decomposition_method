@@ -34,7 +34,7 @@ if algorithm_path not in sys.path:
     sys.path.append(algorithm_path)
 
 # from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
-from TBMD.core.digital_twin import DigitalTwin as DigitalTwinTBMD
+from TBMD.digital_twin import DigitalTwin as DigitalTwinTBMD
 from TBMD.config import (
     DecompositionConfig,
     SensorPlacementConfig,
@@ -43,7 +43,7 @@ from TBMD.config import (
     MLPForecasterConfig,
     LSTMForecasterConfig
 )
-from TBMD.models.ReservoirProxyModel import WellControl, ReservoirState
+from TBMD.core.forecasting.ReservoirProxyModel import WellControl, ReservoirState
 
 def generate_synthetic_data(spatial_shape=(20, 20), n_time_steps=50):
     """
