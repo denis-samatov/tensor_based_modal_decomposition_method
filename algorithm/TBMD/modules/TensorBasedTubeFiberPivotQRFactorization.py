@@ -380,23 +380,47 @@ class OptimizedPivotSelector:
         if len(norms.shape) < 3:
             return torch.zeros_like(norms)
             
-        penalties = torch.zeros_like(norms)
         total_sensors = sum(slice_counts.values())
         
         if total_sensors == 0:
-            return penalties
+            return torch.zeros_like(norms)
             
-        target_per_slice = total_sensors / norms.shape[2]
+        z_dim = norms.shape[2]
+        target_per_slice = total_sensors / z_dim
         
-        for z in range(norms.shape[2]):
-            current_count = slice_counts.get(z, 0)
-            imbalance = max(0, current_count - target_per_slice)
-            
-            if imbalance > 0:
-                penalty_value = imbalance * self.config.SLICE_PENALTY_WEIGHT * max_norm
-                penalties[..., z] += penalty_value
+        # Convert slice_counts to tensor efficiently
+        counts = torch.zeros(z_dim, device=norms.device, dtype=norms.dtype)
         
-        return penalties
+        if slice_counts:
+            # Filter keys that are within range
+            valid_items = [(k, v) for k, v in slice_counts.items() if 0 <= k < z_dim]
+            if valid_items:
+                indices, values = zip(*valid_items)
+                indices_tensor = torch.tensor(indices, device=norms.device, dtype=torch.long)
+                values_tensor = torch.tensor(values, device=norms.device, dtype=norms.dtype)
+                counts[indices_tensor] = values_tensor
+
+        # Vectorized imbalance calculation
+        imbalance = torch.clamp(counts - target_per_slice, min=0)
+
+        # Calculate penalty values
+        penalty_values = imbalance * self.config.SLICE_PENALTY_WEIGHT * max_norm
+
+        # Apply penalties to the last dimension, consistent with the original loop
+        # Loop over range(norms.shape[2]) and assignment to penalties[..., z]
+        # implies mapping the calculated penalties to the first z_dim indices of the last dimension.
+        last_dim = norms.shape[-1]
+
+        # Prepare vector for broadcasting along the last dimension
+        final_penalties = torch.zeros(last_dim, device=norms.device, dtype=norms.dtype)
+        copy_len = min(z_dim, last_dim)
+        final_penalties[:copy_len] = penalty_values[:copy_len]
+
+        # Reshape for broadcasting
+        shape = [1] * norms.ndim
+        shape[-1] = last_dim
+
+        return final_penalties.view(*shape).expand_as(norms).clone()
     
     def _compute_distribution_penalties(self, norms: torch.Tensor, sensor_placement: torch.Tensor, max_norm: torch.Tensor) -> torch.Tensor:
         """Compute spatial distribution penalties efficiently.
