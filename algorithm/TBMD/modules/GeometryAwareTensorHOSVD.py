@@ -158,6 +158,22 @@ class GeometryAwareTuckerCore:
         # Initialize factors using standard SVD (or HOSVD)
         factors = self._initialize_factors(tensor, ranks)
         
+        # Precompute LTL if needed
+        LTL_reg = None
+        if len(self.geo_config.spatial_modes) > 0:
+            # Convert Laplacian to torch (if sparse)
+            if sp.issparse(self.laplacian):
+                L_torch = self._sparse_scipy_to_torch(self.laplacian, tensor.device, tensor.dtype)
+            else:
+                L_torch = torch.from_numpy(self.laplacian).to(device=tensor.device, dtype=tensor.dtype)
+
+            # Compute L^T L (Laplacian regularization term)
+            if L_torch.is_sparse:
+                # Sparse matrix multiplication
+                LTL_reg = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
+            else:
+                LTL_reg = L_torch.T @ L_torch
+
         # ALS iterations with Laplacian regularization
         prev_error = float('inf')
         
@@ -167,7 +183,7 @@ class GeometryAwareTuckerCore:
                 if mode in self.geo_config.spatial_modes:
                     # Regularized update
                     factors[mode] = self._update_factor_regularized(
-                        tensor, factors, mode, ranks[mode]
+                        tensor, factors, mode, ranks[mode], LTL_reg
                     )
                 else:
                     # Standard update
@@ -251,7 +267,7 @@ class GeometryAwareTuckerCore:
         return U_new
     
     def _update_factor_regularized(self, tensor: torch.Tensor, factors: List[torch.Tensor],
-                                   mode: int, rank: int) -> torch.Tensor:
+                                   mode: int, rank: int, LTL: torch.Tensor) -> torch.Tensor:
         """
         Regularized factor update with Laplacian penalty.
         
@@ -271,19 +287,6 @@ class GeometryAwareTuckerCore:
         
         # LHS: G^T G (data term) + α L^T L (regularization)
         GTG = G.T @ G
-        
-        # Convert Laplacian to torch (if sparse)
-        if sp.issparse(self.laplacian):
-            L_torch = self._sparse_scipy_to_torch(self.laplacian, tensor.device, tensor.dtype)
-        else:
-            L_torch = torch.from_numpy(self.laplacian).to(device=tensor.device, dtype=tensor.dtype)
-        
-        # Compute L^T L (Laplacian regularization term)
-        if L_torch.is_sparse:
-            # Sparse matrix multiplication
-            LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
-        else:
-            LTL = L_torch.T @ L_torch
         
         # Check dimension compatibility
         if LTL.shape[0] != unfolding.shape[0]:
