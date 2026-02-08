@@ -450,6 +450,11 @@ class TensorCompressiveSensing:
         self._d_prev = torch.zeros_like(self.x)
 
         # --- strategies ---
+        # Optimization: use cached factorization if using default Cholesky solver
+        self._use_cached_cholesky = (solver is None) and (self.ext.solver == "cholesky")
+        self._L: Optional[torch.Tensor] = None
+        self._cached_delta: float = -1.0
+
         self.solver = solver or make_linear_solver(self.ext)
         self.delta_policy = delta_policy or make_delta_policy(self.ext.delta_policy)
         self.stop_policy = stop_policy or make_stop_policy(self.ext)
@@ -500,9 +505,32 @@ class TensorCompressiveSensing:
         """
         cfg = self.cfg
         # x‑update (32)
-        lhs = self.AtA + self.delta * self.I
         rhs = self.AtY + self.delta * (self.d - self.p)
-        self.x = self.solver(lhs, rhs)
+
+        if self._use_cached_cholesky:
+            try:
+                # If delta changed, recompute Cholesky factorization
+                if self.delta != self._cached_delta:
+                    # Efficient update: lhs_reg = AtA + (delta + reg) * I
+                    # We clone AtA and update only the diagonal
+                    lhs_reg = self.AtA.clone()
+                    lhs_reg.diagonal().add_(self.delta + self.ext.reg)
+                    self._L = torch.linalg.cholesky(lhs_reg)
+                    self._cached_delta = self.delta
+
+                # Solve using cached factorization
+                # Note: cholesky_solve expects (N, 1) rhs for (N, N) matrix
+                # self._L is guaranteed to be set if we reach here (or exception raised)
+                self.x = torch.cholesky_solve(rhs, self._L, upper=False)
+
+            except torch.linalg.LinAlgError:
+                # Fallback to the standard robust solver (handles SVD fallback)
+                # We must construct full lhs here as fallback expects it
+                lhs = self.AtA + self.delta * self.I
+                self.x = self.solver(lhs, rhs)
+        else:
+            lhs = self.AtA + self.delta * self.I
+            self.x = self.solver(lhs, rhs)
 
         # relaxation
         x_hat = cfg.relax_lambda * self.x + (1 - cfg.relax_lambda) * self.d
