@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import concurrent.futures
+import itertools
 
 from collections import defaultdict
 from pathlib import Path
@@ -8,6 +10,7 @@ from tqdm import tqdm
 from typing import Dict, Tuple, Union, List, Optional, Any
 
 from TBMD.utils.utils import extract_step_number
+
 
 
 class DataLoader:
@@ -60,11 +63,10 @@ class DataLoader:
         if not data_path.is_dir():
             raise ValueError(f"The provided path '{data_path}' is not a valid directory.")
 
-        files = list(data_path.glob("*.csv")) + list(data_path.glob("*.xls")) + list(data_path.glob("*.xlsx"))
+        files = sorted(itertools.chain(data_path.glob("*.csv"), data_path.glob("*.xls"), data_path.glob("*.xlsx")), key=lambda f: extract_step_number(f.name))
         if not files:
             raise ValueError(f"No CSV or Excel files found in directory: {data_path}")
 
-        files = sorted(files, key=lambda f: extract_step_number(f.name))
         tensors_dict = defaultdict(lambda: None)
 
         for file in tqdm(files, desc="Loading static tensor files"):
@@ -105,12 +107,16 @@ class DataLoader:
             subject_dir_list.append(subject_id)
 
             image_files_sorted = sorted(image_files, key=lambda f: extract_step_number(f.name))
-            image_list = []
 
-            for image_file in tqdm(image_files_sorted, desc=f"Loading {subject_id}", leave=False):
-                with Image.open(image_file).convert("RGB") as img:
+            def load_image(image_file):
+                with Image.open(image_file) as img:
+                    img = img.convert("RGB")
                     img_array = np.array(img, dtype=np.float32) / 255.0
-                image_list.append(img_array)
+                return img_array
+
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                image_list = list(tqdm(executor.map(load_image, image_files_sorted), total=len(image_files_sorted), desc=f"Loading {subject_id}", leave=False))
 
             subject_images[subject_id] = np.stack(image_list, axis=-1)
 
@@ -143,12 +149,11 @@ class DataLoader:
             raise ValueError(f"The provided path '{directory}' is not a valid directory.")
 
         # Collect CSV and Excel files
-        file_paths = list(directory.glob("*.csv")) + list(directory.glob("*.xls*"))
+        file_paths = sorted(itertools.chain(directory.glob("*.csv"), directory.glob("*.xls*")), key=lambda f: extract_step_number(f.name))
+
         if not file_paths:
             raise ValueError(f"No CSV or Excel files found in directory: {directory}")
 
-        # Sort files based on the step number extracted from the filename
-        file_paths = sorted(file_paths, key=lambda f: extract_step_number(f.name))
         loaded_tensors = defaultdict(lambda: None)
 
         for file_path in tqdm(file_paths, desc="Loading dynamic tensor files"):

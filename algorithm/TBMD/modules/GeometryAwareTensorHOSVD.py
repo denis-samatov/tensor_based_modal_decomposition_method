@@ -134,6 +134,23 @@ class GeometryAwareTuckerCore:
         logger.info(f"GeometryAwareTuckerCore initialized with α={geo_config.alpha}, "
                    f"regularizing modes {geo_config.spatial_modes}")
     
+    def _prepare_laplacian(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        """Precomputes the Laplacian regularization term L^T L."""
+        # Convert Laplacian to torch (if sparse)
+        if sp.issparse(self.laplacian):
+            L_torch = self._sparse_scipy_to_torch(self.laplacian, device, dtype)
+        else:
+            L_torch = torch.from_numpy(self.laplacian).to(device=device, dtype=dtype)
+
+        # Compute L^T L (Laplacian regularization term)
+        if L_torch.is_sparse:
+            # Sparse matrix multiplication
+            LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
+        else:
+            LTL = L_torch.T @ L_torch
+
+        return LTL
+
     def decompose(self, tensor: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         """Performs geometry-aware Tucker decomposition.
 
@@ -155,41 +172,30 @@ class GeometryAwareTuckerCore:
         if len(ranks) != len(tensor.shape):
             raise ValidationError(f"Ranks length {len(ranks)} must match tensor ndim {len(tensor.shape)}")
         
+        # Precompute LTL only if regularization is used
+        LTL = None
+        if len(self.geo_config.spatial_modes) > 0:
+            LTL = self._prepare_laplacian(tensor.device, tensor.dtype)
+
         # Initialize factors using standard SVD (or HOSVD)
         factors = self._initialize_factors(tensor, ranks)
-        
-        # Precompute LTL if needed
-        LTL_reg = None
-        if len(self.geo_config.spatial_modes) > 0:
-            # Convert Laplacian to torch (if sparse)
-            if sp.issparse(self.laplacian):
-                L_torch = self._sparse_scipy_to_torch(self.laplacian, tensor.device, tensor.dtype)
-            else:
-                L_torch = torch.from_numpy(self.laplacian).to(device=tensor.device, dtype=tensor.dtype)
-
-            # Compute L^T L (Laplacian regularization term)
-            if L_torch.is_sparse:
-                # Sparse matrix multiplication
-                LTL_reg = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
-            else:
-                LTL_reg = L_torch.T @ L_torch
 
         # ALS iterations with Laplacian regularization
         prev_error = float('inf')
-        
+
         for iteration in range(self.max_iter):
-            # Update each mode
             for mode in range(len(tensor.shape)):
                 if mode in self.geo_config.spatial_modes:
-                    # Regularized update
+                    if LTL is None:
+                        raise ValidationError("Laplacian regularization requested but LTL is not prepared.")
                     factors[mode] = self._update_factor_regularized(
-                        tensor, factors, mode, ranks[mode], LTL_reg
+                        tensor, factors, mode, ranks[mode], LTL
                     )
                 else:
-                    # Standard update
                     factors[mode] = self._update_factor_standard(
                         tensor, factors, mode, ranks[mode]
                     )
+
             
             # Compute core tensor
             core = self._compute_core(tensor, factors)
