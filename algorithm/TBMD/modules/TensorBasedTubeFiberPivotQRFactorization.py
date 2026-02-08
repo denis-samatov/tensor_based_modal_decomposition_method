@@ -484,15 +484,21 @@ class UniformDistributionManager:
         # Use first temporal slice as pattern descriptor
         pattern_tensor = tensor[..., 0].detach().cpu().numpy()
         
-        # Vectorized pattern computation
-        for x in range(self.spatial_shape[0]):
-            for y in range(self.spatial_shape[1]):
-                if len(self.spatial_shape) >= 3:
-                    z_values = pattern_tensor[x, y, :]
-                    pattern = tuple(np.round(z_values, decimals=self.config.SIMILARITY_GROUPING_DECIMALS))
-                    
-                    self.similar_regions.setdefault(pattern, []).append((x, y))
-                    self.region_lookup[(x, y)] = pattern
+        # Efficient vectorized implementation
+        # Reshape to (N, Z) to apply rounding in one go
+        reshaped = pattern_tensor.reshape(-1, self.spatial_shape[2])
+        rounded = np.round(reshaped, decimals=self.config.SIMILARITY_GROUPING_DECIMALS)
+
+        # Convert rows to tuples (efficient iteration using tolist)
+        patterns = [tuple(row) for row in rounded.tolist()]
+
+        # Populate dictionary
+        Y = self.spatial_shape[1]
+        for i, pattern in enumerate(patterns):
+            # i = x * Y + y
+            x, y = divmod(i, Y)
+            self.similar_regions.setdefault(pattern, []).append((x, y))
+            self.region_lookup[(x, y)] = pattern
     
     def update_sensor_placement(self, pivot: Tuple[int, ...]) -> None:
         """Updates distribution tracking after sensor placement.
