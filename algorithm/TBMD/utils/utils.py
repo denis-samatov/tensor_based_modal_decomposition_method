@@ -188,10 +188,10 @@ def reconstruct_tensor(
         if isinstance(x_hat, np.ndarray):
             x_hat = torch.from_numpy(x_hat)
 
-        # Ensure computation on CPU for safety
+        # Ensure tensors are on the same device
         if A_tensor.device != x_hat.device:
-            print("Warning: tensors on different devices – moving to CPU.")
-        A_tensor, x_hat = A_tensor.cpu(), x_hat.cpu()
+            # Move x_hat to A_tensor's device
+            x_hat = x_hat.to(A_tensor.device)
 
         # Infer contraction mode and reconstruct
         mode = auto_select_mode(A_tensor, x_hat.squeeze())  # helper defined elsewhere
