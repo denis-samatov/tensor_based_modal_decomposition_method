@@ -134,6 +134,23 @@ class GeometryAwareTuckerCore:
         logger.info(f"GeometryAwareTuckerCore initialized with α={geo_config.alpha}, "
                    f"regularizing modes {geo_config.spatial_modes}")
     
+    def _prepare_laplacian(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        """Precomputes the Laplacian regularization term L^T L."""
+        # Convert Laplacian to torch (if sparse)
+        if sp.issparse(self.laplacian):
+            L_torch = self._sparse_scipy_to_torch(self.laplacian, device, dtype)
+        else:
+            L_torch = torch.from_numpy(self.laplacian).to(device=device, dtype=dtype)
+
+        # Compute L^T L (Laplacian regularization term)
+        if L_torch.is_sparse:
+            # Sparse matrix multiplication
+            LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
+        else:
+            LTL = L_torch.T @ L_torch
+
+        return LTL
+
     def decompose(self, tensor: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         """Performs geometry-aware Tucker decomposition.
 
@@ -155,6 +172,9 @@ class GeometryAwareTuckerCore:
         if len(ranks) != len(tensor.shape):
             raise ValidationError(f"Ranks length {len(ranks)} must match tensor ndim {len(tensor.shape)}")
         
+        # Precompute LTL
+        LTL = self._prepare_laplacian(tensor.device, tensor.dtype)
+
         # Initialize factors using standard SVD (or HOSVD)
         factors = self._initialize_factors(tensor, ranks)
         
@@ -167,7 +187,7 @@ class GeometryAwareTuckerCore:
                 if mode in self.geo_config.spatial_modes:
                     # Regularized update
                     factors[mode] = self._update_factor_regularized(
-                        tensor, factors, mode, ranks[mode]
+                        tensor, factors, mode, ranks[mode], LTL
                     )
                 else:
                     # Standard update
@@ -251,7 +271,7 @@ class GeometryAwareTuckerCore:
         return U_new
     
     def _update_factor_regularized(self, tensor: torch.Tensor, factors: List[torch.Tensor],
-                                   mode: int, rank: int) -> torch.Tensor:
+                                   mode: int, rank: int, LTL: torch.Tensor) -> torch.Tensor:
         """
         Regularized factor update with Laplacian penalty.
         
@@ -271,19 +291,6 @@ class GeometryAwareTuckerCore:
         
         # LHS: G^T G (data term) + α L^T L (regularization)
         GTG = G.T @ G
-        
-        # Convert Laplacian to torch (if sparse)
-        if sp.issparse(self.laplacian):
-            L_torch = self._sparse_scipy_to_torch(self.laplacian, tensor.device, tensor.dtype)
-        else:
-            L_torch = torch.from_numpy(self.laplacian).to(device=tensor.device, dtype=tensor.dtype)
-        
-        # Compute L^T L (Laplacian regularization term)
-        if L_torch.is_sparse:
-            # Sparse matrix multiplication
-            LTL = torch.sparse.mm(L_torch.t(), L_torch).to_dense()
-        else:
-            LTL = L_torch.T @ L_torch
         
         # Check dimension compatibility
         if LTL.shape[0] != unfolding.shape[0]:
