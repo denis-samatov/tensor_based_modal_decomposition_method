@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import concurrent.futures
 import itertools
 
 from collections import defaultdict
@@ -9,6 +10,7 @@ from tqdm import tqdm
 from typing import Dict, Tuple, Union, List, Optional, Any
 
 from TBMD.utils.utils import extract_step_number
+
 
 
 class DataLoader:
@@ -105,12 +107,16 @@ class DataLoader:
             subject_dir_list.append(subject_id)
 
             image_files_sorted = sorted(image_files, key=lambda f: extract_step_number(f.name))
-            image_list = []
 
-            for image_file in tqdm(image_files_sorted, desc=f"Loading {subject_id}", leave=False):
-                with Image.open(image_file).convert("RGB") as img:
+            def load_image(image_file):
+                with Image.open(image_file) as img:
+                    img = img.convert("RGB")
                     img_array = np.array(img, dtype=np.float32) / 255.0
-                image_list.append(img_array)
+                return img_array
+
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                image_list = list(tqdm(executor.map(load_image, image_files_sorted), total=len(image_files_sorted), desc=f"Loading {subject_id}", leave=False))
 
             subject_images[subject_id] = np.stack(image_list, axis=-1)
 
