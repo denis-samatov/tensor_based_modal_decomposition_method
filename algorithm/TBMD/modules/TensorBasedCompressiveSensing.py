@@ -193,6 +193,65 @@ class MetricsHook(Protocol):
 # ------------------------------------------------------------------
 
 
+def _svd_solve(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+    """Pseudo‑inverse via SVD with thresholding of small singular values."""
+    U, S, Vh = torch.linalg.svd(lhs, full_matrices=False)
+    eps = torch.finfo(S.dtype).eps
+    thresh = eps * max(lhs.shape) * S.max()
+    S_inv = torch.where(S > thresh, S.reciprocal(), torch.zeros_like(S))
+    return Vh.T @ (S_inv.unsqueeze(1) * (U.T @ rhs))
+
+
+class CholeskyCachedSolver:
+    """A linear solver that caches the Cholesky factorization.
+
+    It updates the factorization only when `delta` changes.
+    """
+
+    def __init__(self, reg: float, svd_fallback_fn: Callable = _svd_solve):
+        self.reg = reg
+        self.svd_fallback = svd_fallback_fn
+        self.L: Optional[torch.Tensor] = None
+        self.AtA: Optional[torch.Tensor] = None
+        self.delta: Optional[float] = None
+
+    def update(self, AtA: torch.Tensor, delta: float) -> None:
+        """Update the cached factorization for the new AtA and delta."""
+        self.AtA = AtA
+        self.delta = delta
+        lhs_reg = AtA.clone()
+        # Add to diagonal: delta * I + reg * I
+        lhs_reg.diagonal().add_(delta + self.reg)
+        try:
+            self.L = torch.linalg.cholesky(lhs_reg)
+        except torch.linalg.LinAlgError:
+            self.L = None
+
+    def solve(self, rhs: torch.Tensor) -> torch.Tensor:
+        """Solve for rhs using the cached factorization (or fallback)."""
+        if self.L is not None:
+            return torch.cholesky_solve(rhs, self.L, upper=False)
+        else:
+            # Fallback to SVD using stored AtA and delta
+            if self.AtA is None or self.delta is None:
+                raise RuntimeError("Solver not updated before solve")
+            lhs_reg = self.AtA + (self.delta + self.reg) * torch.eye(
+                self.AtA.shape[0], device=self.AtA.device, dtype=self.AtA.dtype
+            )
+            return self.svd_fallback(lhs_reg, rhs)
+
+    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+        """Stateless solve (compatible with LinearSolver protocol)."""
+        lhs_reg = lhs + self.reg * torch.eye(
+            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
+        )
+        try:
+            L = torch.linalg.cholesky(lhs_reg)
+            return torch.cholesky_solve(rhs, L, upper=False)
+        except torch.linalg.LinAlgError:
+            return self.svd_fallback(lhs_reg, rhs)
+
+
 def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
     """Creates a factory for a `LinearSolver` based on `cfg.solver`.
 
@@ -205,16 +264,8 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
     """
     reg = cfg.reg
 
-    def cholesky(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        """Cholesky factorization with diagonal regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(
-            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
-        )
-        try:
-            L = torch.linalg.cholesky(lhs_reg)
-            return torch.cholesky_solve(rhs, L, upper=False)
-        except torch.linalg.LinAlgError:
-            return svd(lhs_reg, rhs)
+    if cfg.solver == "cholesky":
+        return CholeskyCachedSolver(reg)
 
     def direct(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Direct linear solve (LU) with regularization and SVD fallback."""
@@ -224,17 +275,13 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
         try:
             return torch.linalg.solve(lhs_reg, rhs)
         except torch.linalg.LinAlgError:
-            return svd(lhs_reg, rhs)
+            return _svd_solve(lhs_reg, rhs)
 
-    def svd(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        """Pseudo‑inverse via SVD with thresholding of small singular values."""
-        U, S, Vh = torch.linalg.svd(lhs, full_matrices=False)
-        eps = torch.finfo(S.dtype).eps
-        thresh = eps * max(lhs.shape) * S.max()
-        S_inv = torch.where(S > thresh, S.reciprocal(), torch.zeros_like(S))
-        return Vh.T @ (S_inv.unsqueeze(1) * (U.T @ rhs))
+    if cfg.solver == "direct":
+        return direct
 
-    return {"cholesky": cholesky, "direct": direct, "svd": svd}[cfg.solver]
+    # Fallback to SVD solver
+    return _svd_solve
 
 
 def make_delta_policy(name: str) -> DeltaPolicy:
@@ -456,6 +503,7 @@ class TensorCompressiveSensing:
         self.hook = hook or noop_metrics_hook
 
         self.history: List[float] = []
+        self._cached_delta = -1.0
 
     # --- helpers ---------------------------------------------------
     @staticmethod
@@ -500,9 +548,16 @@ class TensorCompressiveSensing:
         """
         cfg = self.cfg
         # x‑update (32)
-        lhs = self.AtA + self.delta * self.I
         rhs = self.AtY + self.delta * (self.d - self.p)
-        self.x = self.solver(lhs, rhs)
+
+        if hasattr(self.solver, "update") and hasattr(self.solver, "solve"):
+            if self.delta != self._cached_delta:
+                self.solver.update(self.AtA, self.delta)
+                self._cached_delta = self.delta
+            self.x = self.solver.solve(rhs)
+        else:
+            lhs = self.AtA + self.delta * self.I
+            self.x = self.solver(lhs, rhs)
 
         # relaxation
         x_hat = cfg.relax_lambda * self.x + (1 - cfg.relax_lambda) * self.d
