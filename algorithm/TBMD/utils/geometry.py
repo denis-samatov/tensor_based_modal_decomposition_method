@@ -81,7 +81,6 @@ class MeshGeometry:
 
 
 @dataclass
-@dataclass
 class TorchMeshGeometry:
     """A PyTorch version of MeshGeometry with sparse tensors.
 
@@ -448,37 +447,66 @@ class GeometricWeightComputer:
             raise ValueError(f"Unknown gradient method: {method}")
     
     def _compute_fd_gradient(self, field: np.ndarray) -> np.ndarray:
-        """Finite difference gradient using neighbor information."""
+        """Finite difference gradient using vectorized sparse matrix operations."""
         A = self.mesh.adjacency_matrix
         D_mat = self.mesh.distances
-        
+
         if D_mat is None:
-            # Fallback: compute distances on the fly
             D_mat = self._compute_distances_from_adjacency(A)
+
+        N = len(field)
         
-        # Approximate gradient magnitude
-        gradient = np.zeros(len(field))
+        # Convert to COO for efficient access
+        if not sp.isspmatrix_coo(D_mat):
+            D_coo = D_mat.tocoo()
+        else:
+            D_coo = D_mat
+
+        # Create sparse matrix W2 where W2[i, j] = 1/d_ij^2 for d_ij > 0
+        mask = D_coo.data > 0
+        if not np.any(mask):
+            return np.zeros(N)
+
+        row = D_coo.row[mask]
+        col = D_coo.col[mask]
+        data_inv_sq = 1.0 / (D_coo.data[mask] ** 2)
         
-        A_coo = A.tocoo()
-        D_coo = D_mat.tocoo()
+        W2 = sp.csr_matrix((data_inv_sq, (row, col)), shape=(N, N))
+
+        # Count of valid neighbors per row (k)
+        # Using a binary matrix of valid connections
+        ones_data = np.ones_like(data_inv_sq)
+        W2_binary = sp.csr_matrix((ones_data, (row, col)), shape=(N, N))
+        k = np.array(W2_binary.sum(axis=1)).flatten()
+
+        # Compute gradient terms:
+        # S_i = sum_j ( (f_j - f_i)^2 / d_ij^2 )
+        #     = sum_j ( f_j^2/d_ij^2 - 2*f_i*f_j/d_ij^2 + f_i^2/d_ij^2 )
+        #     = (W2 @ f^2)_i - 2*f_i * (W2 @ f)_i + f_i^2 * (W2 @ 1)_i
+
+        f_sq = field ** 2
+        term1 = W2.dot(f_sq)
+        term2 = -2 * field * W2.dot(field)
+
+        # W2 @ 1 is just the row sums of W2
+        w2_row_sums = np.array(W2.sum(axis=1)).flatten()
+        term3 = f_sq * w2_row_sums
         
-        # Build a dict for quick lookup
-        dist_dict = {(i, j): d for i, j, d in zip(D_coo.row, D_coo.col, D_coo.data)}
+        S = term1 + term2 + term3
         
-        for idx in range(len(field)):
-            neighbors = A.indices[A.indptr[idx]:A.indptr[idx+1]]
-            if len(neighbors) == 0:
-                continue
-            
-            grad_components = []
-            for neighbor in neighbors:
-                key = (idx, neighbor)
-                dist = dist_dict.get(key, 1.0)
-                if dist > 0:
-                    grad_components.append((field[neighbor] - field[idx]) / dist)
-            
-            if grad_components:
-                gradient[idx] = np.sqrt(np.mean(np.array(grad_components)**2))
+        # Handle floating point inaccuracies
+        S = np.maximum(S, 0)
+
+        # Compute root mean square
+        # gradient = sqrt( S / k )
+
+        # Avoid division by zero
+        k_safe = np.where(k > 0, k, 1.0)
+        gradient_sq = S / k_safe
+        gradient = np.sqrt(gradient_sq)
+
+        # Zero out gradients where k=0
+        gradient[k == 0] = 0.0
         
         return gradient
     
@@ -560,4 +588,3 @@ def estimate_characteristic_length(mesh: MeshGeometry) -> float:
         N = len(coords)
         # Rough estimate assuming uniform distribution
         return float(np.mean(extent) / np.sqrt(N))
-
