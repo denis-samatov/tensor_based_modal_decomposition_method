@@ -144,12 +144,38 @@ class CPUStrategy(ProcessingStrategy):
         """
         results = {}
         
+        # Identify unique tensors to compute norms efficiently
+        unique_tensors = {}
+        key_to_id = {}
+        for key in cores.keys():
+            tensor = original_tensors[key]
+            tid = id(tensor)
+            unique_tensors[tid] = tensor
+            key_to_id[key] = tid
+
+        id_to_norm = {}
+
+        def compute_norm(t):
+            return float(tl.norm(t))
+
         def reconstruct_single(key: str) -> Tuple[str, ReconstructionResult]:
             reconstructed = tucker_to_tensor((cores[key], factors[key]))
-            error = float(tl.norm(original_tensors[key] - reconstructed) / tl.norm(original_tensors[key]))
+            norm_val = id_to_norm[key_to_id[key]]
+            error = float(tl.norm(original_tensors[key] - reconstructed) / norm_val)
             return key, ReconstructionResult(tensor=reconstructed, error=error)
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Phase 1: Compute norms in parallel
+            norm_futures = {executor.submit(compute_norm, t): tid for tid, t in unique_tensors.items()}
+            for future in concurrent.futures.as_completed(norm_futures):
+                tid = norm_futures[future]
+                try:
+                    id_to_norm[tid] = future.result()
+                except Exception as e:
+                    logger.error(f"Norm calculation failed: {e}")
+                    raise e
+
+            # Phase 2: Reconstruct
             futures = [executor.submit(reconstruct_single, key) for key in cores.keys()]
             
             for future in concurrent.futures.as_completed(futures):
