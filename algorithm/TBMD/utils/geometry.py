@@ -372,11 +372,12 @@ class MeshGraphBuilder:
     def _compute_edge_distances(self, A: sp.spmatrix, coordinates: np.ndarray) -> sp.spmatrix:
         """Compute Euclidean distances for all edges in adjacency matrix."""
         A_coo = A.tocoo()
-        distances = []
         
-        for i, j in zip(A_coo.row, A_coo.col):
-            dist = np.linalg.norm(coordinates[i] - coordinates[j])
-            distances.append(dist)
+        # Vectorized computation
+        row_coords = coordinates[A_coo.row]
+        col_coords = coordinates[A_coo.col]
+        diff = row_coords - col_coords
+        distances = np.linalg.norm(diff, axis=1)
         
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
     
@@ -497,10 +498,11 @@ class GeometricWeightComputer:
         coords = self.mesh.coordinates
         A_coo = A.tocoo()
         
-        distances = []
-        for i, j in zip(A_coo.row, A_coo.col):
-            dist = np.linalg.norm(coords[i] - coords[j])
-            distances.append(dist)
+        # Vectorized computation
+        row_coords = coords[A_coo.row]
+        col_coords = coords[A_coo.col]
+        diff = row_coords - col_coords
+        distances = np.linalg.norm(diff, axis=1)
         
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
     
