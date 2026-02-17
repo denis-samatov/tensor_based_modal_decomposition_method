@@ -237,34 +237,41 @@ class MeshGraphBuilder:
             z_coords.ravel()
         ], axis=1)
         
-        # Build adjacency (6-connectivity)
-        row, col, data = [], [], []
+        # Build adjacency (6-connectivity) using vectorization
+        indices = np.arange(N).reshape(H, W, D)
         
-        for i in range(H):
-            for j in range(W):
-                for k in range(D):
-                    idx = i * W * D + j * D + k
-                    
-                    # Right neighbor (x+1)
-                    if j < W - 1:
-                        neighbor = i * W * D + (j + 1) * D + k
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
-                    
-                    # Bottom neighbor (y+1)
-                    if i < H - 1:
-                        neighbor = (i + 1) * W * D + j * D + k
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
-                    
-                    # Forward neighbor (z+1)
-                    if k < D - 1:
-                        neighbor = i * W * D + j * D + (k + 1)
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
+        row_list = []
+        col_list = []
+
+        # Right neighbors (j+1): connect (i, j, k) to (i, j+1, k)
+        # Valid for j < W - 1
+        sources_right = indices[:, :-1, :].ravel()
+        targets_right = indices[:, 1:, :].ravel()
+        row_list.append(sources_right)
+        col_list.append(targets_right)
+
+        # Bottom neighbors (i+1): connect (i, j, k) to (i+1, j, k)
+        # Valid for i < H - 1
+        sources_bottom = indices[:-1, :, :].ravel()
+        targets_bottom = indices[1:, :, :].ravel()
+        row_list.append(sources_bottom)
+        col_list.append(targets_bottom)
+
+        # Forward neighbors (z+1): connect (i, j, k) to (i, j, k+1)
+        # Valid for k < D - 1
+        sources_forward = indices[:, :, :-1].ravel()
+        targets_forward = indices[:, :, 1:].ravel()
+        row_list.append(sources_forward)
+        col_list.append(targets_forward)
+
+        # Concatenate all
+        rows_one_way = np.concatenate(row_list)
+        cols_one_way = np.concatenate(col_list)
+
+        # Make symmetric (both directions)
+        row = np.concatenate([rows_one_way, cols_one_way])
+        col = np.concatenate([cols_one_way, rows_one_way])
+        data = np.ones(len(row), dtype=float)
         
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         
@@ -372,14 +379,11 @@ class MeshGraphBuilder:
     def _compute_edge_distances(self, A: sp.spmatrix, coordinates: np.ndarray) -> sp.spmatrix:
         """Compute Euclidean distances for all edges in adjacency matrix."""
         A_coo = A.tocoo()
-        distances = []
-        
-        for i, j in zip(A_coo.row, A_coo.col):
-            dist = np.linalg.norm(coordinates[i] - coordinates[j])
-            distances.append(dist)
+        # Vectorized distance computation
+        diff = coordinates[A_coo.row] - coordinates[A_coo.col]
+        distances = np.sqrt(np.sum(diff**2, axis=1))
         
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
-    
     @staticmethod
     def _compute_laplacian(A: sp.spmatrix) -> sp.spmatrix:
         """Compute graph Laplacian L = D - A."""
@@ -497,10 +501,9 @@ class GeometricWeightComputer:
         coords = self.mesh.coordinates
         A_coo = A.tocoo()
         
-        distances = []
-        for i, j in zip(A_coo.row, A_coo.col):
-            dist = np.linalg.norm(coords[i] - coords[j])
-            distances.append(dist)
+        # Vectorized distance computation
+        diff = coords[A_coo.row] - coords[A_coo.col]
+        distances = np.sqrt(np.sum(diff**2, axis=1))
         
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
     
