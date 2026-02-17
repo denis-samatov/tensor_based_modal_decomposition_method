@@ -119,14 +119,17 @@ class DataLoader:
             def load_image(image_file):
                 with Image.open(image_file) as img:
                     img = img.convert("RGB")
-                    img_array = np.array(img, dtype=np.float32) / 255.0
+                    img_array = np.array(img, dtype=np.uint8)
                 return img_array
 
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 image_list = list(tqdm(executor.map(load_image, image_files_sorted), total=len(image_files_sorted), desc=f"Loading {subject_id}", leave=False))
 
-            subject_images[subject_id] = np.stack(image_list, axis=-1)
+            # Stack images first (uint8), then convert to float32 and normalize
+            # This is more memory efficient and faster than converting each image individually
+            subject_images[subject_id] = np.stack(image_list, axis=-1).astype(np.float32)
+            subject_images[subject_id] /= 255.0
 
         if not subject_dir_list:
             raise ValueError(f"No subjects with PNG images found in the directory: {dataset_path}")
