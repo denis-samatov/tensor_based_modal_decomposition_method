@@ -320,15 +320,24 @@ class MeshGraphBuilder:
         # Query all neighbors within radius
         pairs = tree.query_pairs(radius, output_type='ndarray')
         
-        row, col, data, dist_data = [], [], [], []
-        
-        for i, j in pairs:
-            dist = np.linalg.norm(coordinates[i] - coordinates[j])
-            # Add both directions
-            row.extend([i, j])
-            col.extend([j, i])
-            data.extend([1.0, 1.0])
-            dist_data.extend([dist, dist])
+        if len(pairs) == 0:
+            row = np.array([], dtype=int)
+            col = np.array([], dtype=int)
+            data = np.array([], dtype=float)
+            dist_data = np.array([], dtype=float)
+        else:
+            # Vectorized implementation for speed
+            i_indices = pairs[:, 0]
+            j_indices = pairs[:, 1]
+
+            diff = coordinates[i_indices] - coordinates[j_indices]
+            dists = np.linalg.norm(diff, axis=1)
+
+            # We need both directions: (i, j) and (j, i)
+            row = np.concatenate([i_indices, j_indices])
+            col = np.concatenate([j_indices, i_indices])
+            data = np.ones(len(row))
+            dist_data = np.concatenate([dists, dists])
         
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
