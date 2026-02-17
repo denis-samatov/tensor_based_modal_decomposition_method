@@ -420,7 +420,7 @@ class OptimizedPivotSelector:
         shape = [1] * norms.ndim
         shape[-1] = last_dim
 
-        return final_penalties.view(*shape).expand_as(norms).clone()
+        return final_penalties.view(*shape).expand_as(norms)
     
     def _compute_distribution_penalties(self, norms: torch.Tensor, sensor_placement: torch.Tensor, max_norm: torch.Tensor) -> torch.Tensor:
         """Compute spatial distribution penalties efficiently.
