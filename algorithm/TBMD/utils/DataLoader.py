@@ -67,14 +67,22 @@ class DataLoader:
         if not files:
             raise ValueError(f"No CSV or Excel files found in directory: {data_path}")
 
-        tensors_dict = defaultdict(lambda: None)
-
-        for file in tqdm(files, desc="Loading static tensor files"):
+        def load_file(file_path):
             try:
-                data = self._read_tabular_file(file).fillna(0)
-                tensors_dict[file.stem] = data.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(shape)
+                data = self._read_tabular_file(file_path).fillna(0)
+                tensor = data.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(shape)
+                return file_path.stem, tensor
             except Exception as e:
-                print(f"Error loading file {file}: {e}")
+                print(f"Error loading file {file_path}: {e}")
+                return file_path.stem, None
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = list(tqdm(executor.map(load_file, files), total=len(files), desc="Loading static tensor files"))
+
+        tensors_dict = defaultdict(lambda: None)
+        for stem, tensor in results:
+            if tensor is not None:
+                tensors_dict[stem] = tensor
 
         return tensors_dict
     
@@ -154,15 +162,22 @@ class DataLoader:
         if not file_paths:
             raise ValueError(f"No CSV or Excel files found in directory: {directory}")
 
-        loaded_tensors = defaultdict(lambda: None)
-
-        for file_path in tqdm(file_paths, desc="Loading dynamic tensor files"):
+        def load_file(file_path):
             try:
                 df = self._read_tabular_file(file_path).fillna(0)
                 tensor = df.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(target_shape)
-                loaded_tensors[file_path.stem] = tensor
+                return file_path.stem, tensor
             except Exception as err:
                 print(f"Error loading file {file_path}: {err}")
+                return file_path.stem, None
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = list(tqdm(executor.map(load_file, file_paths), total=len(file_paths), desc="Loading dynamic tensor files"))
+
+        loaded_tensors = defaultdict(lambda: None)
+        for stem, tensor in results:
+            if tensor is not None:
+                loaded_tensors[stem] = tensor
 
         # Post-process: split 4D tensors with shape[2] != 0 into multiple 3D tensors
         processed_tensors = defaultdict(lambda: None)
