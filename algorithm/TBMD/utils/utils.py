@@ -7,6 +7,8 @@ import torch
 from pathlib import Path
 from typing import Union, Optional, Dict
 from collections import defaultdict
+import torch
+import numpy as np
 from tqdm import tqdm
 
 
@@ -340,9 +342,39 @@ def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
 
     for subject, coords_list in wells_dict.items():
         P = torch.zeros(H, W, device=device)
-        for i, j in coords_list:
-            if 0 <= i < H and 0 <= j < W:
-                P[i, j] = 1
+
+        # Handle empty list of coordinates
+        if len(coords_list) == 0:
+            wells_matrices[subject] = P
+            continue
+
+        # Convert to tensor efficiently
+        if isinstance(coords_list, torch.Tensor):
+            coords = coords_list.to(device)
+        elif isinstance(coords_list, np.ndarray):
+            coords = torch.from_numpy(coords_list).to(device)
+        else:
+            coords = torch.tensor(coords_list, device=device)
+
+        # Ensure integer type for indexing
+        if coords.dtype not in (torch.int, torch.long, torch.int64, torch.int32):
+            coords = coords.long()
+
+        # Ensure we have a 2D tensor of shape (N, 2)
+        if coords.dim() != 2 or coords.shape[1] != 2:
+             # Fallback: if shape is wrong, it might be because the list was flat or something else.
+             # But assuming the original code expected [[i,j], ...], torch.tensor should produce (N, 2).
+             pass
+
+        # Check bounds
+        valid_mask = (coords[:, 0] >= 0) & (coords[:, 0] < H) & \
+                     (coords[:, 1] >= 0) & (coords[:, 1] < W)
+
+        valid_coords = coords[valid_mask]
+
+        if valid_coords.shape[0] > 0:
+            P[valid_coords[:, 0], valid_coords[:, 1]] = 1
+
         wells_matrices[subject] = P
 
     return wells_matrices
