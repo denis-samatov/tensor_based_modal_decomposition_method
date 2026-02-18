@@ -367,15 +367,15 @@ class OptimizedPivotSelector:
         max_norm = torch.max(norms)
         
         # Vectorized slice penalty computation
-        if 'slice_counts' in state and len(norms.shape) >= 3:
-            penalties += self._compute_slice_penalties(norms, state['slice_counts'], max_norm)
+        if "slice_counts" in state and len(norms.shape) >= 3:
+            penalties += self._compute_slice_penalties(norms, state["slice_counts"], max_norm)
         
         # Vectorized distribution penalty computation
-        if 'sensor_placement' in state:
-            penalties += self._compute_distribution_penalties(norms, state['sensor_placement'], max_norm)
+        if "sensor_placement" in state or "dimension_counts" in state:
+            penalties += self._compute_distribution_penalties(norms, state, max_norm)
         
         return norms - penalties
-    
+
     def _compute_slice_penalties(self, norms: torch.Tensor, slice_counts: Dict[int, int], max_norm: torch.Tensor) -> torch.Tensor:
         """Compute slice balance penalties efficiently.
 
@@ -423,8 +423,6 @@ class OptimizedPivotSelector:
         penalty_values = imbalance * self.config.SLICE_PENALTY_WEIGHT * max_norm
 
         # Apply penalties to the last dimension, consistent with the original loop
-        # Loop over range(norms.shape[2]) and assignment to penalties[..., z]
-        # implies mapping the calculated penalties to the first z_dim indices of the last dimension.
         last_dim = norms.shape[-1]
 
         # Prepare vector for broadcasting along the last dimension
@@ -437,16 +435,16 @@ class OptimizedPivotSelector:
         shape[-1] = last_dim
 
         return final_penalties.view(*shape).expand_as(norms)
-    
-    def _compute_distribution_penalties(self, norms: torch.Tensor, sensor_placement: torch.Tensor, max_norm: torch.Tensor) -> torch.Tensor:
+
+    def _compute_distribution_penalties(self, norms: torch.Tensor, state: Union[Dict, torch.Tensor], max_norm: torch.Tensor) -> torch.Tensor:
         """Compute spatial distribution penalties efficiently.
 
         Parameters
         ----------
         norms : torch.Tensor
             The norms to compute penalties for.
-        sensor_placement : torch.Tensor
-            The sensor placement matrix.
+        state : Union[Dict, torch.Tensor]
+            The distribution state dictionary or sensor placement tensor.
         max_norm : torch.Tensor
             The maximum norm value.
 
@@ -456,6 +454,61 @@ class OptimizedPivotSelector:
             The computed spatial distribution penalties.
         """
         penalties = torch.zeros_like(norms)
+
+        # Optimized path: Use pre-computed dimension counts
+        if isinstance(state, dict) and "dimension_counts" in state:
+            dimension_counts = state["dimension_counts"]
+
+            # Use total sensors from the first dimension (if available)
+            total_sensors = 0
+            if dimension_counts:
+                first_dim_counts = next(iter(dimension_counts.values()))
+                total_sensors = sum(first_dim_counts.values())
+
+            if total_sensors == 0:
+                return penalties
+
+            # Iterate over dimensions using pre-computed counts
+            for dim in range(len(norms.shape)):
+                dim_counts = dimension_counts.get(dim, {})
+                if not dim_counts:
+                    continue
+
+                # Convert counts to tensor efficiently
+                size = norms.shape[dim]
+                indices = list(dim_counts.keys())
+                values = list(dim_counts.values())
+
+                indices_tensor = torch.tensor(indices, device=norms.device, dtype=torch.long)
+                values_tensor = torch.tensor(values, device=norms.device, dtype=norms.dtype)
+
+                # Create sparse density vector
+                density = torch.zeros(size, device=norms.device, dtype=norms.dtype)
+
+                # Handle potential out of bounds (though unlikely with correct state)
+                mask = (indices_tensor >= 0) & (indices_tensor < size)
+                if mask.any():
+                    density[indices_tensor[mask]] = values_tensor[mask]
+
+                density = density / total_sensors
+
+                # Broadcast penalty across the dimension
+                penalty_shape = [1] * len(norms.shape)
+                penalty_shape[dim] = size
+
+                penalty_values = density.view(penalty_shape) * self.config.DISTRIBUTION_PENALTY_WEIGHT * max_norm
+                penalties += penalty_values
+
+            return penalties
+
+        # Fallback path: Compute from sensor placement tensor
+        if isinstance(state, torch.Tensor):
+            sensor_placement = state
+        elif isinstance(state, dict) and "sensor_placement" in state:
+            sensor_placement = state["sensor_placement"]
+        else:
+            return penalties
+
         total_sensors = torch.sum(sensor_placement).item()
         
         if total_sensors == 0:
@@ -478,8 +531,6 @@ class OptimizedPivotSelector:
                 penalties += penalty_values
         
         return penalties
-
-
 class UniformDistributionManager:
     """Manages uniform sensor distribution with efficient region grouping.
 
