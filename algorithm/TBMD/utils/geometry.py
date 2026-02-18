@@ -553,6 +553,37 @@ class GeometricWeightComputer:
         
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
     
+    def update_proximity_penalty(self, new_sensor_idx: int, current_min_dists: np.ndarray, min_distance: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Updates the proximity penalty incrementally given a new sensor.
+
+        This method avoids recomputing the KDTree by updating the minimum
+        distances directly, which is O(N) instead of O(N log K).
+
+        Args:
+            new_sensor_idx (int): The index of the newly added sensor.
+            current_min_dists (np.ndarray): The current minimum distance from
+                each cell to any existing sensor. Shape (N,).
+            min_distance (float): The minimum allowed distance.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: A tuple containing:
+                - penalty (np.ndarray): The new penalty values.
+                - new_min_dists (np.ndarray): The updated minimum distances.
+        """
+        sensor_coord = self.mesh.coordinates[new_sensor_idx]
+
+        # Calculate distance from new sensor to all points
+        diff = self.mesh.coordinates - sensor_coord
+        dists = np.linalg.norm(diff, axis=1)
+
+        # Update minimum distances
+        new_min_dists = np.minimum(current_min_dists, dists)
+
+        # Calculate penalty: exponential decay
+        penalty = np.exp(-new_min_dists / (min_distance + 1e-10))
+
+        return penalty, new_min_dists
+
     def compute_proximity_penalty(self, sensor_positions: np.ndarray,
                                    min_distance: float) -> np.ndarray:
         """Computes a penalty for placing sensors too close to existing ones.
