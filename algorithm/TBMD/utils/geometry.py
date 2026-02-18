@@ -293,15 +293,22 @@ class MeshGraphBuilder:
         # Query k+1 neighbors (including self)
         distances, indices = tree.query(coordinates, k=min(k+1, N))
         
-        row, col, data, dist_data = [], [], [], []
+        # Vectorized implementation for speed
+        # Flatten the indices and distances
+        col_indices = indices.flatten()
+        dists_flat = distances.flatten()
+
+        # Create row indices corresponding to each neighbor
+        # Each row i has k+1 neighbors (including self potentially)
+        row_indices = np.repeat(np.arange(N), indices.shape[1])
+
+        # Filter out self-loops
+        mask = col_indices != row_indices
         
-        for i in range(N):
-            for j, neighbor_idx in enumerate(indices[i]):
-                if neighbor_idx != i:  # Exclude self-loops
-                    row.append(i)
-                    col.append(neighbor_idx)
-                    data.append(1.0)
-                    dist_data.append(distances[i, j])
+        row = row_indices[mask]
+        col = col_indices[mask]
+        data = np.ones(len(row))
+        dist_data = dists_flat[mask]
         
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
