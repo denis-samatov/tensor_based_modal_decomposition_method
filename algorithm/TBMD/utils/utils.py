@@ -9,6 +9,7 @@ from typing import Union, Optional, Dict
 from collections import defaultdict
 import torch
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
 
@@ -132,14 +133,22 @@ def generate_noisy_datasets(
             noise = noise_level * torch.randn_like(item)
             return item + noise
         elif isinstance(item, np.ndarray):
-            noise = noise_level * np.random.randn(*item.shape).astype(item.dtype)
+            # Optimized: use local RNG to avoid global lock contention and direct dtype generation
+            rng = np.random.default_rng()
+            noise = noise_level * rng.standard_normal(item.shape, dtype=item.dtype)
             return item + noise
         else:
             raise TypeError("Unsupported data type. Expected torch.Tensor or numpy.ndarray.")
     
-    # Generate additional noisy datasets
-    for idx in range(2, num_noisy_datasets + 1):
-        datasets[f"noisy_dataset_{idx}"] = add_noise(tensor)
+    # Generate additional noisy datasets in parallel
+    if num_noisy_datasets >= 2:
+        with ThreadPoolExecutor() as executor:
+            # Submit tasks
+            futures = {executor.submit(add_noise, tensor): idx for idx in range(2, num_noisy_datasets + 1)}
+
+            # Retrieve results
+            for future, idx in futures.items():
+                datasets[f"noisy_dataset_{idx}"] = future.result()
     
     # Save datasets to disk if an output directory is provided
     if output_dir is not None:
