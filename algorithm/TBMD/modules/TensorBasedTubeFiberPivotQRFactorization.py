@@ -476,7 +476,7 @@ class UniformDistributionManager:
         device (torch.device): The device for computations.
     """
     
-    def __init__(self, config: TensorQRConfig, spatial_shape: Tuple[int, ...], device: torch.device):
+    def __init__(self, config: TensorQRConfig, spatial_shape: Tuple[int, ...], device: "torch.device"):
         self.config = config
         self.spatial_shape = spatial_shape
         self.device = device
@@ -488,15 +488,18 @@ class UniformDistributionManager:
         }
         
         # Similar regions for efficient grouping
-        self.similar_regions: Dict[tuple, List[Tuple[int, ...]]] = {}
-        self.region_lookup: Dict[Tuple[int, ...], tuple] = {}
+        # Maps pattern ID (int) to tensor of coordinates (N, 2)
+        self.similar_regions: Dict[int, "torch.Tensor"] = {}
+        # Maps spatial coordinates (x, y) to pattern ID (int).
+        # Initialized as None, populated in identify_similar_regions
+        self.region_ids: Optional["torch.Tensor"] = None
         
         # Initialize slice tracking for 3D+ tensors
         if len(spatial_shape) >= 3:
             for z in range(spatial_shape[2]):
                 self.slice_counts[z] = 0
     
-    def identify_similar_regions(self, tensor: torch.Tensor) -> None:
+    def identify_similar_regions(self, tensor: "torch.Tensor") -> None:
         """Identifies similar regions for distribution constraints.
 
         Args:
@@ -506,23 +509,53 @@ class UniformDistributionManager:
             return
         
         # Use first temporal slice as pattern descriptor
-        pattern_tensor = tensor[..., 0].detach().cpu().numpy()
+        # Keep on device if possible
+        pattern_tensor = tensor[..., 0] # (X, Y, Z)
         
         # Efficient vectorized implementation
-        # Reshape to (N, Z) to apply rounding in one go
+        # Reshape to (N, Z)
         reshaped = pattern_tensor.reshape(-1, self.spatial_shape[2])
-        rounded = np.round(reshaped, decimals=self.config.SIMILARITY_GROUPING_DECIMALS)
 
-        # Convert rows to tuples (efficient iteration using tolist)
-        patterns = [tuple(row) for row in rounded.tolist()]
+        # Apply rounding.
+        # Use simple multiplication/rounding for compatibility
+        scale = 10**self.config.SIMILARITY_GROUPING_DECIMALS
+        rounded = torch.round(reshaped * scale) / scale
+
+        # Use torch.unique to group patterns
+        # dim=0 groups by rows
+        # return_inverse=True gives indices mapping rows to unique patterns
+        # Note: torch.unique on floating point might have precision issues but rounding helps.
+        _, inverse_indices = torch.unique(rounded, dim=0, return_inverse=True)
+
+        # Store region IDs for fast lookup
+        # inverse_indices has shape (X*Y,), reshape to (X, Y)
+        self.region_ids = inverse_indices.reshape(self.spatial_shape[0], self.spatial_shape[1])
+
+        # Group coordinates by pattern ID
+        num_patterns = inverse_indices.max().item() + 1
+
+        # Sort indices to group them
+        sorted_indices = torch.argsort(inverse_indices)
+
+        # Get counts to know where to split
+        counts = torch.bincount(inverse_indices, minlength=num_patterns)
+
+        # Split sorted_indices into groups
+        groups = torch.split(sorted_indices, counts.tolist())
+
+        # Create coordinates tensor (N, 2)
+        Y_dim = self.spatial_shape[1]
+        all_indices = torch.arange(inverse_indices.numel(), device=inverse_indices.device)
+        all_x = all_indices // Y_dim
+        all_y = all_indices % Y_dim
+        all_coords = torch.stack([all_x, all_y], dim=1) # (N, 2)
 
         # Populate dictionary
-        Y = self.spatial_shape[1]
-        for i, pattern in enumerate(patterns):
-            # i = x * Y + y
-            x, y = divmod(i, Y)
-            self.similar_regions.setdefault(pattern, []).append((x, y))
-            self.region_lookup[(x, y)] = pattern
+        self.similar_regions = {}
+        for pattern_id, group_indices in enumerate(groups):
+            # group_indices contains flat indices
+            # mapping them to coordinates
+            self.similar_regions[pattern_id] = all_coords[group_indices]
     
     def update_sensor_placement(self, pivot: Tuple[int, ...]) -> None:
         """Updates distribution tracking after sensor placement.
@@ -539,7 +572,7 @@ class UniformDistributionManager:
             z = pivot[2]
             self.slice_counts[z] = self.slice_counts.get(z, 0) + 1
     
-    def mark_similar_regions_unavailable(self, pivot: Tuple[int, ...], available: torch.Tensor) -> None:
+    def mark_similar_regions_unavailable(self, pivot: Tuple[int, ...], available: "torch.Tensor") -> None:
         """Marks similar regions as unavailable.
 
         This is a corrected version with less aggressive locking.
@@ -552,24 +585,39 @@ class UniformDistributionManager:
             return
         
         x, y = pivot[0], pivot[1]
-        pattern = self.region_lookup.get((x, y))
         
-        if pattern and pattern in self.similar_regions:
-            similar_positions = self.similar_regions[pattern]
+        if self.region_ids is None:
+            return
+
+        # Get pattern ID
+        # Ensure indices are within bounds
+        if x >= self.region_ids.shape[0] or y >= self.region_ids.shape[1]:
+            return
+
+        pattern_id = self.region_ids[x, y].item()
+
+        if pattern_id in self.similar_regions:
+            similar_positions = self.similar_regions[pattern_id] # Tensor (K, 2)
+
+            # blocked_count logic
+            max_blocks_per_region = max(1, len(similar_positions) // 4)
+
+            # Filter out (x, y)
+            # Create a mask for rows not equal to (x, y)
+            # similar_positions is (K, 2), x and y are scalars
+            # We want rows where row[0] != x OR row[1] != y
+            mask = ~((similar_positions[:, 0] == x) & (similar_positions[:, 1] == y))
+            candidates = similar_positions[mask]
             
-            # ИЗМЕНЕНИЕ: блокировать только ближайшие позиции
-            blocked_count = 0
-            max_blocks_per_region = max(1, len(similar_positions) // 4)  # Максимум 25%
+            # Take up to max_blocks_per_region
+            to_block = candidates[:max_blocks_per_region]
             
-            for px, py in similar_positions:
-                if (px, py) != (x, y) and blocked_count < max_blocks_per_region:
-                    # Блокировать только тот же z-уровень
-                    if len(pivot) >= 3:
-                        z = pivot[2]
-                        available[px, py, z] = False
-                        blocked_count += 1
+            if len(to_block) > 0 and len(pivot) >= 3:
+                z = pivot[2]
+                # Vectorized update
+                available[to_block[:, 0], to_block[:, 1], z] = False
     
-    def get_distribution_state(self, sensor_placement: torch.Tensor) -> Dict:
+    def get_distribution_state(self, sensor_placement: "torch.Tensor") -> Dict:
         """Returns the current distribution state for penalty computation.
 
         Args:
