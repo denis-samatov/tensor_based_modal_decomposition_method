@@ -50,6 +50,9 @@ class DataLoader:
     def load_static_tensor(self, data_path: Union[str, Path], shape: tuple) -> Dict[str, np.ndarray]:
         """Loads static tensor data from CSV or Excel files in a directory.
 
+        This method uses a thread pool to load files in parallel, improving performance
+        for large datasets.
+
         Args:
             data_path (Union[str, Path]): The path to the directory containing
                 the data files.
@@ -67,7 +70,8 @@ class DataLoader:
         if not files:
             raise ValueError(f"No CSV or Excel files found in directory: {data_path}")
 
-        def load_file(file_path):
+        # Use ThreadPoolExecutor for parallel file loading to improve performance
+        def _load_single_file(file_path):
             try:
                 data = self._read_tabular_file(file_path).fillna(0)
                 tensor = data.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(shape)
@@ -77,7 +81,7 @@ class DataLoader:
                 return file_path.stem, None
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            results = list(tqdm(executor.map(load_file, files), total=len(files), desc="Loading static tensor files"))
+            results = list(tqdm(executor.map(_load_single_file, files), total=len(files), desc="Loading static tensor files"))
 
         tensors_dict = defaultdict(lambda: None)
         for stem, tensor in results:
@@ -165,7 +169,7 @@ class DataLoader:
         if not file_paths:
             raise ValueError(f"No CSV or Excel files found in directory: {directory}")
 
-        def load_file(file_path):
+        def _load_single_file(file_path):
             try:
                 df = self._read_tabular_file(file_path).fillna(0)
                 tensor = df.iloc[:, 4:].to_numpy(dtype=np.float32).reshape(target_shape)
@@ -175,7 +179,7 @@ class DataLoader:
                 return file_path.stem, None
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            results = list(tqdm(executor.map(load_file, file_paths), total=len(file_paths), desc="Loading dynamic tensor files"))
+            results = list(tqdm(executor.map(_load_single_file, file_paths), total=len(file_paths), desc="Loading dynamic tensor files"))
 
         loaded_tensors = defaultdict(lambda: None)
         for stem, tensor in results:
