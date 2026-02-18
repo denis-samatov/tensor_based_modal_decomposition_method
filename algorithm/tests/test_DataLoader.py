@@ -1,3 +1,4 @@
+import pandas as pd
 import unittest
 import numpy as np
 from PIL import Image
@@ -61,6 +62,52 @@ class TestDataLoader(unittest.TestCase):
             original = self.generated_images[i]
             loaded = loaded_tensor[..., i]
             np.testing.assert_allclose(loaded, original, atol=1e-5)
+
+    def test_load_static_tensor(self):
+        # Create a temporary directory for static tensor files
+        static_dir = Path(self.test_dir) / "static_tensors"
+        static_dir.mkdir()
+
+        num_files = 5
+        rows, cols = 10, 5
+        shape = (rows, cols)
+
+        expected_tensors = {}
+
+        for i in range(num_files):
+            # Create random data: 10 rows, 4 metadata + 5 data cols = 9 columns total.
+            # We want the data part (last 5 cols) to match our shape.
+
+            # Create full dataframe content
+            # Metadata: 4 columns
+            meta_data = np.zeros((rows, 4))
+            # Tensor data: 5 columns
+            tensor_data = np.random.rand(rows, cols).astype(np.float32)
+
+            full_data = np.hstack([meta_data, tensor_data])
+
+            # Column names
+            columns = [f"meta_{j}" for j in range(4)] + [f"data_{j}" for j in range(cols)]
+
+            df = pd.DataFrame(full_data, columns=columns)
+
+            # Filename pattern expected by extract_step_number is likely "_(\d+)"
+            # TBMD.utils.utils.extract_step_number regex is r'_(\d+)'
+            file_path = static_dir / f"tensor_step_{i}.csv"
+            df.to_csv(file_path, index=False)
+
+            # Store expected tensor data
+            expected_tensors[file_path.stem] = tensor_data
+
+        loader = DataLoader()
+        loaded_tensors = loader.load_static_tensor(static_dir, shape)
+
+        self.assertEqual(len(loaded_tensors), num_files)
+
+        for stem, tensor in loaded_tensors.items():
+            self.assertIn(stem, expected_tensors)
+            expected = expected_tensors[stem]
+            np.testing.assert_allclose(tensor, expected, atol=1e-5)
 
 if __name__ == "__main__":
     unittest.main()
