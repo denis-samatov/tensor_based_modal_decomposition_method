@@ -243,10 +243,26 @@ class NumericallyStableOperations:
             # Use SVD on a representative slice for efficiency
             if tensor.ndim >= 2:
                 representative_slice = tensor.flatten(-2, -1)
-                if representative_slice.shape[-1] > 0:
-                    _, s, _ = torch.svd(representative_slice[..., :min(representative_slice.shape[-2:])].float())
-                    if s.numel() > 1 and s.min() > 0:
-                        return (s.max() / s.min()).item()
+
+                # Check for sufficient dimensions for SVD
+                if representative_slice.ndim < 2:
+                    return 1.0
+
+                h, w = representative_slice.shape[-2:]
+
+                # Limit size for performance while maintaining square-ish aspect ratio logic
+                limit = 1000
+                h_slice = min(h, limit)
+                w_slice = min(w, limit)
+
+                if h_slice > 0 and w_slice > 0:
+                    # Use svdvals instead of full SVD (approx 2x faster)
+                    # And take a sub-block to ensure performance on very large tensors (O(1) wrt tensor size)
+                    s = torch.linalg.svdvals(representative_slice[..., :h_slice, :w_slice].float())
+
+                    # s is sorted descending by default in svdvals
+                    if s.numel() > 1 and s[-1] > 0:
+                        return (s[0] / s[-1]).item()
         except RuntimeError:
             pass
         return 1.0  # Default safe value
