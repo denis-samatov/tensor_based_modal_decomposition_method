@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import tensorly as tl
 import re
 import torch
+import concurrent.futures
 
 from pathlib import Path
 from typing import Union, Optional, Dict
@@ -300,26 +301,50 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
 
     multiple_masks = isinstance(P, dict)
 
+    # Pre-process global mask if applicable
+    P_tensor_global = None
     if not multiple_masks:
-        P_tensor = _to_mask(P)
+        P_tensor_global = _to_mask(P)
     
+    def _process_subject(item):
+        subject, tensor = item
+        try:
+            tensor_torch = to_torch_tensor(tensor, device=device)
+            # Choose mask
+            if multiple_masks:
+                if subject not in P:
+                    raise KeyError(f"No mask provided for subject '{subject}'.")
+                local_P = _to_mask(P[subject])
+            else:
+                local_P = P_tensor_global
+
+            # Shape check
+            if local_P.shape != tensor_torch.shape[:-1]:
+                raise ValueError(
+                    f"Sensor mask shape {local_P.shape} does not match spatial "
+                    f"dimensions {tensor_torch.shape[:-1]} for subject '{subject}'."
+                )
+            # Broadcast along slice axis
+            Y = tensor_torch * local_P.unsqueeze(-1)
+            return subject, Y
+        except Exception as e:
+            raise e
+
     Y_matrices = {}
-    for subject, tensor in tensors.items():
-        tensor_torch = to_torch_tensor(tensor, device=device)
-        # Choose mask
-        if multiple_masks:
-            if subject not in P:
-                raise KeyError(f"No mask provided for subject '{subject}'.")
-            P_tensor = _to_mask(P[subject])
-        # Shape check
-        if P_tensor.shape != tensor_torch.shape[:-1]:
-            raise ValueError(
-                f"Sensor mask shape {P_tensor.shape} does not match spatial "
-                f"dimensions {tensor_torch.shape[:-1]} for subject '{subject}'."
-            )
-        # Broadcast along slice axis
-        Y = tensor_torch * P_tensor.unsqueeze(-1)
-        Y_matrices[subject] = Y
+
+    # Use ThreadPoolExecutor for parallel processing
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit all tasks
+        future_to_subject = {executor.submit(_process_subject, item): item[0] for item in tensors.items()}
+
+        for future in concurrent.futures.as_completed(future_to_subject):
+            try:
+                subject, Y = future.result()
+                Y_matrices[subject] = Y
+            except Exception as e:
+                # Propagate the exception
+                raise e
+
     return Y_matrices
 
 def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
