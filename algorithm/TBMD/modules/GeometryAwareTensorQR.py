@@ -146,6 +146,7 @@ class GeometryAwarePivotSelector:
         
         # Cache for efficiency
         self._norm_cache = {}
+        self.current_min_dists = None
     
     def _compute_gradient_weights(self, field_data: torch.Tensor) -> None:
         """Compute gradient-based geometric weights."""
@@ -155,6 +156,16 @@ class GeometryAwarePivotSelector:
         else:
             field_np = field_data
         
+        # Handle spatial dimensions: (H, W, ..., T) -> (N_cells, T)
+        N_cells = len(self.mesh.coordinates)
+
+        if field_np.ndim > 2:
+            field_np = field_np.reshape(N_cells, -1)
+        elif field_np.ndim == 2 and field_np.shape[0] != N_cells:
+            # Check if it is a single snapshot (spatial_1, spatial_2)
+            if np.prod(field_np.shape) == N_cells:
+                 field_np = field_np.reshape(N_cells, 1)
+
         # Ensure 2D: (N_cells, N_time)
         if field_np.ndim == 1:
             field_np = field_np[:, np.newaxis]
@@ -217,7 +228,7 @@ class GeometryAwarePivotSelector:
         
         # 4. Apply proximity penalties
         if len(self.placed_sensors) > 0 and self.config.proximity_weight > 0:
-            prox_penalty = self._compute_proximity_penalty()
+            prox_penalty = self._compute_proximity_penalty().view(norms.shape)
             max_norm = torch.max(norms[available])
             
             if max_norm > 0:
@@ -237,6 +248,12 @@ class GeometryAwarePivotSelector:
         # 7. Update sensor tracking
         self.placed_sensors.append(flat_idx)
         
+        # Update distances incrementally
+        if self.current_min_dists is not None:
+            _, self.current_min_dists = self.geo_computer.update_proximity_penalty(
+                flat_idx, self.current_min_dists, self.min_distance
+            )
+
         return pivot
     
     def _compute_residual_norms(self, R: torch.Tensor, d: int) -> torch.Tensor:
@@ -262,21 +279,18 @@ class GeometryAwarePivotSelector:
             spatial_size = int(np.prod(self.mesh.coordinates.shape[:-1]))
             return torch.zeros(spatial_size, device=self.device, dtype=self.dtype)
         
-        # Get sensor positions (flat indices)
+        if self.current_min_dists is not None:
+            # Use cached distances (O(N) update is done in select_pivot)
+            penalty = np.exp(-self.current_min_dists / (self.min_distance + 1e-10))
+            return torch.from_numpy(penalty).to(device=self.device, dtype=self.dtype)
+
+        # Fallback (should not be reached if reset() is called)
         sensor_positions = np.array(self.placed_sensors)
-        
-        # Compute penalty using geometry utilities
         penalty = self.geo_computer.compute_proximity_penalty(
             sensor_positions,
             self.min_distance
         )
-        
-        # Convert to torch
-        penalty_torch = torch.from_numpy(penalty).to(
-            device=self.device, dtype=self.dtype
-        )
-        
-        return penalty_torch
+        return torch.from_numpy(penalty).to(device=self.device, dtype=self.dtype)
     
     def _compute_distribution_penalties(self,
                                        norms: torch.Tensor,
@@ -307,6 +321,9 @@ class GeometryAwarePivotSelector:
         """Reset state for new factorization."""
         self.placed_sensors.clear()
         self._norm_cache.clear()
+        # Initialize with infinity
+        N_cells = len(self.mesh.coordinates)
+        self.current_min_dists = np.full(N_cells, np.inf)
 
 
 class GeometryAwareTensorQR:
