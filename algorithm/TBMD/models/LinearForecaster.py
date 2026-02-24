@@ -159,18 +159,40 @@ class LinearForecaster:
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
         
-        # Initialize sequence with starting state
-        sequence = np.zeros((n_steps + 1, x_start.shape[0]))
-        sequence[0] = x_start
-        
-        # Generate predictions iteratively
-        x_current = x_start
-        for i in range(n_steps):
-            x_next = self.predict_next(x_current)
-            sequence[i+1] = x_next
-            x_current = x_next
-        
-        return sequence[1:]  # Return without the starting state
+        if self.use_torch:
+            # Optimized path for PyTorch: Keep data on device
+            if not isinstance(x_start, torch.Tensor):
+                x_current = torch.tensor(x_start, dtype=torch.float32, device=self.device)
+            else:
+                x_current = x_start.to(dtype=torch.float32, device=self.device)
+
+            # Pre-allocate output tensor on device
+            # x_current shape is (W,)
+            sequence = torch.zeros((n_steps + 1, x_current.shape[0]), dtype=torch.float32, device=self.device)
+            sequence[0] = x_current
+
+            # Generate predictions iteratively completely on device
+            for i in range(n_steps):
+                x_next = x_current @ self.M
+                sequence[i+1] = x_next
+                x_current = x_next
+
+            # Convert back to numpy once at the end
+            return sequence[1:].detach().cpu().numpy()
+
+        else:
+            # Initialize sequence with starting state
+            sequence = np.zeros((n_steps + 1, x_start.shape[0]))
+            sequence[0] = x_start
+
+            # Generate predictions iteratively
+            x_current = x_start
+            for i in range(n_steps):
+                x_next = self.predict_next(x_current)
+                sequence[i+1] = x_next
+                x_current = x_next
+
+            return sequence[1:]  # Return without the starting state
     
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
         """Evaluates the model on historical data.
