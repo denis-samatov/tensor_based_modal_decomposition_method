@@ -359,9 +359,13 @@ class ExperimentRunner:
                 slice_psnrs.append(psnr_noisy)
             
             # Calculate statistics
-            error_mean, error_std = float(torch.mean(torch.tensor(slice_errors))), float(torch.std(torch.tensor(slice_errors)))
-            ssim_mean, ssim_std = float(torch.mean(torch.tensor(slice_ssims))), float(torch.std(torch.tensor(slice_ssims)))
-            psnr_mean, psnr_std = float(torch.mean(torch.tensor(slice_psnrs))), float(torch.std(torch.tensor(slice_psnrs)))
+            error_tensor = torch.tensor(slice_errors)
+            ssim_tensor = torch.tensor(slice_ssims)
+            psnr_tensor = torch.tensor(slice_psnrs)
+
+            error_mean, error_std = float(torch.mean(error_tensor)), float(torch.std(error_tensor))
+            ssim_mean, ssim_std = float(torch.mean(ssim_tensor)), float(torch.std(ssim_tensor))
+            psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
             
             # Confidence intervals
             error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(slice_errors))
@@ -463,9 +467,13 @@ class ExperimentRunner:
                 slice_psnrs.append(psnr_noisy)
             
             # Calculate statistics
-            error_mean, error_std = float(torch.mean(torch.tensor(slice_errors))), float(torch.std(torch.tensor(slice_errors)))
-            ssim_mean, ssim_std = float(torch.mean(torch.tensor(slice_ssims))), float(torch.std(torch.tensor(slice_ssims)))
-            psnr_mean, psnr_std = float(torch.mean(torch.tensor(slice_psnrs))), float(torch.std(torch.tensor(slice_psnrs)))
+            error_tensor = torch.tensor(slice_errors)
+            ssim_tensor = torch.tensor(slice_ssims)
+            psnr_tensor = torch.tensor(slice_psnrs)
+
+            error_mean, error_std = float(torch.mean(error_tensor)), float(torch.std(error_tensor))
+            ssim_mean, ssim_std = float(torch.mean(ssim_tensor)), float(torch.std(ssim_tensor))
+            psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
             
             # Confidence intervals
             error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(slice_errors))
