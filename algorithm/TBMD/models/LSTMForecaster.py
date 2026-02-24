@@ -455,20 +455,36 @@ class LSTMForecaster:
         if x_start_window.shape[0] != self.seq_length:
             raise ValueError(f"Input window has sequence length {x_start_window.shape[0]}, expected {self.seq_length}")
         
-        # Initialize sequence with starting window
-        input_window = x_start_window.copy()
-        sequence = np.zeros((n_steps, self.out_dim))
+        # Initialize input window on device
+        # (seq_length, W) -> (1, seq_length, W)
+        input_window_tensor = torch.tensor(x_start_window, dtype=torch.float32, device=self.device).unsqueeze(0)
+
+        # Pre-allocate sequence tensor on device
+        sequence_tensor = torch.zeros((n_steps, self.out_dim), device=self.device)
         
         # Generate predictions iteratively
-        for i in range(n_steps):
-            # Predict next step
-            next_step = self.predict_next(input_window)
-            sequence[i] = next_step
-            
-            # Update window by removing oldest step and adding prediction
-            input_window = np.vstack([input_window[1:], next_step])
+        with torch.no_grad():
+            for i in range(n_steps):
+                # Predict next step
+                # input_window_tensor shape: (1, seq_length, W)
+                next_step_tensor = self.model(input_window_tensor) # (1, out_dim)
+
+                # Store prediction
+                sequence_tensor[i] = next_step_tensor.squeeze(0)
+
+                # Update window by removing oldest step and adding prediction
+                # input_window_tensor[:, 1:, :] is (1, seq_length-1, W)
+                # next_step_tensor.unsqueeze(1) is (1, 1, out_dim)
+                input_window_tensor = torch.cat([
+                    input_window_tensor[:, 1:, :],
+                    next_step_tensor.unsqueeze(1)
+                ], dim=1)
         
-        return sequence
+        return sequence_tensor.cpu().numpy()
+
+
+
+
     
     def save_model(self, path: str) -> None:
         """Saves the model.
