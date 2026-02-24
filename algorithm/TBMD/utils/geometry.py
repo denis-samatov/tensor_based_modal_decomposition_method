@@ -239,36 +239,39 @@ class MeshGraphBuilder:
             z_coords.ravel()
         ], axis=1)
         
-        # Build adjacency (6-connectivity)
-        row, col, data = [], [], []
+        # Build adjacency (6-connectivity) using vectorized operations
+        # Create full grid of indices (H, W, D)
+        indices = np.arange(N).reshape(H, W, D)
+
+        # Right neighbors (j < W - 1)
+        src_right = indices[:, :-1, :].ravel()
+        dst_right = indices[:, 1:, :].ravel()
+
+        # Bottom neighbors (i < H - 1)
+        src_bottom = indices[:-1, :, :].ravel()
+        dst_bottom = indices[1:, :, :].ravel()
         
-        for i in range(H):
-            for j in range(W):
-                for k in range(D):
-                    idx = i * W * D + j * D + k
-                    
-                    # Right neighbor (x+1)
-                    if j < W - 1:
-                        neighbor = i * W * D + (j + 1) * D + k
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
-                    
-                    # Bottom neighbor (y+1)
-                    if i < H - 1:
-                        neighbor = (i + 1) * W * D + j * D + k
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
-                    
-                    # Forward neighbor (z+1)
-                    if k < D - 1:
-                        neighbor = i * W * D + j * D + (k + 1)
-                        row.extend([idx, neighbor])
-                        col.extend([neighbor, idx])
-                        data.extend([1.0, 1.0])
+        # Forward neighbors (k < D - 1)
+        src_forward = indices[:, :, :-1].ravel()
+        dst_forward = indices[:, :, 1:].ravel()
         
-        A = sp.csr_matrix((data, (row, col)), shape=(N, N))
+        # Combine all edges
+        # We need bidirectional connections: (u, v) and (v, u)
+        all_src = np.concatenate([
+            src_right, dst_right,
+            src_bottom, dst_bottom,
+            src_forward, dst_forward
+        ])
+        all_dst = np.concatenate([
+            dst_right, src_right,
+            dst_bottom, src_bottom,
+            dst_forward, src_forward
+        ])
+
+        # All weights are 1.0
+        all_data = np.ones(len(all_src), dtype=float)
+
+        A = sp.csr_matrix((all_data, (all_src, all_dst)), shape=(N, N))
         
         # Compute distances
         distances = self._compute_edge_distances(A, coordinates)
