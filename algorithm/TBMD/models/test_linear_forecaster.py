@@ -87,6 +87,26 @@ class TestLinearForecaster(unittest.TestCase):
         self.assertAlmostEqual(metrics['mse'], expected_mse, places=5,
                                msg="PyTorch evaluation MSE is incorrect.")
 
+    def test_predict_sequence_torch(self):
+        """Test if predict_sequence works correctly with PyTorch."""
+        forecaster = LinearForecaster(use_torch=True)
+        forecaster.train(self.x_history, verbose=False)
+
+        x_start = self.x_history[0]
+        n_steps = 5
+
+        # Optimized sequence prediction
+        seq = forecaster.predict_sequence(x_start, n_steps)
+
+        # Manual verification
+        manual_seq = []
+        x_curr = torch.tensor(x_start, dtype=torch.float32, device=forecaster.device)
+        for _ in range(n_steps):
+            x_curr = x_curr @ forecaster.M
+            manual_seq.append(x_curr.detach().cpu().numpy())
+        manual_seq = np.array(manual_seq)
+
+        np.testing.assert_allclose(seq, manual_seq, atol=1e-5, err_msg="predict_sequence output mismatch")
 
 if __name__ == '__main__':
     unittest.main()
