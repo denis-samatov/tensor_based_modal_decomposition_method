@@ -608,7 +608,7 @@ class TensorVisualizer:
         subjects : Optional[List[str]], optional
             A list of subjects to visualize, by default None.
         """
-        subjects = subjects or list(original_tensors.keys())
+        subjects = subjects or original_tensors.keys()
         
         for subject in subjects:
             if subject not in original_tensors or subject not in reconstructed_tensors:
