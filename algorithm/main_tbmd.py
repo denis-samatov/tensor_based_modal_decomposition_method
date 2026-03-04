@@ -160,7 +160,7 @@ wells
 
 train_data, test_data = split_data_in_memory_ordered(tensors['all'], train_ratio=0.8)
 
-subject_name = list(tensors['all'].keys())[0]
+subject_name = next(iter(tensors['all']))
 
 print(list(tensors['all'].keys()))
 print(tensors['all'][subject_name].shape)
@@ -182,7 +182,7 @@ print(tensors['all'][subject_name].shape)
 
 # train_data, test_data = split_data_in_memory_ordered(tensors['soil'], train_ratio=0.8)
 
-# subject_name = list(tensors['soil'].keys())[0]
+# subject_name = next(iter(tensors['soil']))
 
 # print(list(tensors['soil'].keys()))
 # print(tensors['soil'][subject_name].shape)
@@ -205,7 +205,7 @@ print(tensors['all'][subject_name].shape)
 
 # train_data, test_data = split_data_in_memory_ordered(noisy_datasets, train_ratio=0.8)
 
-# subject_name = list(noisy_datasets.keys())[0]
+# subject_name = next(iter(noisy_datasets))
 
 # print(list(noisy_datasets.keys()))
 # print(noisy_datasets[subject_name].shape)
@@ -221,7 +221,7 @@ print(tensors['all'][subject_name].shape)
 
 # train_data, test_data = split_data_in_memory_ordered(dynamic_data, train_ratio=0.8)
 
-# subject_name = list(dynamic_data.keys())[0]
+# subject_name = next(iter(dynamic_data))
 
 # print(list(dynamic_data.keys()))
 # print(dynamic_data[subject_name].shape)
