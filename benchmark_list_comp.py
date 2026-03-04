@@ -1,21 +1,18 @@
 import timeit
 
-setup_code_append = """
-dim = 3
-size = 256
-"""
+setup = "d = {i: i for i in range(1000000)}"
 
-stmt_append = """
-size_list = []
-for j in range(dim):
-    size_list.append(size)
-tuple(size_list)
-"""
+# The issue is about "Unnecessary list conversion of dictionary keys"
+# This typically implies doing list(d.keys()) vs d.keys() when iterating or checking membership,
+# or when printing. If we just print it, print(list(d.keys())) creates a list, but print(d.keys()) creates a dict_keys object.
 
-stmt_list_comp = """
-size_list = [size for _ in range(dim)]
-tuple(size_list)
-"""
-
-print(f"Append baseline: {timeit.timeit(stmt=stmt_append, setup=setup_code_append, number=1000000)} seconds")
-print(f"List comprehension: {timeit.timeit(stmt=stmt_list_comp, setup=setup_code_append, number=1000000)} seconds")
+# If the code is: `subject_name = list(tensors['all'].keys())[0]`
+# In the original code snippet in the prompt:
+# ```python
+# subject_name = list(tensors['all'].keys())[0]
+#
+# print(list(tensors['all'].keys()))
+# print(tensors['all'][subject_name].shape)
+# ```
+# It seems `subject_name = list(tensors['all'].keys())[0]` was the current code.
+# Let me look at line 163 in the file again. Wait, someone might have fixed it to `next(iter(...))`? Let me check git log.
