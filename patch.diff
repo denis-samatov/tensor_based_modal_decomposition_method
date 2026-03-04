@@ -1,0 +1,15 @@
+--- algorithm/TBMD/utils/data_generation.py
++++ algorithm/TBMD/utils/data_generation.py
+@@ -63,11 +63,7 @@
+             self.sqrt_eig = (size**3)*math.sqrt(2.0)*sigma*((4*(math.pi**2)*(k_x**2 + k_y**2 + k_z**2) + tau**2)**(-alpha/2.0))
+             self.sqrt_eig[0,0,0] = 0.0
+
+-        self.size = []
+-        for j in range(self.dim):
+-            self.size.append(size)
+-
+-        self.size = tuple(self.size)
++        self.size = tuple([size for _ in range(self.dim)])
+
+     def sample(self, N):
+         """Generates N samples from the random field.
