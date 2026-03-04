@@ -344,7 +344,7 @@ class GeometryAwareTuckerCore:
         )
         
         # Solve for U^T (transpose of factor)
-        rhs_T = unfolding @ G  # This is actually X_(mode) @ K^T
+        rhs_T = rhs  # This is actually X_(mode) @ K^T
         
         try:
             U_new = torch.linalg.solve(lhs, rhs_T)
