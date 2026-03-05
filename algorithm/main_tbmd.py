@@ -162,7 +162,7 @@ train_data, test_data = split_data_in_memory_ordered(tensors['all'], train_ratio
 
 subject_name = next(iter(tensors['all']))
 
-print(list(tensors['all']))
+print(tensors['all'].keys())
 print(tensors['all'][subject_name].shape)
 
 
@@ -173,7 +173,7 @@ print(tensors['all'][subject_name].shape)
 
 # subject_name = list(tensors['pressure'])[2]
 
-# print(list(tensors['pressure']))
+# print(tensors['pressure'].keys())
 # print(tensors['pressure'][subject_name].shape)
 
 
@@ -184,7 +184,7 @@ print(tensors['all'][subject_name].shape)
 
 # subject_name = next(iter(tensors['soil']))
 
-# print(list(tensors['soil']))
+# print(tensors['soil'].keys())
 # print(tensors['soil'][subject_name].shape)
 
 
@@ -207,7 +207,7 @@ print(tensors['all'][subject_name].shape)
 
 # subject_name = next(iter(noisy_datasets))
 
-# print(list(noisy_datasets))
+# print(noisy_datasets.keys())
 # print(noisy_datasets[subject_name].shape)
 
 
@@ -223,7 +223,7 @@ print(tensors['all'][subject_name].shape)
 
 # subject_name = next(iter(dynamic_data))
 
-# print(list(dynamic_data))
+# print(dynamic_data.keys())
 # print(dynamic_data[subject_name].shape)
 
 
