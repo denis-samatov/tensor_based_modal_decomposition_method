@@ -476,8 +476,8 @@ class OptimizedPivotSelector:
 
                 # Convert counts to tensor efficiently
                 size = norms.shape[dim]
-                indices = list(dim_counts.keys())
-                values = list(dim_counts.values())
+                indices = tuple(dim_counts.keys())
+                values = tuple(dim_counts.values())
 
                 indices_tensor = torch.tensor(indices, device=norms.device, dtype=torch.long)
                 values_tensor = torch.tensor(values, device=norms.device, dtype=norms.dtype)
