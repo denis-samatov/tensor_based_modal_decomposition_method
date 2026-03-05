@@ -477,6 +477,8 @@ class OptimizedPivotSelector:
                 # Convert counts to tensor efficiently avoiding list allocation
                 size = norms.shape[dim]
                 count = len(dim_counts)
+                if count == 0:
+                    continue
 
                 indices_np = np.fromiter(dim_counts.keys(), dtype=np.int64, count=count)
                 values_np = np.fromiter(dim_counts.values(), dtype=np.float64, count=count)
