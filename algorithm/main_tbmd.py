@@ -162,7 +162,7 @@ train_data, test_data = split_data_in_memory_ordered(tensors['all'], train_ratio
 
 subject_name = next(iter(tensors['all']))
 
-print(list(tensors['all']))
+print(tensors['all'].keys())
 print(tensors['all'][subject_name].shape)
 
 

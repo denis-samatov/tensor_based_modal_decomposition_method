@@ -474,13 +474,17 @@ class OptimizedPivotSelector:
                 if not dim_counts:
                     continue
 
-                # Convert counts to tensor efficiently
+                # Convert counts to tensor efficiently avoiding list allocation
                 size = norms.shape[dim]
-                indices = tuple(dim_counts.keys())
-                values = tuple(dim_counts.values())
+                count = len(dim_counts)
+                if count == 0:
+                    continue
 
-                indices_tensor = torch.tensor(indices, device=norms.device, dtype=torch.long)
-                values_tensor = torch.tensor(values, device=norms.device, dtype=norms.dtype)
+                indices_np = np.fromiter(dim_counts.keys(), dtype=np.int64, count=count)
+                values_np = np.fromiter(dim_counts.values(), dtype=np.float64, count=count)
+
+                indices_tensor = torch.from_numpy(indices_np).to(device=norms.device)
+                values_tensor = torch.from_numpy(values_np).to(device=norms.device, dtype=norms.dtype)
 
                 # Create sparse density vector
                 density = torch.zeros(size, device=norms.device, dtype=norms.dtype)
