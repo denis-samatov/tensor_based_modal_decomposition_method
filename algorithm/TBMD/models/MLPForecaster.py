@@ -24,20 +24,22 @@ class MLPModel(nn.Module):
                  dropout_rate: float = 0.3, num_layers: int = 2):
         super().__init__()
         
-        layers = []
-        # Input layer
-        layers.append(nn.Linear(in_dim, hidden_dim))
-        layers.append(nn.ReLU())
-        layers.append(nn.Dropout(dropout_rate))
-        
-        # Hidden layers
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout_rate))
-        
-        # Output layer
-        layers.append(nn.Linear(hidden_dim, out_dim))
+        # Input layer, Hidden layers, Output layer
+        layers = [
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
+            *[
+                layer
+                for _ in range(num_layers - 1)
+                for layer in (
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout_rate)
+                )
+            ],
+            nn.Linear(hidden_dim, out_dim)
+        ]
         
         self.net = nn.Sequential(*layers)
     
