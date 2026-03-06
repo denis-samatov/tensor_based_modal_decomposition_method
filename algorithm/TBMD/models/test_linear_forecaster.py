@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import numpy as np
 import torch
@@ -18,10 +19,11 @@ class TestLinearForecaster(unittest.TestCase):
             [0.8, 0.1, 0.1]
         ])
         # Generate synthetic data
-        self.x_history = np.zeros((self.t_steps, self.in_dim))
-        self.x_history[0] = np.array([1, 2, 3])
-        for t in range(1, self.t_steps):
-            self.x_history[t] = self.x_history[t-1] @ self.true_m
+        self.x_history = np.array(list(itertools.accumulate(
+            itertools.repeat(self.true_m, self.t_steps - 1),
+            np.matmul,
+            initial=np.array([1., 2., 3.])
+        )))
 
     def test_training_metrics_numpy(self):
         """Test if the training metrics are calculated correctly with NumPy."""
