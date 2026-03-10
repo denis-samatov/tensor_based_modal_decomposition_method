@@ -147,7 +147,7 @@ class CPUStrategy(ProcessingStrategy):
         # Identify unique tensors to compute norms efficiently
         unique_tensors = {}
         key_to_id = {}
-        for key in cores.keys():
+        for key in cores:
             tensor = original_tensors[key]
             tid = id(tensor)
             unique_tensors[tid] = tensor
@@ -176,7 +176,7 @@ class CPUStrategy(ProcessingStrategy):
                     raise e
 
             # Phase 2: Reconstruct
-            futures = [executor.submit(reconstruct_single, key) for key in cores.keys()]
+            futures = [executor.submit(reconstruct_single, key) for key in cores]
             
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -297,7 +297,7 @@ class GPUStrategy(ProcessingStrategy):
         """
         results = {}
         
-        for key in cores.keys():
+        for key in cores:
             try:
                 # Clear memory before processing
                 self._clear_gpu_memory()
@@ -608,7 +608,7 @@ class TensorVisualizer:
         subjects : Optional[List[str]], optional
             A list of subjects to visualize, by default None.
         """
-        subjects = subjects or original_tensors.keys()
+        subjects = subjects or original_tensors
         
         for subject in subjects:
             if subject not in original_tensors or subject not in reconstructed_tensors:
