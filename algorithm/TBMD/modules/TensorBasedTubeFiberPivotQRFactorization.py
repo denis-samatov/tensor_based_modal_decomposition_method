@@ -519,16 +519,17 @@ class OptimizedPivotSelector:
             return penalties
         
         # Vectorized computation for each spatial dimension
-        for dim in range(len(norms.shape)):
+        ndim = len(norms.shape)
+        base_dims = list(range(ndim))
+        for dim in range(ndim):
             # Sum along all other dimensions to get density per slice in this dimension
-            sum_dims = list(range(len(norms.shape)))
-            sum_dims.remove(dim)
+            sum_dims = base_dims[:dim] + base_dims[dim+1:]
             
             if sum_dims:
                 density_per_slice = torch.sum(sensor_placement, dim=tuple(sum_dims)) / total_sensors
                 
                 # Broadcast penalty across the dimension
-                penalty_shape = [1] * len(norms.shape)
+                penalty_shape = [1] * ndim
                 penalty_shape[dim] = norms.shape[dim]
                 
                 penalty_values = density_per_slice.view(penalty_shape) * self.config.DISTRIBUTION_PENALTY_WEIGHT * max_norm
