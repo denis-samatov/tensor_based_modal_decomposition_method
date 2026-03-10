@@ -1933,12 +1933,9 @@ class ExperimentRunner:
         wells_list = self.config.wells.get(subject_name, [])
 
         # Удаляем дубликаты и невалидные координаты, затем сортируем по возрастанию координат (сначала по i, потом по j)
-        valid_wells = []
-        seen = set()
-        for i, j in wells_list:
-            if (i, j) not in seen and 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]:
-                valid_wells.append([i, j])
-                seen.add((i, j))
+        valid_wells = [[i, j] for i, j in dict.fromkeys(
+            (i, j) for i, j in wells_list if 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]
+        )]
         # Сортировка слева направо, сверху вниз (сначала по j, потом по i)
         # valid_wells.sort(key=lambda x: (x[0], x[1]))
 
@@ -2079,12 +2076,9 @@ class ExperimentRunner:
         # Подготовить валидные wells для каждого subject
         wells_dict_valid = {}
         for subject, wells_list in self.config.wells.items():
-            valid_wells = []
-            seen = set()
-            for i, j in wells_list:
-                if (i, j) not in seen and 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]:
-                    valid_wells.append([i, j])
-                    seen.add((i, j))
+            valid_wells = [[i, j] for i, j in dict.fromkeys(
+                (i, j) for i, j in wells_list if 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]
+            )]
             wells_dict_valid[subject] = valid_wells
 
         results = []

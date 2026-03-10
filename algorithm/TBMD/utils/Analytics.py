@@ -424,12 +424,9 @@ class ExperimentRunner:
         # Получить wells только для subject_name
         wells_list = self.config.wells.get(subject_name, [])
         # Убрать дубликаты и невалидные координаты
-        valid_wells = []
-        seen = set()
-        for i, j in wells_list:
-            if (i, j) not in seen and 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]:
-                valid_wells.append([i, j])
-                seen.add((i, j))
+        valid_wells = [[i, j] for i, j in dict.fromkeys(
+            (i, j) for i, j in wells_list if 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]
+        )]
         
         results = []
         num_total_samples = 1 + self.config.num_noise_samples
@@ -530,12 +527,9 @@ class ExperimentRunner:
         # Подготовить валидные wells для каждого subject
         wells_dict_valid = {}
         for subject, wells_list in self.config.wells.items():
-            valid_wells = []
-            seen = set()
-            for i, j in wells_list:
-                if (i, j) not in seen and 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]:
-                    valid_wells.append([i, j])
-                    seen.add((i, j))
+            valid_wells = [[i, j] for i, j in dict.fromkeys(
+                (i, j) for i, j in wells_list if 0 <= i < A_tensor.shape[0] and 0 <= j < A_tensor.shape[1]
+            )]
             wells_dict_valid[subject] = valid_wells
         
         results = []
