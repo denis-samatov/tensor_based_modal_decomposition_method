@@ -779,8 +779,7 @@ def plot_analytics(df: pd.DataFrame,
     
     # Plot 1: Individual plots for each metric
     if plot_type in ['individual', 'all']:
-        for metric in plot_data.keys():
-            data = plot_data[metric]
+        for metric, data in plot_data.items():
             color = colors.get(metric, 'black')
             
             plt.figure(figsize=figsize)
