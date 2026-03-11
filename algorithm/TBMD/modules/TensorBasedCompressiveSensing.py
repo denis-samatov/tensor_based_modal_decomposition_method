@@ -242,9 +242,14 @@ class CholeskyCachedSolver:
 
     def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Stateless solve (compatible with LinearSolver protocol)."""
-        lhs_reg = lhs + self.reg * torch.eye(
-            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
-        )
+        if not hasattr(self, "eye_cache"):
+            self.eye_cache = {}
+
+        key = (lhs.shape[0], lhs.device, lhs.dtype)
+        if key not in self.eye_cache:
+            self.eye_cache[key] = self.reg * torch.eye(key[0], device=key[1], dtype=key[2])
+
+        lhs_reg = lhs + self.eye_cache[key]
         try:
             L = torch.linalg.cholesky(lhs_reg)
             return torch.cholesky_solve(rhs, L, upper=False)
@@ -267,11 +272,15 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
     if cfg.solver == "cholesky":
         return CholeskyCachedSolver(reg)
 
+    eye_cache = {}
+
     def direct(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Direct linear solve (LU) with regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(
-            lhs.shape[0], device=lhs.device, dtype=lhs.dtype
-        )
+        key = (lhs.shape[0], lhs.device, lhs.dtype)
+        if key not in eye_cache:
+            eye_cache[key] = reg * torch.eye(key[0], device=key[1], dtype=key[2])
+
+        lhs_reg = lhs + eye_cache[key]
         try:
             return torch.linalg.solve(lhs_reg, rhs)
         except torch.linalg.LinAlgError:
