@@ -124,6 +124,7 @@ class GeometryAwareTuckerCore:
         self.epsilon = epsilon
         self.max_iter = max_iter
         self.random_state = random_state
+        self._eye_cache = {}
         
         # Select Laplacian type
         if geo_config.laplacian_type == 'normalized':
@@ -259,7 +260,7 @@ class GeometryAwareTuckerCore:
         
         try:
             # Regularize for numerical stability
-            lhs_reg = lhs + 1e-8 * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+            lhs_reg = lhs + 1e-8 * self._get_identity(lhs.shape[0], lhs.device, lhs.dtype)
             U_new = torch.linalg.solve(lhs_reg.T, rhs.T).T
         except:
             # Fallback to pseudo-inverse
@@ -339,9 +340,7 @@ class GeometryAwareTuckerCore:
         KKT = G @ G.T  # This is the Gram matrix in the mode space
         
         # Regularized system
-        lhs = KKT + self.geo_config.alpha * LTL + 1e-8 * torch.eye(
-            KKT.shape[0], device=tensor.device, dtype=tensor.dtype
-        )
+        lhs = KKT + self.geo_config.alpha * LTL + 1e-8 * self._get_identity(KKT.shape[0], tensor.device, tensor.dtype)
         
         # Solve for U^T (transpose of factor)
         rhs_T = rhs  # This is actually X_(mode) @ K^T
@@ -357,6 +356,14 @@ class GeometryAwareTuckerCore:
         
         return U_new
     
+
+    def _get_identity(self, size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        """Get or create a cached identity matrix of the specified size."""
+        key = (size, str(device), dtype)
+        if key not in self._eye_cache:
+            self._eye_cache[key] = torch.eye(size, device=device, dtype=dtype)
+        return self._eye_cache[key]
+
     def _compute_gramian(self, factors: List[torch.Tensor], skip_mode: int) -> torch.Tensor:
         """
         Compute Khatri-Rao product of all factors except skip_mode.
