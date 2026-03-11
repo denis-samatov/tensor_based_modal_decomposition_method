@@ -1304,8 +1304,17 @@ class MetricsHook(Protocol):
 
 def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
     reg = cfg.reg
+    eye_cache = {}
+
+    def get_reg_eye(size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        # Tuple of attributes acts as a key to support varying parameters
+        key = (size, str(device), dtype)
+        if key not in eye_cache:
+            eye_cache[key] = reg * torch.eye(size, device=device, dtype=dtype)
+        return eye_cache[key]
+
     def cholesky(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+        lhs_reg = lhs + get_reg_eye(lhs.shape[0], lhs.device, lhs.dtype)
         try:
             L = torch.linalg.cholesky(lhs_reg)
             return torch.cholesky_solve(rhs, L, upper=False)
@@ -1314,7 +1323,7 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
             return svd(lhs_reg, rhs)
 
     def direct(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+        lhs_reg = lhs + get_reg_eye(lhs.shape[0], lhs.device, lhs.dtype)
         try:
             return torch.linalg.solve(lhs_reg, rhs)
         except torch.linalg.LinAlgError:
