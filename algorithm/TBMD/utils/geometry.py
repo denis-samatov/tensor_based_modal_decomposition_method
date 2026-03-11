@@ -123,6 +123,15 @@ class MeshGraphBuilder:
         """
         self.connectivity_type = connectivity_type
         self.params = kwargs
+        self._cached_kdtree = None
+        self._cached_coords = None
+
+    def _get_kdtree(self, coordinates: np.ndarray) -> KDTree:
+        """Get or create a KDTree for the given coordinates."""
+        if self._cached_coords is not coordinates or self._cached_kdtree is None:
+            self._cached_kdtree = KDTree(coordinates)
+            self._cached_coords = coordinates
+        return self._cached_kdtree
         
     def build_from_shape(self, spatial_shape: Tuple[int, ...]) -> MeshGeometry:
         """Builds a graph for a regular grid mesh.
@@ -291,7 +300,7 @@ class MeshGraphBuilder:
     def _build_knn_graph(self, coordinates: np.ndarray, k: int) -> Tuple[sp.spmatrix, sp.spmatrix]:
         """Build k-nearest neighbors graph."""
         N = len(coordinates)
-        tree = KDTree(coordinates)
+        tree = self._get_kdtree(coordinates)
         
         # Query k+1 neighbors (including self)
         distances, indices = tree.query(coordinates, k=min(k+1, N))
@@ -327,7 +336,7 @@ class MeshGraphBuilder:
     def _build_radius_graph(self, coordinates: np.ndarray, radius: float) -> Tuple[sp.spmatrix, sp.spmatrix]:
         """Build radius-based graph."""
         N = len(coordinates)
-        tree = KDTree(coordinates)
+        tree = self._get_kdtree(coordinates)
         
         # Query all neighbors within radius
         pairs = tree.query_pairs(radius, output_type='ndarray')
