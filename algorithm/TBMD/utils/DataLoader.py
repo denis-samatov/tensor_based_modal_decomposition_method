@@ -106,7 +106,7 @@ class DataLoader:
         subject_images = defaultdict(lambda: None)
         subject_dir_list = []
 
-        for subject_dir in tqdm(list(dataset_path.iterdir()), desc="Load images as tensors"):
+        for subject_dir in tqdm(dataset_path.iterdir(), desc="Load images as tensors"):
             if not subject_dir.is_dir():
                 continue
 
