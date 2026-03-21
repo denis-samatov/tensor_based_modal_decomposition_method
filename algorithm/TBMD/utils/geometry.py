@@ -307,8 +307,8 @@ class MeshGraphBuilder:
         
         # Vectorized implementation for speed
         # Flatten the indices and distances
-        col_indices = indices.flatten()
-        dists_flat = distances.flatten()
+        col_indices = np.ravel(indices)
+        dists_flat = np.ravel(distances)
 
         # Create row indices corresponding to each neighbor
         # Each row i has k+1 neighbors (including self potentially)
