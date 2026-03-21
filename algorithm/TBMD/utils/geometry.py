@@ -414,7 +414,7 @@ class MeshGraphBuilder:
     @staticmethod
     def _compute_laplacian(A: sp.spmatrix) -> sp.spmatrix:
         """Compute graph Laplacian L = D - A."""
-        degrees = np.array(A.sum(axis=1)).flatten()
+        degrees = A.sum(axis=1).A1
         D = sp.diags(degrees)
         L = D - A
         return L.tocsr()
@@ -422,7 +422,7 @@ class MeshGraphBuilder:
     @staticmethod
     def _compute_normalized_laplacian(A: sp.spmatrix) -> sp.spmatrix:
         """Compute normalized Laplacian L_norm = I - D^{-1/2} A D^{-1/2}."""
-        degrees = np.array(A.sum(axis=1)).flatten()
+        degrees = A.sum(axis=1).A1
         
         # Avoid division by zero for isolated nodes
         degrees = np.where(degrees > 0, degrees, 1.0)
