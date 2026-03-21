@@ -46,7 +46,7 @@ class MeshGeometry:
     coordinates: np.ndarray
     distances: Optional[sp.spmatrix] = None
     gradient_weights: Optional[sp.spmatrix] = None
-    
+
     def to_torch(self, device: str = 'cpu', dtype: torch.dtype = torch.float32) -> 'TorchMeshGeometry':
         """Converts sparse matrices to PyTorch sparse tensors.
 
@@ -59,7 +59,7 @@ class MeshGeometry:
             TorchMeshGeometry: A new object with PyTorch sparse tensors.
         """
         dev = get_torch_device(device)
-        
+
         def sparse_to_torch(mat):
             """Convert scipy sparse matrix to torch sparse tensor."""
             if mat is None:
@@ -69,7 +69,7 @@ class MeshGeometry:
             values = torch.FloatTensor(coo.data).to(dtype)
             shape = coo.shape
             return torch.sparse_coo_tensor(indices, values, shape, device=dev)
-        
+
         return TorchMeshGeometry(
             adjacency_matrix=sparse_to_torch(self.adjacency_matrix),
             laplacian_matrix=sparse_to_torch(self.laplacian_matrix),
@@ -111,7 +111,7 @@ class MeshGraphBuilder:
     - 'radius': Connects cells within a distance threshold.
     - 'delaunay': Delaunay triangulation-based connectivity (2D/3D).
     """
-    
+
     def __init__(self, connectivity_type: str = 'knn', **kwargs):
         """Initializes the MeshGraphBuilder.
 
@@ -132,7 +132,7 @@ class MeshGraphBuilder:
             self._cached_kdtree = KDTree(coordinates)
             self._cached_coords = coordinates
         return self._cached_kdtree
-        
+
     def build_from_shape(self, spatial_shape: Tuple[int, ...]) -> MeshGeometry:
         """Builds a graph for a regular grid mesh.
 
@@ -149,7 +149,7 @@ class MeshGraphBuilder:
             return self._build_3d_grid(spatial_shape)
         else:
             raise ValueError(f"Unsupported spatial dimension: {len(spatial_shape)}")
-    
+
     def build_from_coordinates(self, coordinates: np.ndarray) -> MeshGeometry:
         """Builds a graph from cell center coordinates (unstructured mesh).
 
@@ -161,7 +161,7 @@ class MeshGraphBuilder:
             MeshGeometry: The constructed mesh geometry.
         """
         N = len(coordinates)
-        
+
         if self.connectivity_type == 'knn':
             k = self.params.get('k', 6)
             A, distances = self._build_knn_graph(coordinates, k)
@@ -174,11 +174,11 @@ class MeshGraphBuilder:
             A, distances = self._build_delaunay_graph(coordinates)
         else:
             raise ValueError(f"Unknown connectivity type for unstructured mesh: {self.connectivity_type}")
-        
+
         # Compute Laplacian matrices
         L = self._compute_laplacian(A)
         L_norm = self._compute_normalized_laplacian(A)
-        
+
         return MeshGeometry(
             adjacency_matrix=A,
             laplacian_matrix=L,
@@ -186,16 +186,16 @@ class MeshGraphBuilder:
             coordinates=coordinates,
             distances=distances
         )
-    
+
     def _build_2d_grid(self, shape: Tuple[int, int]) -> MeshGeometry:
         """Build 4-connected grid graph for 2D."""
         H, W = shape
         N = H * W
-        
+
         # Create coordinate grid
         y_coords, x_coords = np.mgrid[0:H, 0:W]
         coordinates = np.stack([x_coords.ravel(), y_coords.ravel()], axis=1)
-        
+
         # Build adjacency (4-connectivity) using vectorized operations
         # Create full grid of indices (H, W)
         indices = np.arange(N).reshape(H, W)
@@ -214,19 +214,19 @@ class MeshGraphBuilder:
         # We need bidirectional connections: (u, v) and (v, u)
         all_src = np.concatenate([src_right, dst_right, src_bottom, dst_bottom])
         all_dst = np.concatenate([dst_right, src_right, dst_bottom, src_bottom])
-        
+
         # All weights are 1.0
         all_data = np.ones(len(all_src), dtype=float)
 
         A = sp.csr_matrix((all_data, (all_src, all_dst)), shape=(N, N))
-        
+
         # Compute distances
         distances = self._compute_edge_distances(A, coordinates)
-        
+
         # Laplacians
         L = self._compute_laplacian(A)
         L_norm = self._compute_normalized_laplacian(A)
-        
+
         return MeshGeometry(
             adjacency_matrix=A,
             laplacian_matrix=L,
@@ -234,12 +234,12 @@ class MeshGraphBuilder:
             coordinates=coordinates,
             distances=distances
         )
-    
+
     def _build_3d_grid(self, shape: Tuple[int, int, int]) -> MeshGeometry:
         """Build 6-connected grid graph for 3D."""
         H, W, D = shape
         N = H * W * D
-        
+
         # Create coordinate grid
         z_coords, y_coords, x_coords = np.mgrid[0:H, 0:W, 0:D]
         coordinates = np.stack([
@@ -247,7 +247,7 @@ class MeshGraphBuilder:
             y_coords.ravel(),
             z_coords.ravel()
         ], axis=1)
-        
+
         # Build adjacency (6-connectivity) using vectorized operations
         # Create full grid of indices (H, W, D)
         indices = np.arange(N).reshape(H, W, D)
@@ -259,11 +259,11 @@ class MeshGraphBuilder:
         # Bottom neighbors (i < H - 1)
         src_bottom = indices[:-1, :, :].ravel()
         dst_bottom = indices[1:, :, :].ravel()
-        
+
         # Forward neighbors (k < D - 1)
         src_forward = indices[:, :, :-1].ravel()
         dst_forward = indices[:, :, 1:].ravel()
-        
+
         # Combine all edges
         # We need bidirectional connections: (u, v) and (v, u)
         all_src = np.concatenate([
@@ -281,14 +281,14 @@ class MeshGraphBuilder:
         all_data = np.ones(len(all_src), dtype=float)
 
         A = sp.csr_matrix((all_data, (all_src, all_dst)), shape=(N, N))
-        
+
         # Compute distances
         distances = self._compute_edge_distances(A, coordinates)
-        
+
         # Laplacians
         L = self._compute_laplacian(A)
         L_norm = self._compute_normalized_laplacian(A)
-        
+
         return MeshGeometry(
             adjacency_matrix=A,
             laplacian_matrix=L,
@@ -296,15 +296,15 @@ class MeshGraphBuilder:
             coordinates=coordinates,
             distances=distances
         )
-    
+
     def _build_knn_graph(self, coordinates: np.ndarray, k: int) -> Tuple[sp.spmatrix, sp.spmatrix]:
         """Build k-nearest neighbors graph."""
         N = len(coordinates)
         tree = self._get_kdtree(coordinates)
-        
+
         # Query k+1 neighbors (including self)
         distances, indices = tree.query(coordinates, k=min(k+1, N))
-        
+
         # Vectorized implementation for speed
         # Flatten the indices and distances
         col_indices = np.ravel(indices)
@@ -316,31 +316,31 @@ class MeshGraphBuilder:
 
         # Filter out self-loops
         mask = col_indices != row_indices
-        
+
         row = row_indices[mask]
         col = col_indices[mask]
         data = np.ones(len(row))
         dist_data = dists_flat[mask]
-        
+
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
-        
+
         # Symmetrize (undirected graph)
         A = (A + A.T) / 2
         A.data = np.ones_like(A.data)  # Binary adjacency
-        
+
         D = (D + D.T) / 2
-        
+
         return A, D
-    
+
     def _build_radius_graph(self, coordinates: np.ndarray, radius: float) -> Tuple[sp.spmatrix, sp.spmatrix]:
         """Build radius-based graph."""
         N = len(coordinates)
         tree = self._get_kdtree(coordinates)
-        
+
         # Query all neighbors within radius
         pairs = tree.query_pairs(radius, output_type='ndarray')
-        
+
         if len(pairs) == 0:
             row = np.array([], dtype=int)
             col = np.array([], dtype=int)
@@ -359,22 +359,22 @@ class MeshGraphBuilder:
             col = np.concatenate([j_indices, i_indices])
             data = np.ones(len(row))
             dist_data = np.concatenate([dists, dists])
-        
+
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
-        
+
         return A, D
-    
+
     def _build_delaunay_graph(self, coordinates: np.ndarray) -> Tuple[sp.spmatrix, sp.spmatrix]:
         """Build graph from Delaunay triangulation."""
         N = len(coordinates)
-        
+
         try:
             tri = Delaunay(coordinates)
         except Exception as e:
             warnings.warn(f"Delaunay triangulation failed: {e}. Falling back to KNN.")
             return self._build_knn_graph(coordinates, k=6)
-        
+
         # Extract edges from simplices
         edges = set()
         for simplex in tri.simplices:
@@ -383,9 +383,9 @@ class MeshGraphBuilder:
                 for j in range(i + 1, n_vertices):
                     edge = tuple(sorted([simplex[i], simplex[j]]))
                     edges.add(edge)
-        
+
         row, col, data, dist_data = [], [], [], []
-        
+
         for i, j in edges:
             dist = np.linalg.norm(coordinates[i] - coordinates[j])
             # Add both directions
@@ -393,24 +393,24 @@ class MeshGraphBuilder:
             col.extend([j, i])
             data.extend([1.0, 1.0])
             dist_data.extend([dist, dist])
-        
+
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
-        
+
         return A, D
-    
+
     def _compute_edge_distances(self, A: sp.spmatrix, coordinates: np.ndarray) -> sp.spmatrix:
         """Compute Euclidean distances for all edges in adjacency matrix."""
         A_coo = A.tocoo()
-        
+
         # Vectorized computation
         row_coords = coordinates[A_coo.row]
         col_coords = coordinates[A_coo.col]
         diff = row_coords - col_coords
         distances = np.linalg.norm(diff, axis=1)
-        
+
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
-    
+
     @staticmethod
     def _compute_laplacian(A: sp.spmatrix) -> sp.spmatrix:
         """Compute graph Laplacian L = D - A."""
@@ -418,19 +418,19 @@ class MeshGraphBuilder:
         D = sp.diags(degrees)
         L = D - A
         return L.tocsr()
-    
+
     @staticmethod
     def _compute_normalized_laplacian(A: sp.spmatrix) -> sp.spmatrix:
         """Compute normalized Laplacian L_norm = I - D^{-1/2} A D^{-1/2}."""
         degrees = A.sum(axis=1).A1
-        
+
         # Avoid division by zero for isolated nodes
         degrees = np.where(degrees > 0, degrees, 1.0)
-        
+
         D_inv_sqrt = sp.diags(1.0 / np.sqrt(degrees))
         I = sp.eye(A.shape[0])
         L_norm = I - D_inv_sqrt @ A @ D_inv_sqrt
-        
+
         return L_norm.tocsr()
 
 
@@ -442,7 +442,7 @@ class GeometricWeightComputer:
     - Geometric significance (corners, boundaries)
     - Flow features (vortices, stagnation points)
     """
-    
+
     def __init__(self, mesh: MeshGeometry):
         """Initializes the GeometricWeightComputer.
 
@@ -450,7 +450,7 @@ class GeometricWeightComputer:
             mesh (MeshGeometry): The mesh geometry information.
         """
         self.mesh = mesh
-    
+
     def compute_gradient_weights(self, field: np.ndarray, method: str = 'fd') -> np.ndarray:
         """Computes the spatial gradient magnitude for each cell.
 
@@ -470,14 +470,14 @@ class GeometricWeightComputer:
             field_mean = field.mean(axis=1)
         else:
             field_mean = field
-        
+
         if method == 'fd':
             return self._compute_fd_gradient(field_mean)
         elif method == 'graph':
             return self._compute_graph_gradient(field_mean)
         else:
             raise ValueError(f"Unknown gradient method: {method}")
-    
+
     def _compute_fd_gradient(self, field: np.ndarray) -> np.ndarray:
         """Finite difference gradient using vectorized sparse matrix operations."""
         A = self.mesh.adjacency_matrix
@@ -487,7 +487,7 @@ class GeometricWeightComputer:
             D_mat = self._compute_distances_from_adjacency(A)
 
         N = len(field)
-        
+
         # Convert to COO for efficient access
         if not sp.isspmatrix_coo(D_mat):
             D_coo = D_mat.tocoo()
@@ -502,7 +502,7 @@ class GeometricWeightComputer:
         row = D_coo.row[mask]
         col = D_coo.col[mask]
         data_inv_sq = 1.0 / (D_coo.data[mask] ** 2)
-        
+
         W2 = sp.csr_matrix((data_inv_sq, (row, col)), shape=(N, N))
 
         # Count of valid neighbors per row (k)
@@ -523,9 +523,9 @@ class GeometricWeightComputer:
         # W2 @ 1 is just the row sums of W2
         w2_row_sums = np.array(W2.sum(axis=1)).flatten()
         term3 = f_sq * w2_row_sums
-        
+
         S = term1 + term2 + term3
-        
+
         # Handle floating point inaccuracies
         S = np.maximum(S, 0)
 
@@ -539,40 +539,41 @@ class GeometricWeightComputer:
 
         # Zero out gradients where k=0
         gradient[k == 0] = 0.0
-        
+
         return gradient
-    
+
     def _compute_graph_gradient(self, field: np.ndarray) -> np.ndarray:
         """Graph-based gradient using Laplacian."""
         L = self.mesh.laplacian_matrix
-        
+
         # Graph gradient: |L * f|
         grad_field = L @ field
         gradient = np.abs(grad_field)
-        
+
         return gradient
-    
+
     def _compute_distances_from_adjacency(self, A: sp.spmatrix) -> sp.spmatrix:
         """Compute distances using coordinates if not available."""
         coords = self.mesh.coordinates
         A_coo = A.tocoo()
-        
+
         # Vectorized computation
         row_coords = coords[A_coo.row]
         col_coords = coords[A_coo.col]
         diff = row_coords - col_coords
         distances = np.linalg.norm(diff, axis=1)
-        
+
         return sp.csr_matrix((distances, (A_coo.row, A_coo.col)), shape=A.shape)
-    
-    def update_proximity_penalty(self, new_sensor_idx: int, current_min_dists: np.ndarray, min_distance: float) -> Tuple[np.ndarray, np.ndarray]:
-        """Updates the proximity penalty incrementally given a new sensor.
+
+    def update_proximity_penalty(self, new_sensor_indices: Union[int, List[int], np.ndarray], current_min_dists: np.ndarray, min_distance: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Updates the proximity penalty incrementally given one or more new sensors.
 
         This method avoids recomputing the KDTree by updating the minimum
-        distances directly, which is O(N) instead of O(N log K).
+        distances directly, which is O(N * K) where K is the number of new sensors,
+        instead of O(N log (M+K)) full rebuild.
 
         Args:
-            new_sensor_idx (int): The index of the newly added sensor.
+            new_sensor_indices (Union[int, List[int], np.ndarray]): The index or indices of newly added sensors.
             current_min_dists (np.ndarray): The current minimum distance from
                 each cell to any existing sensor. Shape (N,).
             min_distance (float): The minimum allowed distance.
@@ -582,14 +583,18 @@ class GeometricWeightComputer:
                 - penalty (np.ndarray): The new penalty values.
                 - new_min_dists (np.ndarray): The updated minimum distances.
         """
-        sensor_coord = self.mesh.coordinates[new_sensor_idx]
+        from scipy.spatial.distance import cdist
+        if isinstance(new_sensor_indices, int):
+            new_sensor_indices = [new_sensor_indices]
 
-        # Calculate distance from new sensor to all points
-        diff = self.mesh.coordinates - sensor_coord
-        dists = np.linalg.norm(diff, axis=1)
+        sensor_coords = self.mesh.coordinates[new_sensor_indices]
+
+        # Calculate distance from new sensors to all points
+        dists = cdist(self.mesh.coordinates, sensor_coords)
+        min_dists_to_new = np.min(dists, axis=1)
 
         # Update minimum distances
-        new_min_dists = np.minimum(current_min_dists, dists)
+        new_min_dists = np.minimum(current_min_dists, min_dists_to_new)
 
         # Calculate penalty: exponential decay
         penalty = np.exp(-new_min_dists / (min_distance + 1e-10))
@@ -611,7 +616,7 @@ class GeometricWeightComputer:
             (N_cells,). Higher values are less desirable.
         """
         N = len(self.mesh.coordinates)
-        
+
         if len(sensor_positions) == 0:
             return np.zeros(N)
 
@@ -621,12 +626,13 @@ class GeometricWeightComputer:
         if hasattr(self, '_prox_last_pos_bytes') and self._prox_last_pos_bytes == pos_bytes and getattr(self, '_prox_last_min_dist', None) == min_distance:
             return self._prox_penalty_cache
 
-        # Check if we can perform a fast incremental O(N) update instead of rebuilding KDTree
-        if hasattr(self, '_prox_last_positions') and len(sensor_positions) == len(self._prox_last_positions) + 1:
-            if np.array_equal(sensor_positions[:-1], self._prox_last_positions) and getattr(self, '_prox_last_min_dist', None) == min_distance:
-                new_sensor_idx = int(sensor_positions[-1])
+        # Check if we can perform a fast incremental O(N*K) update instead of rebuilding KDTree
+        if hasattr(self, '_prox_last_positions') and len(sensor_positions) > len(self._prox_last_positions):
+            num_old = len(self._prox_last_positions)
+            if np.array_equal(sensor_positions[:num_old], self._prox_last_positions) and getattr(self, '_prox_last_min_dist', None) == min_distance:
+                new_sensor_indices = sensor_positions[num_old:]
                 penalty, new_min_dists = self.update_proximity_penalty(
-                    new_sensor_idx, self._prox_min_dists_cache, min_distance
+                    new_sensor_indices, self._prox_min_dists_cache, min_distance
                 )
 
                 # Update cache
@@ -656,37 +662,7 @@ class GeometricWeightComputer:
 
         return penalty
 
-        # Get coordinates of existing sensors
-        sensor_coords = self.mesh.coordinates[sensor_positions]
 
-        # Compute distance from each cell to nearest sensor (Full Recomputation)
-        tree = KDTree(sensor_coords)
-        distances, _ = tree.query(self.mesh.coordinates)
-
-        # Apply penalty: exponential decay with distance
-        penalty = np.exp(-distances / (min_distance + 1e-10))
-
-        # Update cache
-        self._prox_cache_key = cache_key
-        self._prox_penalty_cache = penalty
-        self._prox_min_dists_cache = distances
-        self._prox_last_positions = sensor_positions.copy()
-        self._prox_last_min_dist = min_distance
-
-        return penalty
-        
-        # Get coordinates of existing sensors
-        sensor_coords = self.mesh.coordinates[sensor_positions]
-        
-        # Compute distance from each cell to nearest sensor
-        tree = KDTree(sensor_coords)
-        distances, _ = tree.query(self.mesh.coordinates)
-        
-        # Apply penalty: exponential decay with distance
-        # penalty = exp(-distances / min_distance)
-        penalty = np.exp(-distances / (min_distance + 1e-10))
-        
-        return penalty
 
 
 def estimate_characteristic_length(mesh: MeshGeometry) -> float:
