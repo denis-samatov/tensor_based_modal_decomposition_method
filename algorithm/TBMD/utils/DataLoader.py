@@ -191,8 +191,10 @@ class DataLoader:
         for key, tensor in loaded_tensors.items():
             if tensor is not None and tensor.ndim == 4 and tensor.shape[2] != 0:
                 # Iterate over the 3rd dimension and extract 3D slices.
-                for i in range(tensor.shape[2]):
-                    processed_tensors[f"{key}_slice_{i}"] = tensor[:, :, i, :]
+                processed_tensors.update(zip(
+                    (f"{key}_slice_{i}" for i in range(tensor.shape[2])),
+                    tensor.swapaxes(0, 2)
+                ))
             else:
                 processed_tensors[key] = tensor
 
