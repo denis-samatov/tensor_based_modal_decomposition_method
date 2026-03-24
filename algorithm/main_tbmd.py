@@ -1737,7 +1737,7 @@ class ExperimentRunner:
 
         for number_sensors in tqdm(sensor_values, desc="Full dataset experiments"):
             P, Q, R = self._perform_qr_decomposition(A_tensor, number_sensors)
-            Y_mats = build_Y_matrices(test_tensors, P, device=self.config.device)
+            Y_mats = build_Y_matrices(test_tensors_torch, P, device=self.config.device)
 
             all_errors, all_ssims, all_psnrs = [], [], []
 
@@ -1836,9 +1836,15 @@ class ExperimentRunner:
         results = []
         num_total_samples = 1 + self.config.num_noise_samples
 
+        # Convert all test tensors once at the beginning
+        test_tensors_torch = {
+            subject: to_torch_tensor(tensor, device=self.config.device, dtype=torch.float32)
+            for subject, tensor in test_tensors.items()
+        }
+
         for number_sensors in tqdm(sensor_values, desc=f"Single slice experiments (slice {slice_idx})"):
             P, Q, R = self._perform_qr_decomposition(A_tensor, number_sensors)
-            Y_mats = build_Y_matrices(test_tensors, P, device=self.config.device)
+            Y_mats = build_Y_matrices(test_tensors_torch, P, device=self.config.device)
             Y_subject = Y_mats[subject_name]
             Y_slice = Y_subject[..., slice_idx]
 
@@ -2094,7 +2100,7 @@ class ExperimentRunner:
             P = build_wells_matrix(wells_dict_N, A_tensor.shape, device=self.config.device)
 
             # Build Y matrices for all subjects
-            Y_mats = build_Y_matrices(test_tensors, P, device=self.config.device)
+            Y_mats = build_Y_matrices(test_tensors_torch, P, device=self.config.device)
 
             all_errors, all_mses, all_ssims, all_psnrs = [], [], [], []
 
