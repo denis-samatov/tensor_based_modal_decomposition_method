@@ -2,6 +2,8 @@ import itertools
 import unittest
 import numpy as np
 import torch
+import os
+import tempfile
 
 from algorithm.TBMD.models.LinearForecaster import LinearForecaster
 
@@ -109,6 +111,65 @@ class TestLinearForecaster(unittest.TestCase):
         manual_seq = np.array(manual_seq)
 
         np.testing.assert_allclose(seq, manual_seq, atol=1e-5, err_msg="predict_sequence output mismatch")
+
+    def test_save_load_model_numpy(self):
+        """Test if the model is saved and loaded correctly with NumPy."""
+        forecaster = LinearForecaster(use_torch=False)
+        forecaster.train(self.x_history, verbose=False)
+
+        with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            forecaster.save_model(tmp_path)
+
+            loaded_forecaster = LinearForecaster(use_torch=False)
+            loaded_forecaster.load_model(tmp_path)
+
+            self.assertTrue(loaded_forecaster.trained)
+            self.assertFalse(loaded_forecaster.use_torch)
+            self.assertEqual(forecaster.metrics['mse'], loaded_forecaster.metrics['mse'])
+            np.testing.assert_allclose(forecaster.M, loaded_forecaster.M)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_save_load_model_torch(self):
+        """Test if the model is saved and loaded correctly with PyTorch."""
+        forecaster = LinearForecaster(use_torch=True)
+        forecaster.train(self.x_history, verbose=False)
+
+        with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            forecaster.save_model(tmp_path)
+
+            loaded_forecaster = LinearForecaster(use_torch=True)
+            loaded_forecaster.load_model(tmp_path)
+
+            self.assertTrue(loaded_forecaster.trained)
+            self.assertTrue(loaded_forecaster.use_torch)
+            self.assertEqual(forecaster.metrics['mse'], loaded_forecaster.metrics['mse'])
+            np.testing.assert_allclose(
+                forecaster.M.detach().cpu().numpy(),
+                loaded_forecaster.M.detach().cpu().numpy()
+            )
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_save_model_untrained(self):
+        """Test if saving an untrained model raises a RuntimeError."""
+        forecaster = LinearForecaster()
+        with self.assertRaises(RuntimeError):
+            forecaster.save_model("any_path.npz")
+
+    def test_load_model_nonexistent(self):
+        """Test if loading a non-existent file raises a FileNotFoundError."""
+        forecaster = LinearForecaster()
+        with self.assertRaises(FileNotFoundError):
+            forecaster.load_model("non_existent_file.npz")
 
 if __name__ == '__main__':
     unittest.main()
