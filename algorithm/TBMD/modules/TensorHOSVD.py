@@ -209,9 +209,9 @@ class GPUStrategy(ProcessingStrategy):
             # Clear MPS cache if available (PyTorch 2.0+)
             try:
                 torch.mps.empty_cache()
-            except AttributeError:
+            except AttributeError as e:
                 # Fallback for older PyTorch versions
-                pass
+                logger.debug(f"MPS cache clear failed: {e}")
     
     def _is_memory_error(self, error: Exception) -> bool:
         """Check if an error is related to GPU memory."""
