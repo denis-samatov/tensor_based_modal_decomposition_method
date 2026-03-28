@@ -224,8 +224,9 @@ class GeometryAwareTuckerCore:
                 try:
                     U, _, _ = torch.svd(unfolding)
                     factor = U[:, :ranks[mode]]
-                except:
+                except Exception as e:
                     # Fallback to random initialization
+                    logger.warning(f"SVD decomposition failed, falling back to random initialization: {e}")
                     factor = torch.randn(unfolding.shape[0], ranks[mode],
                                          device=tensor.device, dtype=tensor.dtype)
                     factor, _ = torch.qr(factor)
@@ -238,7 +239,8 @@ class GeometryAwareTuckerCore:
                     idx = torch.argsort(eigenvalues, descending=True)[
                         :ranks[mode]]
                     factor = eigenvectors[:, idx]
-                except:
+                except Exception as e:
+                    logger.warning(f"Eigen decomposition failed, falling back to random initialization: {e}")
                     factor = torch.randn(unfolding.shape[0], ranks[mode],
                                          device=tensor.device, dtype=tensor.dtype)
                     factor, _ = torch.qr(factor)
@@ -265,8 +267,9 @@ class GeometryAwareTuckerCore:
             lhs_reg = lhs + 1e-8 * \
                 self._get_identity(lhs.shape[0], lhs.device, lhs.dtype)
             U_new = torch.linalg.solve(lhs_reg.T, rhs.T).T
-        except:
+        except Exception as e:
             # Fallback to pseudo-inverse
+            logger.warning(f"Standard factor update failed, falling back to pseudo-inverse: {e}")
             U_new = rhs @ torch.linalg.pinv(lhs)
 
         # Orthogonalize (optional but recommended)
@@ -352,8 +355,9 @@ class GeometryAwareTuckerCore:
 
         try:
             U_new = torch.linalg.solve(lhs, rhs_T)
-        except:
+        except Exception as e:
             # Fallback to pseudo-inverse
+            logger.warning(f"Regularized factor update failed, falling back to pseudo-inverse: {e}")
             U_new = torch.linalg.pinv(lhs) @ rhs_T
 
         # Orthogonalize (optional)
