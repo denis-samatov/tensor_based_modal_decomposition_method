@@ -308,8 +308,14 @@ class LinearForecaster:
 
         Args:
             path (str): The path to save the model to.
+
+        Raises:
+            RuntimeError: If the model is not trained.
         """
-        dir_path = os.path.dirname(path)
+        if not self.trained:
+            raise RuntimeError("Cannot save untrained model")
+
+        dir_path = os.path.dirname(os.path.abspath(path))
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         
@@ -331,7 +337,13 @@ class LinearForecaster:
 
         Args:
             path (str): The path to load the model from.
+
+        Raises:
+            FileNotFoundError: If the model file is not found.
         """
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Model file not found: {path}")
+
         # Load the saved model
         loaded = np.load(path, allow_pickle=True)
         
