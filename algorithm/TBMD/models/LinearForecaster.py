@@ -67,14 +67,9 @@ class LinearForecaster:
             X_input_tensor = torch.tensor(X_input, dtype=torch.float32, device=self.device)
             X_output_tensor = torch.tensor(X_output, dtype=torch.float32, device=self.device)
             
-            # Calculate pseudoinverse and transformation matrix
-            if hasattr(torch, 'pinverse'):  # For newer PyTorch versions
-                X_input_pinv = torch.pinverse(X_input_tensor)
-                self.M = X_input_pinv @ X_output_tensor
-            else:  # Fallback to numpy
-                X_input_pinv = np.linalg.pinv(X_input)
-                self.M = np.matmul(X_input_pinv, X_output)
-                self.M = torch.tensor(self.M, dtype=torch.float32, device=self.device)
+            # Solve the linear system X_input * M = X_output for M
+            # This is equivalent to M = X_input_pinv @ X_output
+            self.M = torch.linalg.lstsq(X_input_tensor, X_output_tensor).solution
                 
             # Calculate predictions for evaluation
             X_output_est = X_input_tensor @ self.M
@@ -91,8 +86,8 @@ class LinearForecaster:
             r2 = r2_score(X_output_np, X_output_est_np, multioutput='uniform_average')
             
         else:
-            # Calculate pseudoinverse and transformation matrix using numpy
-            self.M = np.linalg.pinv(X_input) @ X_output  # (W, W)
+            # Solve the linear system X_input * M = X_output for M using numpy
+            self.M = np.linalg.lstsq(X_input, X_output, rcond=None)[0]  # (W, W)
             
             # Calculate predictions for evaluation
             X_output_est = X_input @ self.M  # (T-1, W)
