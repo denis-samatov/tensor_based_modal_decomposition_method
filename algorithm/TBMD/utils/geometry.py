@@ -629,8 +629,18 @@ class GeometricWeightComputer:
         # Create cache key to quickly return previously computed penalty
         pos_bytes = sensor_positions.tobytes()
 
-        if hasattr(self, '_prox_last_pos_bytes') and self._prox_last_pos_bytes == pos_bytes and getattr(self, '_prox_last_min_dist', None) == min_distance:
-            return self._prox_penalty_cache
+        if hasattr(self, '_prox_last_pos_bytes') and self._prox_last_pos_bytes == pos_bytes:
+            if getattr(self, '_prox_last_min_dist', None) == min_distance:
+                return self._prox_penalty_cache
+            else:
+                # Same positions, different min_distance -> reuse distances
+                distances = self._prox_min_dists_cache
+                penalty = np.exp(-distances / (min_distance + 1e-10))
+
+                # Update cache
+                self._prox_penalty_cache = penalty
+                self._prox_last_min_dist = min_distance
+                return penalty
 
         # Check if we can perform a fast incremental O(N*K) update instead of rebuilding KDTree
         if hasattr(self, '_prox_last_positions') and len(sensor_positions) > len(self._prox_last_positions):
