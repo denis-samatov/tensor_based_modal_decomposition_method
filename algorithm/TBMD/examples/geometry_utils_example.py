@@ -7,8 +7,6 @@ Highlights:
   * Compute gradient-based weights used by geometry-aware QR.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Tuple
 
