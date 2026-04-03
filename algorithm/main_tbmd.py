@@ -41,9 +41,6 @@ clarity and reusability.
 # In[2]:
 
 
-# Standard library imports
-from pathlib import Path
-
 # Third-party imports
 import numpy as np
 import tensorly as tl
