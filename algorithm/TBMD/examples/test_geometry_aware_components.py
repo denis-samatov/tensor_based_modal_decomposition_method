@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 # Import components to test
 from TBMD.utils.geometry import (
     MeshGraphBuilder,
-    MeshGeometry,
     GeometricWeightComputer
 )
 from TBMD.modules.GeometryAwareTensorHOSVD import (
