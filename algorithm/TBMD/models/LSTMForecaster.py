@@ -514,7 +514,7 @@ class LSTMForecaster:
             path (str): The path to load the model from.
         """
         # Load checkpoint
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         
         # Load model and optimizer states
         self.model.load_state_dict(checkpoint['model_state_dict'])
