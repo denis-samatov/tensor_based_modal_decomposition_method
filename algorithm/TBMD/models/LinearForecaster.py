@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -319,16 +320,21 @@ class LinearForecaster:
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         
-        # Create save dictionary
-        save_dict = {
-            'M': self.M.detach().cpu().numpy() if self.use_torch else self.M,
+        # Create metadata
+        metadata = {
             'trained': self.trained,
             'metrics': self.metrics,
             'use_torch': self.use_torch
         }
         
         # Save using numpy
-        np.savez(path, **save_dict)
+        # Use np.savez to save tensors and JSON-serialized metadata
+        # This avoids using pickles and improves security
+        np.savez(
+            path,
+            M=self.M.detach().cpu().numpy() if self.use_torch else self.M,
+            metadata=json.dumps(metadata)
+        )
         
         print(f"Model saved to {path}")
     
@@ -344,21 +350,30 @@ class LinearForecaster:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Model file not found: {path}")
 
-        # Load the saved model
-        loaded = np.load(path, allow_pickle=True)
-        
-        # Restore attributes
-        self.trained = loaded['trained'].item()
-        self.metrics = loaded['metrics'].item()
-        self.use_torch = loaded['use_torch'].item()
-        
-        # Restore M, converting to tensor if needed
-        if self.use_torch:
-            if not hasattr(self, 'device'):
-                self.device = torch.device('cuda' if torch.cuda.is_available() else 
-                                      ('mps' if torch.backends.mps.is_available() else 'cpu'))
-            self.M = torch.tensor(loaded['M'], dtype=torch.float32, device=self.device)
-        else:
-            self.M = loaded['M']
+        # Load the saved model without allowing pickles for security
+        with np.load(path, allow_pickle=False) as loaded:
+            # Restore metadata
+            metadata_raw = loaded['metadata']
+            # Handle both 0-d and 1-d arrays for robustness
+            if metadata_raw.ndim == 0:
+                metadata_json = str(metadata_raw)
+            else:
+                metadata_json = str(metadata_raw[0])
+
+            metadata = json.loads(metadata_json)
+
+            self.trained = metadata['trained']
+            self.metrics = metadata['metrics']
+            self.use_torch = metadata['use_torch']
+
+            # Restore M, converting to tensor if needed
+            M_data = loaded['M']
+            if self.use_torch:
+                if not hasattr(self, 'device'):
+                    self.device = torch.device('cuda' if torch.cuda.is_available() else
+                                          ('mps' if torch.backends.mps.is_available() else 'cpu'))
+                self.M = torch.tensor(M_data, dtype=torch.float32, device=self.device)
+            else:
+                self.M = M_data
         
         print(f"Model loaded from {path}")
