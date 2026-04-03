@@ -120,3 +120,48 @@ class TestKNNGraph(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestGeometricWeightComputer(unittest.TestCase):
+    def test_compute_proximity_penalty_caching(self):
+        coordinates = np.array([
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [1, 1, 0]
+        ], dtype=float)
+
+        # We only need coordinates for the mock mesh
+        mesh = MeshGeometry(
+            adjacency_matrix=sp.csr_matrix((4,4)),
+            laplacian_matrix=sp.csr_matrix((4,4)),
+            normalized_laplacian=sp.csr_matrix((4,4)),
+            coordinates=coordinates
+        )
+        computer = GeometricWeightComputer(mesh)
+
+        sensors1 = np.array([0, 1])
+
+        # 1. Initial compute
+        penalty1 = computer.compute_proximity_penalty(sensors1, 0.1)
+
+        # 2. Same positions, same distance (cache exact match)
+        penalty2 = computer.compute_proximity_penalty(sensors1, 0.1)
+        np.testing.assert_array_almost_equal(penalty1, penalty2)
+
+        # 3. Same positions, different distance (cache distance, recompute penalty)
+        penalty3 = computer.compute_proximity_penalty(sensors1, 0.5)
+        self.assertFalse(np.array_equal(penalty1, penalty3))
+
+        # The true distance should be 0 for sensors 0, 1
+        # distance to 2 is 1 (from 0)
+        # distance to 3 is 1 (from 1)
+        # penalty for distance 0 = exp(0) = 1.0
+        # penalty for distance 1 with min_dist 0.5 = exp(-1.0 / 0.5) = exp(-2.0)
+        expected_penalty3 = np.array([1.0, 1.0, np.exp(-1.0/0.5), np.exp(-1.0/0.5)])
+        np.testing.assert_array_almost_equal(penalty3, expected_penalty3)
+
+        # 4. Incremental addition
+        sensors2 = np.array([0, 1, 2])
+        penalty4 = computer.compute_proximity_penalty(sensors2, 0.5)
+        expected_penalty4 = np.array([1.0, 1.0, 1.0, np.exp(-1.0/0.5)])
+        np.testing.assert_array_almost_equal(penalty4, expected_penalty4)
