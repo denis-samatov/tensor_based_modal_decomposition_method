@@ -937,7 +937,7 @@ TBMD‑CS (Algorithm 3) — Core + Extensions
 """
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union, Protocol
+from typing import List, Optional, Tuple, Union, Protocol
 import time
 import torch
 import numpy as np
