@@ -99,7 +99,7 @@ from TBMD.utils.process_data import (
     calculate_global_zscore_params,
     inverse_normalization
 )
-from TBMD.utils.split_data import split_data_in_memory_ordered, split_data_in_memory
+from TBMD.utils.split_data import split_data_in_memory_ordered
 from TBMD.utils.Analytics import (
     ExperimentConfig,
     ExperimentRunner,
