@@ -21,8 +21,7 @@ from typing import Tuple
 from TBMD.utils.geometry import (
     MeshGraphBuilder,
     MeshGeometry,
-    GeometricWeightComputer,
-    estimate_characteristic_length
+    GeometricWeightComputer
 )
 from TBMD.modules.GeometryAwareTensorHOSVD import (
     GeometryAwareTuckerDecomposer,
