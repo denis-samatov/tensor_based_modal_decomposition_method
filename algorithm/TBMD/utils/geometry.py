@@ -384,15 +384,21 @@ class MeshGraphBuilder:
                     edge = tuple(sorted([simplex[i], simplex[j]]))
                     edges.add(edge)
 
-        row, col, data, dist_data = [], [], [], []
+        if not edges:
+            row, col, data, dist_data = [], [], [], []
+        else:
+            edges_array = np.array(list(edges))
+            row_idx = edges_array[:, 0]
+            col_idx = edges_array[:, 1]
 
-        for i, j in edges:
-            dist = np.linalg.norm(coordinates[i] - coordinates[j])
+            diff = coordinates[row_idx] - coordinates[col_idx]
+            dist = np.linalg.norm(diff, axis=1)
+
             # Add both directions
-            row.extend([i, j])
-            col.extend([j, i])
-            data.extend([1.0, 1.0])
-            dist_data.extend([dist, dist])
+            row = np.concatenate([row_idx, col_idx]).tolist()
+            col = np.concatenate([col_idx, row_idx]).tolist()
+            data = np.ones(2 * len(edges)).tolist()
+            dist_data = np.concatenate([dist, dist]).tolist()
 
         A = sp.csr_matrix((data, (row, col)), shape=(N, N))
         D = sp.csr_matrix((dist_data, (row, col)), shape=(N, N))
