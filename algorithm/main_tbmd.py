@@ -48,7 +48,6 @@ from pathlib import Path
 import numpy as np
 import tensorly as tl
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import torch
 from PIL import Image
 
