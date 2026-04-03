@@ -15,7 +15,6 @@ import numpy as np
 import torch
 from scipy.sparse import issparse
 import matplotlib.pyplot as plt
-from typing import Tuple
 
 # Import components to test
 from TBMD.utils.geometry import (
