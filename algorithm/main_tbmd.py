@@ -33,13 +33,10 @@ clarity and reusability.
 
 # In[1]:
 
-
 # %pip install tensorly numpy matplotlib torch tqdm h5py scikit-image scikit-learn pandas
 # %pip install --upgrade scikit-image
 
-
 # In[2]:
-
 
 # Standard library imports
 from pathlib import Path
@@ -79,7 +76,6 @@ from TBMD.utils.utils import (
     reconstruct_tensor,
     build_Y_matrices,
     to_torch_tensor,
-    generate_noisy_datasets,
     build_wells_matrix
 )
 from TBMD.utils.plots import (
@@ -104,9 +100,7 @@ from TBMD.utils.Analytics import (
 from TBMD.utils.DataLoader import DataLoader
 from TBMD.config import SEED, SET_BACKEND
 
-
 # In[3]:
-
 
 SEED = 0
 
@@ -117,14 +111,11 @@ tl.set_backend(SET_BACKEND)
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
-
 # # Download data
 
 # In[4]:
 
-
 loader = DataLoader()
-
 
 # ### Load Brugge data
 
@@ -132,13 +123,10 @@ loader = DataLoader()
 
 # In[5]:
 
-
 tensors = DataLoader.load_h5_tensors("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/data_exp_4_.h5")
 wells = DataLoader.load_wells_from_json("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/Brugge data/all_wells_exp_4.json")
 
-
 # In[6]:
-
 
 for case_id in wells:
     # wells[case_id] is a list of [x,y] coordinate pairs.
@@ -150,9 +138,7 @@ for case_id in wells:
 # Display the modified wells dictionary
 wells
 
-
 # In[7]:
-
 
 train_data, test_data = split_data_in_memory_ordered(tensors['all'], train_ratio=0.8)
 
@@ -161,9 +147,7 @@ subject_name = next(iter(tensors['all']))
 print(tensors['all'].keys())
 print(tensors['all'][subject_name].shape)
 
-
 # In[8]:
-
 
 # train_data, test_data = split_data_in_memory_ordered(tensors['pressure'], train_ratio=0.8)
 
@@ -172,9 +156,7 @@ print(tensors['all'][subject_name].shape)
 # print(tensors['pressure'].keys())
 # print(tensors['pressure'][subject_name].shape)
 
-
 # In[9]:
-
 
 # train_data, test_data = split_data_in_memory_ordered(tensors['soil'], train_ratio=0.8)
 
@@ -183,11 +165,9 @@ print(tensors['all'][subject_name].shape)
 # print(tensors['soil'].keys())
 # print(tensors['soil'][subject_name].shape)
 
-
 # ### Load static csv data
 
 # In[10]:
-
 
 # # Load static tensor
 # static_data = loader.load_data(Path("/Users/denissamatov/Heriot-Watt/tensor-based_modal_decomposition_method/data/HW static data"), "static", (286, 105, 100), tensor_type="pt")
@@ -206,11 +186,9 @@ print(tensors['all'][subject_name].shape)
 # print(noisy_datasets.keys())
 # print(noisy_datasets[subject_name].shape)
 
-
 # ### Load dynamic csv data
 
 # In[11]:
-
 
 # # Load dynamic tensor
 # dynamic_data = loader.load_data(Path("/Users/denissamatov/Heriot-Watt/tensor-based_modal_decomposition_method/data/HW dynamic data"), "dynamic", (286, 105, 25, 253), tensor_type="pt")
@@ -222,11 +200,9 @@ print(tensors['all'][subject_name].shape)
 # print(dynamic_data.keys())
 # print(dynamic_data[subject_name].shape)
 
-
 # ### Load images
 
 # In[12]:
-
 
 # # Load images tensor
 # images_data, subject_list = loader.load_data(Path("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/data/HW data/dynamic_png_new"), "images", tensor_type="pt")
@@ -238,9 +214,7 @@ print(tensors['all'][subject_name].shape)
 # print(subject_list)
 # print(images_data[subject_name].shape)
 
-
 # In[13]:
-
 
 # num_experiments = 2
 # experiments_data = split_data_in_memory(images_data, num_experiments=num_experiments, train_ratio=0.8)
@@ -251,11 +225,9 @@ print(tensors['all'][subject_name].shape)
 # train_data = experiments_data[1].get("train", {})
 # test_data = experiments_data[1].get("test", {})
 
-
 # # Process data
 
 # In[14]:
-
 
 # Decide what counts as background (CT example)
 BG = None        # Hounsfield Units for air
@@ -273,9 +245,7 @@ zscore_params = {'mean': train_global_mean, 'std': train_global_std}
 print(minmax_params)
 print(zscore_params)
 
-
 # In[15]:
-
 
 resize_shape = None
 convert_to_grayscale = False
@@ -316,23 +286,18 @@ if num_images_test:
 else:
     print("No data available for analysis in test.")
 
-
 # # Visualization
 
 # In[17]:
-
 
 tensor = train_data[subject_name]
 reversed_wells = {subject_name: [corr[::-1] for corr in well] for subject_name, well in wells.items()}
 visualize_tensor(tensor, subject_name, cmap="viridis", show_colorbar=True, frame_step=10, wells=reversed_wells)
 
-
 # In[ ]:
-
 
 tensor = test_data[subject_name]
 visualize_tensor(tensor, subject_name, cmap="viridis", show_colorbar=True, save_path=None)
-
 
 # # Pipline
 
@@ -342,12 +307,9 @@ visualize_tensor(tensor, subject_name, cmap="viridis", show_colorbar=True, save_
 
 # In[16]:
 
-
 tensor = train_tensors
 
-
 # In[17]:
-
 
 tbmd_decomposer = TuckerDecomposer(
     tensors=train_tensors,
@@ -357,16 +319,13 @@ tbmd_decomposer = TuckerDecomposer(
     random_state=SEED
 )
 
-
 # Perform decomposition
 tbmd_decomposer.decompose()
 
 cores = tbmd_decomposer.cores
 factors = tbmd_decomposer.factors
 
-
 # In[18]:
-
 
 tbmd_decomposer.reconstruct()
 
@@ -374,11 +333,9 @@ errors = tbmd_decomposer.reconstruction_errors
 for key, error in errors.items():
     print(f"  {key}: error {error:.6f}")
 
-
 # ## Create Modal Tensor 𝐴
 
 # In[19]:
-
 
 madal_processor_config = ModalProcessorConfig(
     device='mps',
@@ -393,9 +350,7 @@ stacker = ModalTensorStacker(madal_processor_config)
 modal_tensors = batch_processor.process_multiple_subjects(cores, factors)
 A_tensor = stacker.stack_modal_tensors(modal_tensors)
 
-
 # In[20]:
-
 
 # # M_tensors = {"single_subject": <torch tensor on MPS>}
 # M_tensors = process_all_subjects(cores=cores, factors=factors, device='mps', return_numpy=False)
@@ -403,11 +358,9 @@ A_tensor = stacker.stack_modal_tensors(modal_tensors)
 # A_tensor = stack_all_modes(M_tensors, device='mps', return_numpy=False)
 # print(f"Final stacked shape: {A_tensor.shape}")
 
-
 # ## QR Factorization
 
 # In[65]:
-
 
 number_sensors = 200
 
@@ -431,9 +384,7 @@ print(f"Sensors placed: {metrics['sensor_count']}/{qr_decomposer.N}")
 
 qr_decomposer.visualize_sensor_placement()
 
-
 # In[83]:
-
 
 # Build wells matrix using the method
 wells_matrix = build_wells_matrix(wells, A_tensor.shape, device='mps')
@@ -450,11 +401,9 @@ if P.ndim == 2:
     P = P.unsqueeze(-1).repeat(1, 1, 2)
 print("New P shape:", P.shape)
 
-
 # ## Sparse measurements matrix Y
 
 # In[84]:
-
 
 Y_mats = build_Y_matrices(test_tensors, P, device="cpu")
 
@@ -465,25 +414,19 @@ X = to_torch_tensor(test_tensors[subject_name][..., slice_number], device="cpu")
 print("Y shape:", Y.shape)
 print("X shape:", X.shape)
 
-
 # In[85]:
-
 
 plot_two_matrices(X[:,:,0], Y[:,:,0])
 
 # plot_two_matrices(X, Y, cmap="viridis")
 
-
 # In[86]:
 
-
 # plot_two_matrices(X[:,:,1], Y[:,:,1])
-
 
 # ## Tensor-based Compressive Sensing Algorithm
 
 # In[87]:
-
 
 compressive_sensing_config = CompressiveSensingConfig(
     max_iter = 1000,
@@ -512,9 +455,7 @@ x_hat, met = solver.solve()
 print("converged:", met.converged, "iters:", met.iterations, "obj:", met.objective)
 print("rel_error:", solver.reconstruction_error(x_hat))
 
-
 # In[88]:
-
 
 # compressive_sensing_config = CompressiveSensingConfig(
 #     max_iter=1000,
@@ -530,31 +471,23 @@ print("rel_error:", solver.reconstruction_error(x_hat))
 # solver = TensorCompressiveSensing(A_tensor, P, Y, compressive_sensing_config)
 # x_hat, metrics = solver.solve_with_metrics()
 
-
 # # Reconstruct the field matrix X
 
 # In[89]:
 
-
 X_reconstructed = reconstruct_tensor(A_tensor=A_tensor, x_hat=x_hat)
 
-
 # In[90]:
-
 
 plot_two_matrices(X[:,:,0], X_reconstructed[:,:,0], titles=("Original", "Reconstructed"))
 
 # plot_two_matrices(X, X_reconstructed, titles=("Original", "Reconstructed"))
 
-
 # In[91]:
-
 
 # plot_two_matrices(X[:,:,1], X_reconstructed[:,:,1], titles=("Original", "Reconstructed"))
 
-
 # In[92]:
-
 
 original_X = inverse_normalization(
     X,
@@ -569,17 +502,13 @@ original_X_reconstructed = inverse_normalization(
     background_value=BG
 )
 
-
 # In[93]:
-
 
 plot_two_matrices(original_X[:,:,0], original_X_reconstructed[:,:,0], titles=("Original", "Reconstructed"))
 
 # plot_two_matrices(original_X, original_X_reconstructed, titles=("Original", "Reconstructed"))
 
-
 # In[94]:
-
 
 error, mse, ssim_value, psnr_value = compute_metrics(original_X, original_X_reconstructed, background_value=BG)
 
@@ -588,9 +517,7 @@ print(f"Mean Squared Error (MSE): {mse:.5f}")
 print(f"Structural Similarity Index (SSIM): {ssim_value:.5f}")
 print(f"Peak Signal-to-Noise Ratio (PSNR): {psnr_value:.5f}")
 
-
 # In[95]:
-
 
 # def plot_original_reconstructed_diff(
 #     original,
@@ -656,9 +583,7 @@ print(f"Peak Signal-to-Noise Ratio (PSNR): {psnr_value:.5f}")
 
 #     plt.show()
 
-
 # In[96]:
-
 
 plot_original_reconstructed_diff(original_X[:,:,0], original_X_reconstructed[:,:,0])
 
@@ -672,9 +597,7 @@ plot_original_reconstructed_diff(original_X[:,:,0], original_X_reconstructed[:,:
 #     colorbar_fontsize=12,
 # )
 
-
 # In[63]:
-
 
 from PIL import Image
 import numpy as np
@@ -722,15 +645,11 @@ def compare_images(path1, path2, cmap="gray", figsize=(12, 6), show_diff=True):
 
 compare_images("/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/algorithm/images/difference_field_wells_pressure_4d.png", "/Users/denissamatov/Heriot-Watt/tensor-based-modal-decomposition-method/algorithm/images/difference_field_pressure_4d.png")
 
-
 # In[58]:
-
 
 original_X.shape
 
-
 # In[97]:
-
 
 # save_pressure_for_tnavigator.py
 # Python 3.10+
@@ -808,16 +727,12 @@ def save_pressure_for_tnavigator(
     _write_ijk_csv(diff, paths["difference"])
     return paths
 
-
-
 files = save_pressure_for_tnavigator(original_X[:,:,0], original_X_reconstructed[:,:,0], out_dir="export_4d_wells", ij_order="JI")
 print("Сохранено:")
 for k, v in files.items():
     print(f" - {k}: {v}")
 
-
 # In[1]:
-
 
 import os
 import pandas as pd
@@ -848,11 +763,9 @@ else:
         else:
             print(f"{sensor_file} and {well_file} differ.")
 
-
 # # Analitycs
 
 # In[ ]:
-
 
 # import torch
 
@@ -908,9 +821,7 @@ else:
 
 #     return P
 
-
 # In[ ]:
-
 
 """
 TBMD‑CS (Algorithm 3) — Core + Extensions
@@ -940,7 +851,6 @@ import numpy as np
 
 from TBMD.utils.utils import get_torch_device, to_torch_tensor
 
-
 @dataclass
 class CoreCompressiveSensingConfig:
     max_iter: int = 1000
@@ -962,7 +872,6 @@ class CoreCompressiveSensingConfig:
         if self.delta_init <= 0 or self.delta_max <= 0:
             raise ValueError("delta values must be > 0")
 
-
 @dataclass
 class ExtensionCompressiveSensingConfig:
     # Линейный солвер
@@ -976,7 +885,6 @@ class ExtensionCompressiveSensingConfig:
     relative_drop: float = 1e-3        # требуемое относительное падение
     # Метрики/логи
     collect_history: bool = True
-
 
 # ------------------------------------------------------------------
 # 2. Протоколы стратегий
@@ -1035,7 +943,6 @@ def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
 
     return {"cholesky": cholesky, "direct": direct, "svd": svd}[cfg.solver]
 
-
 def make_delta_policy(name: str) -> DeltaPolicy:
     if name == "boyd":
         def boyd(delta: float, primal: float, dual: float, delta_max: float):
@@ -1049,7 +956,6 @@ def make_delta_policy(name: str) -> DeltaPolicy:
         def cap_only(delta: float, *_args):
             return delta, 1.0
         return cap_only
-
 
 def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
     if ext_cfg.stop_policy == "residual":
@@ -1070,7 +976,6 @@ def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
         def both(it, p, d, cfg, history):
             return residual(it, p, d, cfg, history) or relative(it, p, d, cfg, history)
         return both
-
 
 def noop_metrics_hook(*_args, **_kwargs):
     return None
@@ -1227,9 +1132,7 @@ class TensorCompressiveSensingCore:
         res = self.As @ x_t - self.Ys
         return (torch.norm(res) / torch.norm(self.Ys)).item()
 
-
 # In[ ]:
-
 
 import numpy as np
 import pandas as pd
@@ -1244,7 +1147,6 @@ from TBMD.modules.TensorBasedCompressiveSensing import TensorCompressiveSensing,
 from TBMD.utils.metrics import compute_metrics
 from TBMD.utils.utils import reconstruct_tensor, to_torch_tensor, build_Y_matrices, build_wells_matrix
 from TBMD.config import SEED
-
 
 @dataclass
 class ExperimentConfig:
@@ -1284,7 +1186,6 @@ class ExperimentConfig:
         if self.confidence_level not in [0.90, 0.95, 0.99]:
             print(f"Warning: confidence_level {self.confidence_level} not in [0.90, 0.95, 0.99]. Using 0.95.")
             self.confidence_level = 0.95
-
 
 class ExperimentRunner:
     """
@@ -1872,7 +1773,6 @@ class ExperimentRunner:
 
         return pd.DataFrame(results)
 
-
 # Utility functions
 def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
     """
@@ -1906,7 +1806,6 @@ def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
             result.append(int(val))
     return result
 
-
 # Backward compatibility functions (deprecated)
 def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95):
     """Deprecated: Use ExperimentRunner class instead."""
@@ -1914,7 +1813,6 @@ def compute_confidence_intervals(means, stds, num_samples, confidence_level=0.95
     config = ExperimentConfig(confidence_level=confidence_level)
     runner = ExperimentRunner(config)
     return runner._compute_confidence_intervals(means, stds, num_samples)
-
 
 def run_experiments(*args, **kwargs):
     """Deprecated: Use ExperimentRunner.run_full_dataset_experiments() instead."""
@@ -1924,24 +1822,20 @@ def run_experiments(*args, **kwargs):
     # This would need more complex mapping - recommend using the class directly
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
-
 def run_experiments_single_slice(*args, **kwargs):
     """Deprecated: Use ExperimentRunner.run_single_slice_experiments() instead."""
     print("Warning: This function is deprecated. Use ExperimentRunner.run_single_slice_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
-
 
 def run_experiments_df(*args, **kwargs):
     """Deprecated: Use ExperimentRunner.run_experiments() instead."""
     print("Warning: This function is deprecated. Use ExperimentRunner.run_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
-
 def run_experiments_wells_df(*args, **kwargs):
     """Deprecated: Use ExperimentRunner.run_wells_experiments() instead."""
     print("Warning: This function is deprecated. Use ExperimentRunner.run_wells_experiments() instead.")
     raise NotImplementedError("Please use ExperimentRunner class directly")
-
 
 def plot_analytics(df: pd.DataFrame,
                   metrics: List[str] = ['error', 'ssim', 'psnr'],
@@ -2153,7 +2047,6 @@ def plot_analytics(df: pd.DataFrame,
         else:
             plt.close()
 
-
 def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
                          ssim_means, ssim_lower, ssim_upper,
                          psnr_means, psnr_lower, psnr_upper,
@@ -2182,15 +2075,11 @@ def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
 
     plot_analytics(df, metrics=['error', 'ssim', 'psnr'], plot_type='all', save_path=save_path)
 
-
 # In[ ]:
-
 
 SEED = 0
 
-
 # In[ ]:
-
 
 experiment_runner_config = ExperimentConfig(
     solver_method = "triangular",
@@ -2213,9 +2102,7 @@ experiment_runner_config = ExperimentConfig(
 
 experiment_runner = ExperimentRunner(experiment_runner_config)
 
-
 # In[ ]:
-
 
 sensor_values = np.arange(1, 300, 10)
 
@@ -2223,9 +2110,7 @@ df = experiment_runner.run_single_slice_experiments(A_tensor, test_tensors, subj
 
 plot_analytics(df, plot_type="all")
 
-
 # In[ ]:
-
 
 sensor_values = np.arange(1, 31)
 
@@ -2233,9 +2118,7 @@ df = experiment_runner.run_single_slice_wells_experiments(A_tensor, test_tensors
 
 plot_analytics(df, plot_type="all")
 
-
 # In[ ]:
-
 
 # import numpy as np
 # import matplotlib.pyplot as plt
