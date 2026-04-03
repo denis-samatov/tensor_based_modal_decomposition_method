@@ -63,8 +63,7 @@ from TBMD.modules.TensorTimeInsensitiveModes import (
     process_all_subjects
 )
 from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
-    TensorTubeQRDecomposition,
-    TensorQRConfig
+    TensorTubeQRDecomposition
 )
 
 # from TBMD.modules.TensorBasedCompressiveSensing import (
