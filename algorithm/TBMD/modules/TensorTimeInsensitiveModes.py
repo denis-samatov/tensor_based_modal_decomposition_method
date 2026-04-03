@@ -265,12 +265,15 @@ class TimeInsensitiveModeComputer:
             return mode.to(dtype=self.config.numerical_precision)
             
         except Exception as e:
+            logger.error(f"Mode computation failed: {e}")
             # Add debug information for better error diagnosis
-            factor_shapes = [f.shape for f in spatial_factors] if spatial_factors else []
+            core_shape = getattr(core_slice, 'shape', 'Unknown') if 'core_slice' in locals() else 'Unknown'
+            f_shapes = [getattr(f, 'shape', 'Unknown') for f in spatial_factors] if 'spatial_factors' in locals() and spatial_factors else []
+            logger.debug(f"Computation context - core_slice shape: {core_shape}, spatial_factors shapes: {f_shapes}")
             raise ComputationError(
                 f"Failed to compute mode: {e}. "
-                f"Core slice shape: {core_slice.shape}, "
-                f"Factor shapes: {factor_shapes}"
+                f"Core slice shape: {core_shape}, "
+                f"Factor shapes: {f_shapes}"
             ) from e
     
     def compute_all_modes(self, 
