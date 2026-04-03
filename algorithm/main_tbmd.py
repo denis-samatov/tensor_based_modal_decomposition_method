@@ -59,8 +59,7 @@ from TBMD.modules.TensorTimeInsensitiveModes import (
     ModalTensorStacker,
     ModalProcessorConfig,
     ProcessingStrategy,
-    stack_all_modes,
-    process_all_subjects
+    stack_all_modes
 )
 from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition
