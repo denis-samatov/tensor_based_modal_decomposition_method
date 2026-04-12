@@ -17,11 +17,15 @@ import numpy as np
 import torch
 import tensorly as tl
 import matplotlib.pyplot as plt
+import logging
 from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from ..utils.utils import to_torch_tensor, get_torch_device
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -109,7 +113,7 @@ class TensorValidator:
                     if flat_tensor.shape[-1] > 0:
                         _, s, _ = torch.svd(flat_tensor[..., :min(flat_tensor.shape[-2:])].float())
                         if s.min() < TensorQRConfig.MACHINE_EPSILON_FACTOR:
-                            print("Warning: Tensor may be numerically rank-deficient")
+                            logger.warning("Tensor may be numerically rank-deficient")
                 except RuntimeError:
                     pass  # SVD might fail for some tensor shapes
     
@@ -135,8 +139,8 @@ class TensorValidator:
         N = int(N)
         
         if N > k:
-            print(f"Warning: N ({N}) exceeds tube dimension k ({k}). "
-                  f"Only {k} sensors can be effectively placed.")
+            logger.warning(f"N ({N}) exceeds tube dimension k ({k}). "
+                           f"Only {k} sensors can be effectively placed.")
     
     @staticmethod
     def validate_rejection_domain(rejection_domain: torch.Tensor, spatial_shape: Tuple[int, ...]) -> None:
@@ -780,8 +784,8 @@ class TensorTubeQRDecomposition:
         # Monitor numerical health
         condition_number = self.numerical_ops.estimate_condition_number(self.tensor)
         if condition_number > self.config.CONDITION_NUMBER_THRESHOLD:
-            print(f"Warning: High condition number ({condition_number:.2e}) detected. "
-                  f"Results may be numerically unstable.")
+            logger.warning(f"High condition number ({condition_number:.2e}) detected. "
+                           f"Results may be numerically unstable.")
     
     def _setup_reproducibility(self, random_state: Optional[int]) -> None:
         """Setup reproducible random number generation."""
@@ -842,12 +846,12 @@ class TensorTubeQRDecomposition:
                 try:
                     success = self._factorization_step(d, available)
                     if not success:
-                        print(f"Warning: Factorization stopped early at step {d} due to numerical issues")
+                        logger.warning(f"Factorization stopped early at step {d} due to numerical issues")
                         break
                     successful_steps += 1
                     
                 except RuntimeError as e:
-                    print(f"Warning: Numerical error at step {d}: {e}")
+                    logger.error(f"Numerical error at step {d}: {e}")
                     break
             
             if successful_steps == 0:
@@ -856,17 +860,17 @@ class TensorTubeQRDecomposition:
             # Final orthogonality check
             is_orthogonal, deviation = self.numerical_ops.check_orthogonality(self.Q)
             if not is_orthogonal:
-                print(f"Warning: Final Q matrix not orthogonal (deviation: {deviation:.2e})")
+                logger.warning(f"Final Q matrix not orthogonal (deviation: {deviation:.2e})")
             
             actual_rank = torch.sum(self.P).item()
-            print(f"QR Factorization completed:")
-            print(f"  Requested sensors: {self.N}")
-            print(f"  Actual rank: {actual_rank}")
-            print(f"  Success rate: {actual_rank/self.N*100:.1f}%")
-            print(f"  Early stops: {self.N - successful_steps}")
+            logger.info(f"QR Factorization completed:")
+            logger.info(f"  Requested sensors: {self.N}")
+            logger.info(f"  Actual rank: {actual_rank}")
+            logger.info(f"  Success rate: {actual_rank/self.N*100:.1f}%")
+            logger.info(f"  Early stops: {self.N - successful_steps}")
             
             if actual_rank < self.N * 0.5:  # Менее 50% успеха
-                print("WARNING: Low rank achieved - consider relaxing thresholds!")
+                logger.warning("Low rank achieved - consider relaxing thresholds!")
             
             return self.P, self.Q, self.R
             
@@ -933,7 +937,7 @@ class TensorTubeQRDecomposition:
             self._orthogonality_history.append(deviation)
             
             if not is_orthogonal:
-                print(f"Warning: Q lost orthogonality at step {d} (deviation: {deviation:.2e})")
+                logger.warning(f"Q lost orthogonality at step {d} (deviation: {deviation:.2e})")
         
         return True
     
@@ -1075,7 +1079,7 @@ class TensorTubeQRDecomposition:
         elif p.ndim >= 3:
             self._visualize_3d_placement(p, figsize)
         else:
-            print(f"Cannot visualize {p.ndim}D sensor placement")
+            logger.error(f"Cannot visualize {p.ndim}D sensor placement")
     
     def _visualize_2d_placement(self, p: np.ndarray, figsize: Optional[Tuple[int, int]]) -> None:
         """Visualize 2D sensor placement.
