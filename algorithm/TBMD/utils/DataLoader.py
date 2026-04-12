@@ -246,16 +246,32 @@ class DataLoader:
             except ImportError:
                 raise ImportError("PyTorch is not installed. Please install it to convert numpy arrays to PyTorch tensors.")
             
-            if data_type in ("static", "dynamic"):
-                for key, value in data.items():
-                    if value is not None:
-                        data[key] = torch.from_numpy(value).to(torch.float32)
-            elif data_type == "images":
-                subject_images, subject_list = data
-                for key, value in subject_images.items():
-                    if value is not None:
-                        subject_images[key] = torch.from_numpy(value).to(torch.float32)
-                data = (subject_images, subject_list)
+            if data_type in ("static", "dynamic", "images"):
+                target_dict = data[0] if data_type == "images" else data
+
+                if isinstance(target_dict, dict) and target_dict:
+                    # Filter out None values and check for shape consistency
+                    valid_items = {k: v for k, v in target_dict.items() if v is not None}
+
+                    if valid_items:
+                        # Attempt to batch conversion if all shapes are identical
+                        first_val = next(iter(valid_items.values()))
+                        first_shape = getattr(first_val, 'shape', None)
+
+                        if len(valid_items) > 1 and all(getattr(v, 'shape', None) == first_shape for v in valid_items.values()):
+                            # Batch conversion: stack into a single contiguous array first.
+                            # While this adds one copy, it significantly reduces the number of
+                            # separate PyTorch tensor creations and potential future device transfers.
+                            keys = list(valid_items.keys())
+                            stacked = np.stack([valid_items[k] for k in keys])
+                            batched_torch = torch.as_tensor(stacked, dtype=torch.float32)
+
+                            for i, key in enumerate(keys):
+                                target_dict[key] = batched_torch[i]
+                        else:
+                            # Fallback to individual conversion
+                            for key, value in valid_items.items():
+                                target_dict[key] = torch.as_tensor(value, dtype=torch.float32)
         
         return data
 
