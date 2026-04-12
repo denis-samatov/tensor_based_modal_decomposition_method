@@ -268,12 +268,29 @@ class TimeInsensitiveModeComputer:
             logger.error(f"Mode computation failed: {e}")
             # Add debug information for better error diagnosis
             core_shape = getattr(core_slice, 'shape', 'Unknown') if 'core_slice' in locals() else 'Unknown'
-            f_shapes = [getattr(f, 'shape', 'Unknown') for f in spatial_factors] if 'spatial_factors' in locals() and spatial_factors else []
-            logger.debug(f"Computation context - core_slice shape: {core_shape}, spatial_factors shapes: {f_shapes}")
+            core_dtype = getattr(core_slice, 'dtype', 'Unknown') if 'core_slice' in locals() else 'Unknown'
+            core_device = getattr(core_slice, 'device', 'Unknown') if 'core_slice' in locals() else 'Unknown'
+
+            f_info = [
+                f"shape={getattr(f, 'shape', 'Unknown')}, "
+                f"dtype={getattr(f, 'dtype', 'Unknown')}, "
+                f"device={getattr(f, 'device', 'Unknown')}"
+                for f in spatial_factors
+            ] if 'spatial_factors' in locals() and spatial_factors else []
+
+            logger.debug(
+                f"Computation context - "
+                f"core_slice: shape={core_shape}, dtype={core_dtype}, device={core_device}; "
+                f"spatial_factors: {f_info}; "
+                f"config: device={self.config.device}, precision={self.config.numerical_precision}; "
+                f"processor device: {self.device}"
+            )
+
             raise ComputationError(
                 f"Failed to compute mode: {e}. "
-                f"Core slice shape: {core_shape}, "
-                f"Factor shapes: {f_shapes}"
+                f"Core slice: shape={core_shape}, dtype={core_dtype}, device={core_device}. "
+                f"Factors: {f_info}. "
+                f"Config device: {self.config.device}, Processor device: {self.device}"
             ) from e
     
     def compute_all_modes(self, 
