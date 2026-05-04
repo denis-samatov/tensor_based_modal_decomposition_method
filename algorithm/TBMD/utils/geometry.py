@@ -13,6 +13,7 @@ Key concepts:
 - Used to impose smoothness regularization on spatial modes in HOSVD
 """
 
+from itertools import combinations
 import numpy as np
 import torch
 import scipy.sparse as sp
@@ -378,11 +379,8 @@ class MeshGraphBuilder:
         # Extract edges from simplices
         edges = set()
         for simplex in tri.simplices:
-            n_vertices = len(simplex)
-            for i in range(n_vertices):
-                for j in range(i + 1, n_vertices):
-                    edge = tuple(sorted([simplex[i], simplex[j]]))
-                    edges.add(edge)
+            for u, v in combinations(simplex, 2):
+                edges.add((u, v) if u < v else (v, u))
 
         if not edges:
             row, col, data, dist_data = [], [], [], []
