@@ -1,42 +1,88 @@
-import pandas as pd
+
 import unittest
-import numpy as np
-from PIL import Image
 from pathlib import Path
 import shutil
 import tempfile
 import sys
 import os
+import json
+
+try:
+    import pandas as pd
+    import numpy as np
+    from PIL import Image
+    HAS_DEPS = True
+except ImportError:
+    HAS_DEPS = False
 
 # Ensure algorithm directory is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../algorithm')))
+
+import sys
+from unittest.mock import MagicMock
+
+# Mock required missing dependencies before importing DataLoader
+try:
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+    import tqdm
+    HAS_DEPS = True
+except ImportError:
+    HAS_DEPS = False
+
+if not HAS_DEPS:
+    sys.modules['numpy'] = MagicMock()
+    sys.modules['pandas'] = MagicMock()
+    sys.modules['PIL'] = MagicMock()
+    sys.modules['tqdm'] = MagicMock()
+    sys.modules['TBMD'] = MagicMock()
+    sys.modules['TBMD.utils'] = MagicMock()
+    sys.modules['TBMD.utils.utils'] = MagicMock()
+    sys.modules['matplotlib'] = MagicMock()
+    sys.modules['matplotlib.pyplot'] = MagicMock()
+    sys.modules['scipy'] = MagicMock()
+    sys.modules['scipy.interpolate'] = MagicMock()
+    sys.modules['scipy.sparse'] = MagicMock()
+    sys.modules['scipy.sparse.csgraph'] = MagicMock()
+    sys.modules['scipy.spatial'] = MagicMock()
+    sys.modules['scipy.ndimage'] = MagicMock()
+    sys.modules['scipy.optimize'] = MagicMock()
+    sys.modules['scikit-learn'] = MagicMock()
+    sys.modules['sklearn'] = MagicMock()
+    sys.modules['sklearn.metrics'] = MagicMock()
+    sys.modules['tensorly'] = MagicMock()
+    sys.modules['tensorly.decomposition'] = MagicMock()
+    sys.modules['torch'] = MagicMock()
 
 from algorithm.TBMD.utils.DataLoader import DataLoader
 
 class TestDataLoader(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
-        self.num_images = 5
-        self.image_size = (10, 10)
-        self.subject_id = "test_subject"
+        if HAS_DEPS:
+            self.num_images = 5
+            self.image_size = (10, 10)
+            self.subject_id = "test_subject"
 
-        subject_dir = Path(self.test_dir) / self.subject_id
-        subject_dir.mkdir()
+            subject_dir = Path(self.test_dir) / self.subject_id
+            subject_dir.mkdir()
 
-        self.generated_images = []
-        for i in range(self.num_images):
-            # Create a random image
-            img_array = np.random.randint(0, 256, self.image_size + (3,), dtype=np.uint8)
-            img = Image.fromarray(img_array)
-            img_path = subject_dir / f"PRESSURE_STEP_{i}.png"
-            img.save(img_path)
-            # Store normalized float array for comparison
-            self.generated_images.append(img_array.astype(np.float32) / 255.0)
+            self.generated_images = []
+            for i in range(self.num_images):
+                # Create a random image
+                img_array = np.random.randint(0, 256, self.image_size + (3,), dtype=np.uint8)
+                img = Image.fromarray(img_array)
+                img_path = subject_dir / f"PRESSURE_STEP_{i}.png"
+                img.save(img_path)
+                # Store normalized float array for comparison
+                self.generated_images.append(img_array.astype(np.float32) / 255.0)
 
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
+    @unittest.skipUnless(HAS_DEPS, "Requires pandas, numpy, and PIL")
     def test_load_images_tensor(self):
         loader = DataLoader()
         data, subjects = loader.load_images_tensor(self.test_dir)
@@ -63,6 +109,7 @@ class TestDataLoader(unittest.TestCase):
             loaded = loaded_tensor[..., i]
             np.testing.assert_allclose(loaded, original, atol=1e-5)
 
+    @unittest.skipUnless(HAS_DEPS, "Requires pandas, numpy, and PIL")
     def test_load_static_tensor(self):
         # Create a temporary directory for static tensor files
         static_dir = Path(self.test_dir) / "static_tensors"
@@ -108,6 +155,22 @@ class TestDataLoader(unittest.TestCase):
             self.assertIn(stem, expected_tensors)
             expected = expected_tensors[stem]
             np.testing.assert_allclose(tensor, expected, atol=1e-5)
+
+
+    def test_load_wells_from_json(self):
+        # Test loading wells from JSON
+        sample_data = {
+            "well_1": {"x": 10, "y": 20},
+            "well_2": {"x": 30, "y": 40}
+        }
+        json_path = Path(self.test_dir) / "wells.json"
+        with open(json_path, 'w') as f:
+            json.dump(sample_data, f)
+
+        loader = DataLoader()
+        loaded_data = loader.load_wells_from_json(json_path)
+
+        self.assertEqual(loaded_data, sample_data)
 
 if __name__ == "__main__":
     unittest.main()
