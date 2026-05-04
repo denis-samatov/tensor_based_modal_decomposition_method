@@ -39,22 +39,18 @@ SubjectFactorsDict = Dict[str, FactorList]
 
 class ProcessingError(Exception):
     """Base exception for modal tensor processing errors."""
-    pass
 
 
 class ValidationError(ProcessingError):
     """Raised when input validation fails."""
-    pass
 
 
 class ComputationError(ProcessingError):
     """Raised when computation fails."""
-    pass
 
 
 class DimensionMismatchError(ValidationError):
     """Raised when tensor dimensions don't match expected values."""
-    pass
 
 
 class ProcessingStrategy(Enum):

@@ -31,19 +31,18 @@ class TensorLike(Protocol):
 # Custom exceptions
 class TensorDecompositionError(Exception):
     """A base exception for tensor decomposition errors."""
-    pass
+
 
 class InvalidRankError(TensorDecompositionError):
     """An exception for invalid rank values."""
-    pass
+
 
 class StateError(TensorDecompositionError):
     """An exception for invalid state for an operation."""
-    pass
+
 
 class ValidationError(TensorDecompositionError):
     """An exception for a failed input validation."""
-    pass
 
 # Constants
 DEFAULT_EPSILON = 1e-2
@@ -78,14 +77,12 @@ class ProcessingStrategy(ABC):
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
         """Process the decomposition for multiple tensors."""
-        pass
-    
+
     @abstractmethod
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
         """Process the reconstruction for multiple tensors."""
-        pass
 
 class CPUStrategy(ProcessingStrategy):
     """A CPU-based parallel processing strategy."""
