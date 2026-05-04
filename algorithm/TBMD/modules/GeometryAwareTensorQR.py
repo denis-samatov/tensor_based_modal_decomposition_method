@@ -42,7 +42,6 @@ import tensorly as tl
 import logging
 from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
-from scipy.sparse import csr_matrix
 
 from .TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition,
