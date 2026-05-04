@@ -180,20 +180,15 @@ class LSTMForecaster:
         if T <= seq_length:
             raise ValueError(f"Not enough time steps ({T}) to create sequences of length {seq_length}")
         
-        # Create sequences and targets
-        X_seq = []
-        Y_seq = []
-        for t in range(seq_length, T):
-            # Window [t-seq_length, ..., t-1]
-            x_window = x_history[t-seq_length:t, :]  # (seq_length, W)
-            X_seq.append(x_window)
-            
-            # Target x(t)
-            y_value = x_history[t, :]  # (W,)
-            Y_seq.append(y_value)
+        # Create sequences and targets efficiently using sliding window views
+        from numpy.lib.stride_tricks import sliding_window_view
+
+        # Input sequences: all but the last time step for the windows
+        # sliding_window_view gives shape (N, W, seq_length), so we transpose to (N, seq_length, W)
+        X_seq = sliding_window_view(x_history[:-1], window_shape=seq_length, axis=0).transpose(0, 2, 1)
         
-        X_seq = np.array(X_seq)  # (N, seq_length, W)
-        Y_seq = np.array(Y_seq)  # (N, W)
+        # Target x(t): from t=seq_length to T-1
+        Y_seq = x_history[seq_length:]
         
         return X_seq, Y_seq
     
