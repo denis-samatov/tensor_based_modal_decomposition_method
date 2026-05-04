@@ -74,7 +74,7 @@ from TBMD.modules import (
 )
 
 # 1. Load your data
-data = np.load('your_data.npy')  # Shape: (H, W, T)
+data = np.load('your_data.npy', allow_pickle=False)  # Shape: (H, W, T)
 H, W, T = data.shape
 
 # 2. Build mesh graph
@@ -278,7 +278,7 @@ TBMD/
 
 ```python
 # Load pressure data
-pressure_data = np.load('pressure_field.npy')  # (Nx, Ny, Nz, Nt)
+pressure_data = np.load('pressure_field.npy', allow_pickle=False)  # (Nx, Ny, Nz, Nt)
 
 # Build 3D mesh
 builder = MeshGraphBuilder(connectivity_type='grid')
@@ -308,7 +308,7 @@ qr_config = GeometricQRConfig(
 
 ```python
 # Load velocity magnitude
-velocity = np.load('flow_velocity.npy')  # (H, W, T)
+velocity = np.load('flow_velocity.npy', allow_pickle=False)  # (H, W, T)
 
 # Build mesh (can use k-NN for irregular domain)
 builder = MeshGraphBuilder(connectivity_type='knn', k=8)
