@@ -8,6 +8,12 @@ import tempfile
 import sys
 import os
 
+try:
+    import h5py
+    HAS_H5PY = True
+except ImportError:
+    HAS_H5PY = False
+
 # Ensure algorithm directory is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../algorithm')))
@@ -108,6 +114,41 @@ class TestDataLoader(unittest.TestCase):
             self.assertIn(stem, expected_tensors)
             expected = expected_tensors[stem]
             np.testing.assert_allclose(tensor, expected, atol=1e-5)
+
+
+    @unittest.skipUnless(HAS_H5PY, "Requires h5py")
+    def test_load_h5_tensors(self):
+        import h5py
+        # Create a temporary h5 file
+        h5_path = Path(self.test_dir) / "dummy.h5"
+
+        num_samples = 2
+        dim0, dim1, dim2 = 3, 4, 5
+
+        with h5py.File(h5_path, 'w') as f:
+            f.create_dataset('pressure', data=np.random.rand(num_samples, dim0, dim1, dim2).astype(np.float32))
+            f.create_dataset('soil', data=np.random.rand(num_samples, dim0, dim1, dim2).astype(np.float32))
+            f.create_dataset('names', data=[b"sample1", b"sample2"])
+
+        loader = DataLoader()
+        result = loader.load_h5_tensors(h5_path)
+
+        # Verify the contract: returns a dict with 'all', 'pressure', 'soil'
+        self.assertIsInstance(result, dict)
+        self.assertIn('all', result)
+        self.assertIn('pressure', result)
+        self.assertIn('soil', result)
+
+        # Verify data for names
+        for name in ["sample1", "sample2"]:
+            self.assertIn(name, result["all"])
+            self.assertIn(name, result["pressure"])
+            self.assertIn(name, result["soil"])
+
+            # Basic validation of expected type
+            self.assertTrue(isinstance(result["all"][name], np.ndarray))
+            self.assertTrue(isinstance(result["pressure"][name], np.ndarray))
+            self.assertTrue(isinstance(result["soil"][name], np.ndarray))
 
 if __name__ == "__main__":
     unittest.main()
