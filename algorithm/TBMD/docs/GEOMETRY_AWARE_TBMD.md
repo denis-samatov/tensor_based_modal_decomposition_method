@@ -259,8 +259,8 @@ from TBMD.modules import (
 
 # 1. Generate/load data
 H, W, T = 100, 100, 200
-data_train = np.load('flow_field_train.npy')  # (100, 100, 200)
-data_test = np.load('flow_field_test.npy')    # (100, 100, 50)
+data_train = np.load('flow_field_train.npy', allow_pickle=False)  # (100, 100, 200)
+data_test = np.load('flow_field_test.npy', allow_pickle=False)    # (100, 100, 50)
 
 # 2. Build mesh geometry
 builder = MeshGraphBuilder(connectivity_type='grid')
