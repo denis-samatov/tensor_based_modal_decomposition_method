@@ -43,6 +43,28 @@ class LinearForecaster:
                 self.device = torch.device(device)
             print(f"Using device: {self.device}")
     
+
+    def _calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+        """Helper method to calculate common evaluation metrics.
+
+        Args:
+            y_true (np.ndarray): True values.
+            y_pred (np.ndarray): Predicted values.
+
+        Returns:
+            Dict[str, float]: A dictionary containing mse, rmse, rel_frob_err, and r2.
+        """
+        mse = np.mean((y_true - y_pred) ** 2)
+        rmse = np.sqrt(mse)
+        rel_frob_err = np.linalg.norm(y_true - y_pred, 'fro') / np.linalg.norm(y_true, 'fro')
+        r2 = r2_score(y_true, y_pred, multioutput='uniform_average')
+        return {
+            'mse': mse,
+            'rmse': rmse,
+            'rel_frob_err': rel_frob_err,
+            'r2': r2
+        }
+
     def train(self, x_history: np.ndarray, verbose: bool = True) -> Dict[str, float]:
         """Trains the linear forecaster by learning the transformation matrix `M`.
 
@@ -76,15 +98,9 @@ class LinearForecaster:
             X_output_est = X_input_tensor @ self.M
             
             # Calculate metrics
-            mse = torch.mean((X_output_tensor - X_output_est) ** 2).item()
-            rmse = np.sqrt(mse)
-            rel_frob_err = torch.norm(X_output_tensor - X_output_est, p='fro') / torch.norm(X_output_tensor, p='fro')
-            rel_frob_err = rel_frob_err.item()
-            
-            # Convert back to numpy for R2 calculation
             X_output_np = X_output_tensor.detach().cpu().numpy()
             X_output_est_np = X_output_est.detach().cpu().numpy()
-            r2 = r2_score(X_output_np, X_output_est_np, multioutput='uniform_average')
+            metrics = self._calculate_metrics(X_output_np, X_output_est_np)
             
         else:
             # Solve the linear system X_input * M = X_output for M using numpy
@@ -94,23 +110,15 @@ class LinearForecaster:
             X_output_est = X_input @ self.M  # (T-1, W)
             
             # Calculate metrics
-            mse = np.mean((X_output - X_output_est) ** 2)
-            rmse = np.sqrt(mse)
-            rel_frob_err = np.linalg.norm(X_output - X_output_est, 'fro') / np.linalg.norm(X_output, 'fro')
-            r2 = r2_score(X_output, X_output_est, multioutput='uniform_average')
+            metrics = self._calculate_metrics(X_output, X_output_est)
         
         # Store metrics
-        self.metrics = {
-            'mse': mse,
-            'rmse': rmse,
-            'rel_frob_err': rel_frob_err,
-            'r2': r2
-        }
+        self.metrics = metrics
         
         self.trained = True
         
         if verbose:
-            print(f"Training complete. RMSE: {rmse:.5f}, Rel. Frob. Err: {rel_frob_err:.5f}, R²: {r2:.5f}")
+            print(f"Training complete. RMSE: {metrics['rmse']:.5f}, Rel. Frob. Err: {metrics['rel_frob_err']:.5f}, R²: {metrics['r2']:.5f}")
         
         return self.metrics
     
@@ -215,31 +223,15 @@ class LinearForecaster:
             X_output_est = X_input_tensor @ self.M
             
             # Calculate metrics
-            mse = torch.mean((X_output_tensor - X_output_est) ** 2).item()
-            rmse = np.sqrt(mse)
-            rel_frob_err = torch.norm(X_output_tensor - X_output_est, p='fro') / torch.norm(X_output_tensor, p='fro')
-            rel_frob_err = rel_frob_err.item()
-            
-            # Convert back to numpy for R2 calculation
             X_output_np = X_output_tensor.detach().cpu().numpy()
             X_output_est_np = X_output_est.detach().cpu().numpy()
-            r2 = r2_score(X_output_np, X_output_est_np, multioutput='uniform_average')
+            metrics = self._calculate_metrics(X_output_np, X_output_est_np)
         else:
             # Make predictions using numpy
             X_output_est = X_input @ self.M
             
             # Calculate metrics
-            mse = np.mean((X_output - X_output_est) ** 2)
-            rmse = np.sqrt(mse)
-            rel_frob_err = np.linalg.norm(X_output - X_output_est, 'fro') / np.linalg.norm(X_output, 'fro')
-            r2 = r2_score(X_output, X_output_est, multioutput='uniform_average')
-        
-        metrics = {
-            'mse': mse,
-            'rmse': rmse,
-            'rel_frob_err': rel_frob_err,
-            'r2': r2
-        }
+            metrics = self._calculate_metrics(X_output, X_output_est)
         
         return metrics
     
