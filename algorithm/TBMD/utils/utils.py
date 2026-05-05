@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 import numpy as np
 import tensorly as tl
 import re
@@ -395,9 +399,19 @@ def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
 
         # Ensure we have a 2D tensor of shape (N, 2)
         if coords.dim() != 2 or coords.shape[1] != 2:
-             # Fallback: if shape is wrong, it might be because the list was flat or something else.
-             # But assuming the original code expected [[i,j], ...], torch.tensor should produce (N, 2).
-             pass
+             logger.warning(
+                 f"Unexpected coordinate shape {coords.shape} for subject '{subject}'. "
+                 "Expected shape (N, 2). Attempting to reshape to (-1, 2)."
+             )
+             try:
+                 coords = coords.view(-1, 2)
+             except RuntimeError as e:
+                 logger.error(
+                     f"Failed to reshape coordinates for subject '{subject}': {e}. "
+                     "Skipping."
+                 )
+                 wells_matrices[subject] = P
+                 continue
 
         # Check bounds
         valid_mask = (coords[:, 0] >= 0) & (coords[:, 0] < H) & \
