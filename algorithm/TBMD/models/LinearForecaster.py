@@ -3,8 +3,60 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from functools import wraps
 from typing import Dict, Tuple, List, Optional, Union, Any
 from sklearn.metrics import r2_score
+
+
+def with_torch_conversion(func):
+    """
+    Decorator to handle PyTorch tensor conversions for LinearForecaster.
+    If `self.use_torch` is True, this decorator:
+    1. Converts numpy array inputs to PyTorch tensors on the correct device.
+    2. Runs the function.
+    3. Converts returned PyTorch tensors back to numpy arrays.
+    """
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not getattr(self, 'use_torch', False):
+            return func(self, *args, **kwargs)
+
+        import torch
+        import numpy as np
+
+        # Convert args to tensors
+        new_args = []
+        for arg in args:
+            if isinstance(arg, np.ndarray):
+                new_args.append(torch.tensor(arg, dtype=torch.float32, device=self.device))
+            elif isinstance(arg, torch.Tensor):
+                new_args.append(arg.to(dtype=torch.float32, device=self.device))
+            else:
+                new_args.append(arg)
+
+        # Convert kwargs to tensors
+        new_kwargs = {}
+        for k, v in kwargs.items():
+            if isinstance(v, np.ndarray):
+                new_kwargs[k] = torch.tensor(v, dtype=torch.float32, device=self.device)
+            elif isinstance(v, torch.Tensor):
+                new_kwargs[k] = v.to(dtype=torch.float32, device=self.device)
+            else:
+                new_kwargs[k] = v
+
+        # Execute function
+        result = func(self, *new_args, **new_kwargs)
+
+        # Convert results back to numpy arrays
+        if isinstance(result, torch.Tensor):
+            return result.detach().cpu().numpy()
+        elif isinstance(result, tuple):
+            return tuple(r.detach().cpu().numpy() if isinstance(r, torch.Tensor) else r for r in result)
+        elif isinstance(result, dict):
+            return {k: (v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v) for k, v in result.items()}
+        return result
+
+    return wrapper
 
 
 class LinearForecaster:
@@ -54,17 +106,26 @@ class LinearForecaster:
         Returns:
             Dict[str, float]: A dictionary containing mse, rmse, rel_frob_err, and r2.
         """
+        import numpy as np
+        if self.use_torch:
+            import torch
+            if isinstance(y_true, torch.Tensor):
+                y_true = y_true.detach().cpu().numpy()
+            if isinstance(y_pred, torch.Tensor):
+                y_pred = y_pred.detach().cpu().numpy()
+
         mse = np.mean((y_true - y_pred) ** 2)
         rmse = np.sqrt(mse)
         rel_frob_err = np.linalg.norm(y_true - y_pred, 'fro') / np.linalg.norm(y_true, 'fro')
         r2 = r2_score(y_true, y_pred, multioutput='uniform_average')
         return {
-            'mse': mse,
-            'rmse': rmse,
-            'rel_frob_err': rel_frob_err,
-            'r2': r2
+            'mse': float(mse),
+            'rmse': float(rmse),
+            'rel_frob_err': float(rel_frob_err),
+            'r2': float(r2)
         }
 
+    @with_torch_conversion
     def train(self, x_history: np.ndarray, verbose: bool = True) -> Dict[str, float]:
         """Trains the linear forecaster by learning the transformation matrix `M`.
 
@@ -86,31 +147,19 @@ class LinearForecaster:
         X_output = x_history[1:, :]   # (T-1, W)
         
         if self.use_torch:
-            # Convert to PyTorch tensors
-            X_input_tensor = torch.tensor(X_input, dtype=torch.float32, device=self.device)
-            X_output_tensor = torch.tensor(X_output, dtype=torch.float32, device=self.device)
-            
+            import torch
             # Solve the linear system X_input * M = X_output for M
-            # This is equivalent to M = X_input_pinv @ X_output
-            self.M = torch.linalg.lstsq(X_input_tensor, X_output_tensor).solution
-                
-            # Calculate predictions for evaluation
-            X_output_est = X_input_tensor @ self.M
-            
-            # Calculate metrics
-            X_output_np = X_output_tensor.detach().cpu().numpy()
-            X_output_est_np = X_output_est.detach().cpu().numpy()
-            metrics = self._calculate_metrics(X_output_np, X_output_est_np)
-            
+            self.M = torch.linalg.lstsq(X_input, X_output).solution
         else:
+            import numpy as np
             # Solve the linear system X_input * M = X_output for M using numpy
-            self.M = np.linalg.lstsq(X_input, X_output, rcond=None)[0]  # (W, W)
+            self.M, _, _, _ = np.linalg.lstsq(X_input, X_output, rcond=None)
             
-            # Calculate predictions for evaluation
-            X_output_est = X_input @ self.M  # (T-1, W)
-            
-            # Calculate metrics
-            metrics = self._calculate_metrics(X_output, X_output_est)
+        # Calculate predictions for evaluation
+        X_output_est = X_input @ self.M
+
+        # Calculate metrics
+        metrics = self._calculate_metrics(X_output, X_output_est)
         
         # Store metrics
         self.metrics = metrics
@@ -122,6 +171,7 @@ class LinearForecaster:
         
         return self.metrics
     
+    @with_torch_conversion
     def predict_next(self, x_current: np.ndarray) -> np.ndarray:
         """Predicts the next state.
 
@@ -134,22 +184,10 @@ class LinearForecaster:
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
         
-        if self.use_torch:
-            # Convert to tensor
-            if not isinstance(x_current, torch.Tensor):
-                x_current_tensor = torch.tensor(x_current, dtype=torch.float32, device=self.device)
-            else:
-                x_current_tensor = x_current
-                
-            # Predict next state
-            x_next = x_current_tensor @ self.M
-            
-            # Convert back to numpy
-            return x_next.detach().cpu().numpy()
-        else:
-            # Predict using numpy
-            return x_current @ self.M
+        # The decorator handles tensor conversion
+        return x_current @ self.M
     
+    @with_torch_conversion
     def predict_sequence(self, x_start: np.ndarray, n_steps: int) -> np.ndarray:
         """Predicts a sequence of future states.
 
@@ -164,40 +202,25 @@ class LinearForecaster:
             raise ValueError("Model not trained. Call train() before making predictions.")
         
         if self.use_torch:
-            # Optimized path for PyTorch: Keep data on device
-            if not isinstance(x_start, torch.Tensor):
-                x_current = torch.tensor(x_start, dtype=torch.float32, device=self.device)
-            else:
-                x_current = x_start.to(dtype=torch.float32, device=self.device)
-
-            # Pre-allocate output tensor on device
-            # x_current shape is (W,)
-            sequence = torch.zeros((n_steps + 1, x_current.shape[0]), dtype=torch.float32, device=self.device)
-            sequence[0] = x_current
-
-            # Generate predictions iteratively completely on device
-            for i in range(n_steps):
-                x_next = x_current @ self.M
-                sequence[i+1] = x_next
-                x_current = x_next
-
-            # Convert back to numpy once at the end
-            return sequence[1:].detach().cpu().numpy()
-
+            import torch
+            sequence = torch.zeros((n_steps + 1, x_start.shape[0]), dtype=torch.float32, device=self.device)
         else:
-            # Initialize sequence with starting state
-            sequence = np.zeros((n_steps + 1, x_start.shape[0]))
-            sequence[0] = x_start
+            import numpy as np
+            sequence = np.zeros((n_steps + 1, x_start.shape[0]), dtype=x_start.dtype)
 
-            # Generate predictions iteratively
-            x_current = x_start
-            for i in range(n_steps):
-                x_next = self.predict_next(x_current)
-                sequence[i+1] = x_next
-                x_current = x_next
+        sequence[0] = x_start
 
-            return sequence[1:]  # Return without the starting state
+        # Generate predictions iteratively completely in device-agnostic way
+        # x_start is automatically converted to correct type by decorator
+        x_current = x_start
+        for i in range(n_steps):
+            x_next = x_current @ self.M
+            sequence[i+1] = x_next
+            x_current = x_next
+
+        return sequence[1:]
     
+    @with_torch_conversion
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
         """Evaluates the model on historical data.
 
@@ -214,24 +237,11 @@ class LinearForecaster:
         X_input = x_history[:-1, :]   # (T-1, W)
         X_output = x_history[1:, :]   # (T-1, W)
         
-        if self.use_torch:
-            # Convert to tensors
-            X_input_tensor = torch.tensor(X_input, dtype=torch.float32, device=self.device)
-            X_output_tensor = torch.tensor(X_output, dtype=torch.float32, device=self.device)
-            
-            # Make predictions
-            X_output_est = X_input_tensor @ self.M
-            
-            # Calculate metrics
-            X_output_np = X_output_tensor.detach().cpu().numpy()
-            X_output_est_np = X_output_est.detach().cpu().numpy()
-            metrics = self._calculate_metrics(X_output_np, X_output_est_np)
-        else:
-            # Make predictions using numpy
-            X_output_est = X_input @ self.M
-            
-            # Calculate metrics
-            metrics = self._calculate_metrics(X_output, X_output_est)
+        # Make predictions using device-agnostic operation
+        X_output_est = X_input @ self.M
+
+        # Calculate metrics
+        metrics = self._calculate_metrics(X_output, X_output_est)
         
         return metrics
     
