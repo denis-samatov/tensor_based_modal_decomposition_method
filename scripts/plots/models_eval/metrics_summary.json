@@ -1,0 +1,151 @@
+{
+  "train_shape": [
+    1000,
+    20,
+    64,
+    64
+  ],
+  "test_shape": [
+    200,
+    20,
+    64,
+    64
+  ],
+  "common_warmup_steps": 7,
+  "results": [
+    {
+      "name": "Linear Forecaster",
+      "slug": "linear_forecaster",
+      "family": "linear",
+      "notes": {},
+      "one_step_r2_raw": 0.6450230376888304,
+      "one_step_r2_common": 0.582704099715518,
+      "rollout_r2_raw": -0.6953207699235777,
+      "rollout_r2_common": -1.031637020319287,
+      "rollout_rmse_common": 1.1938003557407064,
+      "rollout_rel_frob_common": 0.8831280050486616,
+      "common_warmup_steps": 7,
+      "time": 1.851773738861084,
+      "benchmark_frames": {
+        "trajectory_index": 0,
+        "step_indices": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "output_dir": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/linear_forecaster"
+      }
+    },
+    {
+      "name": "MLP Forecaster",
+      "slug": "mlp_forecaster",
+      "family": "mlp",
+      "notes": {
+        "delta_forecast": false,
+        "selected_preset": "mlp_h128_l2_e150"
+      },
+      "one_step_r2_raw": 0.654812983488557,
+      "one_step_r2_common": 0.5918621684115224,
+      "rollout_r2_raw": 0.370453460022668,
+      "rollout_r2_common": 0.24705941895023265,
+      "rollout_rmse_common": 0.726756621674767,
+      "rollout_rel_frob_common": 0.5376268505610536,
+      "common_warmup_steps": 7,
+      "time": 20.229771852493286,
+      "benchmark_frames": {
+        "trajectory_index": 0,
+        "step_indices": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "output_dir": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/mlp_forecaster"
+      }
+    },
+    {
+      "name": "LSTM Forecaster",
+      "slug": "lstm_forecaster",
+      "family": "lstm",
+      "notes": {
+        "selected_preset": "lstm_h128_l2_s7_e150_plus_delta_features",
+        "feature_mode": "latent_plus_delta",
+        "delta_forecast": false
+      },
+      "one_step_r2_raw": 0.5997808424213537,
+      "one_step_r2_common": 0.5997808424213537,
+      "rollout_r2_raw": 0.5317227363054065,
+      "rollout_r2_common": 0.5317227363054065,
+      "rollout_rmse_common": 0.5731392895320151,
+      "rollout_rel_frob_common": 0.4239866029067872,
+      "common_warmup_steps": 7,
+      "time": 307.6809139251709,
+      "benchmark_frames": {
+        "trajectory_index": 0,
+        "step_indices": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "output_dir": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/lstm_forecaster"
+      }
+    },
+    {
+      "name": "LSTM + T+1 Residual Corrector",
+      "slug": "lstm_t_plus_1_residual_corrected",
+      "family": "lstm_residual_corrected",
+      "notes": {
+        "selected_preset": "lstm_h128_l2_s7_e150_plus_delta_features_with_t_plus_1_residual_head",
+        "feature_mode": "latent_plus_delta",
+        "delta_forecast": false,
+        "correction_head": "mlp_h64_l2_e120",
+        "priority_metric": "one_step"
+      },
+      "one_step_r2_raw": 0.6002870306444208,
+      "one_step_r2_common": 0.6002870306444208,
+      "rollout_r2_raw": 0.5477365147680742,
+      "rollout_r2_common": 0.5477365147680742,
+      "rollout_rmse_common": 0.5632541595428161,
+      "rollout_rel_frob_common": 0.4166739604829276,
+      "common_warmup_steps": 7,
+      "time": 328.1881420612335,
+      "benchmark_frames": {
+        "trajectory_index": 0,
+        "step_indices": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "output_dir": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/lstm_t_plus_1_residual_corrected"
+      }
+    },
+    {
+      "name": "Multi-Resolution Linear",
+      "slug": "multi_resolution_linear",
+      "family": "multi_resolution_linear",
+      "notes": {},
+      "one_step_r2_raw": 0.7454147978724877,
+      "one_step_r2_common": 0.6973010297721141,
+      "rollout_r2_raw": -0.753237658788761,
+      "rollout_r2_common": -1.1097623152536387,
+      "rollout_rmse_common": 1.2165372469528866,
+      "rollout_rel_frob_common": 0.8999478906188613,
+      "common_warmup_steps": 7,
+      "time": 6.173826217651367,
+      "benchmark_frames": {
+        "trajectory_index": 0,
+        "step_indices": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "output_dir": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/multi_resolution_linear"
+      }
+    }
+  ],
+  "chart_path": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/model_comparison_chart.png"
+}

@@ -1,17 +1,8 @@
-import sys
 import os
 import pytest
 import random
 import numpy as np
 import torch
-from pathlib import Path
-
-# Add 'algorithm' to sys.path to allow imports like 'from TBMD...'
-# Assuming structure: /.../algorithm/TBMD
-# We want to add /.../algorithm
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "algorithm", "src"))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 @pytest.fixture(autouse=True)
 def set_global_determinism():

@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tbmd"
+version = "2.0.0"
+description = "Tensor-Based Modal Decomposition Method — ROM, sensor placement, and field reconstruction"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Denis Samatov"},
+]
+keywords = ["tensor", "modal-decomposition", "digital-twin", "ROM", "sensor-placement"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "numpy>=1.26,<2.0",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+    "scikit-learn>=1.5",
+    "torch>=2.3",
+    "hdbscan>=0.8.39",
+    "tensorly>=0.9",
+    "pandas>=2.2",
+    "h5py>=3.12",
+    "pillow>=11.0",
+    "scikit-image>=0.23",
+    "tqdm>=4.66",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ipykernel>=6.29",
+    "ipython>=8.30",
+    "jupyter_client>=8.6",
+    "jupyter_core>=5.7",
+    "nbformat>=5.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-repo/tensor-based-modal-decomposition-method"
+Documentation = "https://github.com/your-repo/tensor-based-modal-decomposition-method/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

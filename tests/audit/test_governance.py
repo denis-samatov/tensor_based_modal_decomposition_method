@@ -17,10 +17,8 @@ def test_import_dag():
 
 def test_deprecation_warning():
     """Verify that importing TBMD.modules triggers a DeprecationWarning (isolated)."""
-    # Run a separate process to avoid import caching issues
-    # Ensure algorithm folder is in path
-    algo_path = os.path.join(os.getcwd(), 'algorithm')
-    code = f"import sys; sys.path.append('{algo_path}'); import warnings; warnings.simplefilter('always'); import TBMD.modules"
+    # Run a separate process — TBMD is installed as a package, no sys.path hack needed
+    code = "import warnings; warnings.simplefilter('always'); import TBMD.modules"
     
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     

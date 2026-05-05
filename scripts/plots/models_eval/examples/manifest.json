@@ -1,0 +1,135 @@
+{
+  "output_root": "/Users/denissamatov/Heriot-Watt/Tensors/tensor-based-modal-decomposition-method/scripts/plots/models_eval/examples",
+  "trajectory_indices": [
+    0,
+    199
+  ],
+  "rollout_steps": [
+    0,
+    4,
+    8,
+    12
+  ],
+  "image_settings": {
+    "dpi": 150,
+    "fps": 2,
+    "warmup_steps": 7
+  },
+  "models": [
+    {
+      "name": "Linear Forecaster",
+      "slug": "linear_forecaster",
+      "metrics": {
+        "one_step_r2_raw": 0.6450230376888304,
+        "one_step_r2_common": 0.582704099715518,
+        "rollout_r2_raw": -0.6953207699235777,
+        "rollout_r2_common": -1.031637020319287,
+        "rollout_rmse_common": 1.1938003557407064,
+        "rollout_rel_frob_common": 0.8831280050486616
+      },
+      "artifacts": {
+        "contact_sheet": "linear_forecaster/contact_sheet.png",
+        "gif": "linear_forecaster/rollout.gif",
+        "frames": [
+          "linear_forecaster/frames/frame_t00.png",
+          "linear_forecaster/frames/frame_t04.png",
+          "linear_forecaster/frames/frame_t08.png",
+          "linear_forecaster/frames/frame_t12.png"
+        ]
+      }
+    },
+    {
+      "name": "MLP Forecaster",
+      "slug": "mlp_forecaster",
+      "metrics": {
+        "one_step_r2_raw": 0.654812983488557,
+        "one_step_r2_common": 0.5918621684115224,
+        "rollout_r2_raw": 0.370453460022668,
+        "rollout_r2_common": 0.24705941895023265,
+        "rollout_rmse_common": 0.726756621674767,
+        "rollout_rel_frob_common": 0.5376268505610536
+      },
+      "artifacts": {
+        "contact_sheet": "mlp_forecaster/contact_sheet.png",
+        "gif": "mlp_forecaster/rollout.gif",
+        "frames": [
+          "mlp_forecaster/frames/frame_t00.png",
+          "mlp_forecaster/frames/frame_t04.png",
+          "mlp_forecaster/frames/frame_t08.png",
+          "mlp_forecaster/frames/frame_t12.png"
+        ]
+      }
+    },
+    {
+      "name": "LSTM Forecaster",
+      "slug": "lstm_forecaster",
+      "metrics": {
+        "one_step_r2_raw": 0.5997808424213537,
+        "one_step_r2_common": 0.5997808424213537,
+        "rollout_r2_raw": 0.5317227363054065,
+        "rollout_r2_common": 0.5317227363054065,
+        "rollout_rmse_common": 0.5731392895320151,
+        "rollout_rel_frob_common": 0.4239866029067872
+      },
+      "artifacts": {
+        "contact_sheet": "lstm_forecaster/contact_sheet.png",
+        "gif": "lstm_forecaster/rollout.gif",
+        "frames": [
+          "lstm_forecaster/frames/frame_t00.png",
+          "lstm_forecaster/frames/frame_t04.png",
+          "lstm_forecaster/frames/frame_t08.png",
+          "lstm_forecaster/frames/frame_t12.png"
+        ]
+      }
+    },
+    {
+      "name": "LSTM + T+1 Residual Corrector",
+      "slug": "lstm_t_plus_1_residual_corrected",
+      "metrics": {
+        "one_step_r2_raw": 0.6002870306444208,
+        "one_step_r2_common": 0.6002870306444208,
+        "rollout_r2_raw": 0.5477365147680742,
+        "rollout_r2_common": 0.5477365147680742,
+        "rollout_rmse_common": 0.5632541595428161,
+        "rollout_rel_frob_common": 0.4166739604829276
+      },
+      "artifacts": {
+        "contact_sheet": "lstm_t_plus_1_residual_corrected/contact_sheet.png",
+        "gif": "lstm_t_plus_1_residual_corrected/rollout.gif",
+        "frames": [
+          "lstm_t_plus_1_residual_corrected/frames/frame_t00.png",
+          "lstm_t_plus_1_residual_corrected/frames/frame_t04.png",
+          "lstm_t_plus_1_residual_corrected/frames/frame_t08.png",
+          "lstm_t_plus_1_residual_corrected/frames/frame_t12.png"
+        ],
+        "t_plus_one_diagnostics": "lstm_t_plus_1_residual_corrected/t_plus_one_diagnostics.png"
+      }
+    },
+    {
+      "name": "Multi-Resolution Linear",
+      "slug": "multi_resolution_linear",
+      "metrics": {
+        "one_step_r2_raw": 0.7454147978724877,
+        "one_step_r2_common": 0.6973010297721141,
+        "rollout_r2_raw": -0.753237658788761,
+        "rollout_r2_common": -1.1097623152536387,
+        "rollout_rmse_common": 1.2165372469528866,
+        "rollout_rel_frob_common": 0.8999478906188613
+      },
+      "artifacts": {
+        "contact_sheet": "multi_resolution_linear/contact_sheet.png",
+        "gif": "multi_resolution_linear/rollout.gif",
+        "frames": [
+          "multi_resolution_linear/frames/frame_t00.png",
+          "multi_resolution_linear/frames/frame_t04.png",
+          "multi_resolution_linear/frames/frame_t08.png",
+          "multi_resolution_linear/frames/frame_t12.png"
+        ]
+      }
+    }
+  ],
+  "comparison_artifacts": [
+    "comparison/fixed_trajectory_0.png",
+    "comparison/fixed_trajectory_199.png"
+  ]
+}

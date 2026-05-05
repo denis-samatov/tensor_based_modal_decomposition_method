@@ -3,9 +3,14 @@ venv/
 .env
 .venv/
 
+# Python packaging
+*.egg-info/
+dist/
+build/
+
 # Data and outputs
 data/
-!algorithm/TBMD/core/data/
+!src/TBMD/core/data/
 report/
 output_plots/
 *.npy
@@ -21,17 +26,13 @@ theory/*.log
 theory/*.out
 theory/*.toc
 
-# Algorithm data and outputs
-algorithm/data/
-algorithm/__pycache__/
-algorithm/*.pyc
-.pytest_cache/
+# Python cache
 __pycache__/
+*.pyc
+.pytest_cache/
 
 # Notebooks and checkpoints
 *.ipynb_checkpoints/
-algorithm/main.ipynb
-algorithm/pipline.ipynb
 
 # System files
 .DS_Store
@@ -41,17 +42,18 @@ Thumbs.db
 *.swp
 *.swo
 
-# Ignore all files in .idea (PyCharm) and .vscode (VSCode) settings
+# IDE settings
 .idea/
 .vscode/
 
+# Results and artifacts (generated, not tracked)
+results/
 
-algorithm/all_cores.joblib
-algorithm/all_factors.joblib
-algorithm/pretrained_models/
-algorithm/metadata_forecast_tbmd/
+# Article
 article/
-exports/
-statistics/
-images/
-artifacts/
+
+.cache/
+
+findings.md
+progress.md
+task_plan.md
