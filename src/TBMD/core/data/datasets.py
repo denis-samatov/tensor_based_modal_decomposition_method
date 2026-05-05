@@ -7,27 +7,23 @@ from timeit import default_timer
 
 
 class GaussianRF:
-    """
-    Gaussian Random Field Generator
+    """A Gaussian Random Field (GRF) generator.
 
-    Generates random fields with Gaussian statistics and prescribed spatial correlation structure.
-    
-    Parameters
-    ----------
-    dim : int
-        Dimensionality of the random field (1, 2, or 3)
-    size : int
-        Size of the domain (must be power of 2)
-    alpha : float, optional
-        Smoothness parameter (default: 2)
-    tau : float, optional
-        Correlation length parameter (default: 3)
-    sigma : float, optional
-        Standard deviation parameter (default: computed from tau and alpha)
-    boundary : str, optional
-        Boundary condition type (default: "periodic")
-    device : torch.device, optional
-        Device for computation (default: None)
+    This class generates random fields with Gaussian statistics and a
+    prescribed spatial correlation structure. It supports 1D, 2D, and 3D
+    fields.
+
+    Args:
+        dim (int): The dimensionality of the random field (1, 2, or 3).
+        size (int): The size of the domain, which must be a power of 2.
+        alpha (float, optional): A smoothness parameter. Defaults to 2.
+        tau (float, optional): A correlation length parameter. Defaults to 3.
+        sigma (float, optional): The standard deviation parameter. If None, it
+            is computed from tau and alpha. Defaults to None.
+        boundary (str, optional): The boundary condition type. Defaults to
+            "periodic".
+        device (torch.device, optional): The device for computation. Defaults
+            to None.
     """
 
     def __init__(self, dim, size, alpha=2, tau=3, sigma=None, boundary="periodic", device=None):
@@ -67,25 +63,17 @@ class GaussianRF:
             self.sqrt_eig = (size**3)*math.sqrt(2.0)*sigma*((4*(math.pi**2)*(k_x**2 + k_y**2 + k_z**2) + tau**2)**(-alpha/2.0))
             self.sqrt_eig[0,0,0] = 0.0
 
-        self.size = []
-        for j in range(self.dim):
-            self.size.append(size)
-
-        self.size = tuple(self.size)
+        self.size = tuple([size for _ in range(self.dim)])
 
     def sample(self, N):
-        """
-        Generate N samples from the random field
+        """Generates N samples from the random field.
         
-        Parameters
-        ----------
-        N : int
-            Number of samples to generate
+        Args:
+            N (int): The number of samples to generate.
             
-        Returns
-        -------
-        torch.Tensor
-            Tensor of shape (N, *self.size) containing the samples
+        Returns:
+            torch.Tensor: A tensor of shape (N, *self.size) containing the
+            generated samples.
         """
         coeff = torch.randn(N, *self.size, 2, device=self.device)
 
@@ -109,30 +97,26 @@ class GaussianRF:
 
 
 def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
-    """
-    Solve the 2D Navier-Stokes equations in vorticity form
-    
-    Parameters
-    ----------
-    w0 : torch.Tensor
-        Initial vorticity field
-    f : torch.Tensor
-        Forcing term
-    visc : float
-        Viscosity (1/Reynolds number)
-    T : float
-        Final simulation time
-    delta_t : float, optional
-        Time step for numerical integration (default: 1e-4)
-    record_steps : int, optional
-        Number of snapshots to record (default: 1)
-        
-    Returns
-    -------
-    sol : torch.Tensor
-        Solution tensor of shape (*w0.size(), record_steps)
-    sol_t : torch.Tensor
-        Time points corresponding to recorded solutions
+    """Solves the 2D Navier-Stokes equations in vorticity form.
+
+    This function uses a pseudo-spectral method with a Crank-Nicolson
+    time-stepping scheme to solve the 2D Navier-Stokes equations.
+
+    Args:
+        w0 (torch.Tensor): The initial vorticity field.
+        f (torch.Tensor): The forcing term.
+        visc (float): The viscosity (1 / Reynolds number).
+        T (float): The final simulation time.
+        delta_t (float, optional): The time step for numerical integration.
+            Defaults to 1e-4.
+        record_steps (int, optional): The number of snapshots to record.
+            Defaults to 1.
+
+    Returns:
+        sol (torch.Tensor): The solution tensor of shape `(*w0.size(),
+            record_steps)`.
+        sol_t (torch.Tensor): The time points corresponding to the recorded
+            solutions.
     """
     # Grid size - must be power of 2
     N = w0.size()[-1]
@@ -143,10 +127,10 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
     # Number of steps to final time
     steps = math.ceil(T/delta_t)
 
-    # Подготовка FFT плоскости для вычислений
-    # Используем fft2 вместо rfft2 для сохранения полного спектра
+    # Prepare FFT plane for calculations
+    # Using fft2 instead of rfft2 to preserve the full spectrum
     w_h_complex = torch.fft.fft2(w0)
-    # Разделяем на реальную и мнимую части для совместимости с оригинальным кодом
+    # Separate into real and imaginary parts for compatibility with the original code
     w_h = torch.stack((w_h_complex.real, w_h_complex.imag), dim=-1)
 
     # Forcing to Fourier space
@@ -194,9 +178,9 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
         q[...,0] = -2*math.pi*k_y*q[...,1]
         q[...,1] = 2*math.pi*k_y*temp
         
-        # Преобразуем в комплексный тензор для нового API
+        # Convert to a complex tensor for the new API
         q_complex = torch.complex(q[..., 0], q[..., 1])
-        q = torch.fft.ifft2(q_complex).real  # Возвращаем только реальную часть
+        q = torch.fft.ifft2(q_complex).real  # Return only the real part
 
         # Velocity field in y-direction = -psi_x
         v = psi_h.clone()
@@ -243,7 +227,7 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
         if (j+1) % record_time == 0:
             # Solution in physical space
             w_h_complex = torch.complex(w_h[..., 0], w_h[..., 1])
-            w = torch.fft.ifft2(w_h_complex).real  # Возвращаем только реальную часть
+            w = torch.fft.ifft2(w_h_complex).real  # Return only the real part
 
             # Record solution and time
             sol[...,c] = w
@@ -255,26 +239,23 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
 
 
 def generate_navier_stokes_dataset(resolution=256, num_samples=20, batch_size=20, record_steps=200, save_path='ns_data.mat'):
-    """
-    Generate a dataset of Navier-Stokes solutions with random initial conditions
-    
-    Parameters
-    ----------
-    resolution : int, optional
-        Resolution of the spatial grid (default: 256)
-    num_samples : int, optional
-        Number of total samples to generate (default: 20)
-    batch_size : int, optional
-        Batch size for parallel computation (default: 20)
-    record_steps : int, optional
-        Number of temporal snapshots to record (default: 200)
-    save_path : str, optional
-        Path to save the generated data (default: 'ns_data.mat')
-        
-    Returns
-    -------
-    None
-        Data is saved to the specified file
+    """Generates a dataset of Navier-Stokes solutions.
+
+    This function generates solutions to the 2D Navier-Stokes equations with
+    random initial conditions drawn from a Gaussian Random Field. The
+    generated data is saved to a .mat file.
+
+    Args:
+        resolution (int, optional): The resolution of the spatial grid.
+            Defaults to 256.
+        num_samples (int, optional): The total number of samples to generate.
+            Defaults to 20.
+        batch_size (int, optional): The batch size for parallel computation.
+            Defaults to 20.
+        record_steps (int, optional): The number of temporal snapshots to record.
+            Defaults to 200.
+        save_path (str, optional): The path to save the generated data.
+            Defaults to 'ns_data.mat'.
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -288,7 +269,7 @@ def generate_navier_stokes_dataset(resolution=256, num_samples=20, batch_size=20
     t = torch.linspace(0, 1, s+1, device=device)
     t = t[0:-1]
     
-    # Добавляем параметр indexing='ij' для исправления предупреждения
+    # Add indexing='ij' to correct the warning
     X, Y = torch.meshgrid(t, t, indexing='ij')
     f = 0.1*(torch.sin(2*math.pi*(X + Y)) + torch.cos(2*math.pi*(X + Y)))
     
@@ -318,4 +299,3 @@ def generate_navier_stokes_dataset(resolution=256, num_samples=20, batch_size=20
     print(f"Saving data to {save_path}...")
     scipy.io.savemat(save_path, mdict={'a': a.cpu().numpy(), 'u': u.cpu().numpy(), 't': sol_t.cpu().numpy()})
     print(f"Data generation completed. Total time: {default_timer()-t0:.2f}s")
-

@@ -7,7 +7,6 @@ and comprehensive validation of the refactored TensorBasedTubeFiberPivotQRFactor
 
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition,
     TensorQRConfig

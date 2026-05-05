@@ -9,7 +9,6 @@ Stages:
  5. Report reconstruction metrics and visualise sensor placement.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Tuple

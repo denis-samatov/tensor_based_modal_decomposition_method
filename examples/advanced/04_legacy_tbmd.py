@@ -11,7 +11,6 @@ This script demonstrates how to work with the refactored
 4. Benchmark the threaded CPU strategy via `max_workers`.
 """
 
-from __future__ import annotations
 
 import time
 from dataclasses import dataclass

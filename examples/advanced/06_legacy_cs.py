@@ -12,7 +12,6 @@ This example script covers:
   3. Performing a lightweight grid-search over two hyper-parameters.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple

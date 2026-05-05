@@ -15,14 +15,11 @@ import numpy as np
 import torch
 from scipy.sparse import issparse
 import matplotlib.pyplot as plt
-from typing import Tuple
 
 # Import components to test
 from TBMD.core.geometry import (
     MeshGraphBuilder,
-    MeshGeometry,
-    GeometricWeightComputer,
-    estimate_characteristic_length
+    GeometricWeightComputer
 )
 from TBMD.core.decomposition import (
     GeometryAwareTuckerDecomposer,

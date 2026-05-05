@@ -348,6 +348,7 @@ class UniformDistributionManager:
         # Similar regions for efficient grouping
         self.similar_regions: Dict[tuple, List[Tuple[int, ...]]] = {}
         self.region_lookup: Dict[Tuple[int, ...], tuple] = {}
+        self.region_ids = torch.full(spatial_shape[:2], -1, dtype=torch.long, device=device) if len(spatial_shape) >= 2 else None
         
         # Initialize slice tracking for 3D+ tensors
         if len(spatial_shape) >= 3:
@@ -367,6 +368,8 @@ class UniformDistributionManager:
         # Use first temporal slice as pattern descriptor
         pattern_tensor = tensor[..., 0].detach().cpu().numpy()
         
+        pattern_to_id: Dict[tuple, int] = {}
+
         # Vectorized pattern computation
         for x in range(self.spatial_shape[0]):
             for y in range(self.spatial_shape[1]):
@@ -376,6 +379,20 @@ class UniformDistributionManager:
                     
                     self.similar_regions.setdefault(pattern, []).append((x, y))
                     self.region_lookup[(x, y)] = pattern
+                    if pattern not in pattern_to_id:
+                        pattern_to_id[pattern] = len(pattern_to_id)
+                    if self.region_ids is not None:
+                        self.region_ids[x, y] = pattern_to_id[pattern]
+
+        if self.region_ids is not None:
+            self.similar_regions = {
+                pattern_to_id[pattern]: torch.tensor(coords, dtype=torch.long, device=self.device)
+                for pattern, coords in self.similar_regions.items()
+            }
+            self.region_lookup = {
+                coords: pattern_to_id[pattern]
+                for coords, pattern in self.region_lookup.items()
+            }
     
     def update_sensor_placement(self, pivot: Tuple[int, ...]) -> None:
         """Update distribution tracking after sensor placement."""
@@ -394,16 +411,18 @@ class UniformDistributionManager:
             return
         
         x, y = pivot[0], pivot[1]
-        pattern = self.region_lookup.get((x, y))
+        region_id = self.region_lookup.get((x, y))
         
-        if pattern and pattern in self.similar_regions:
-            similar_positions = self.similar_regions[pattern]
+        if region_id is not None and region_id in self.similar_regions:
+            similar_positions = self.similar_regions[region_id]
             
             # ИЗМЕНЕНИЕ: блокировать только ближайшие позиции
             blocked_count = 0
             max_blocks_per_region = max(1, len(similar_positions) // 4)  # Максимум 25%
             
-            for px, py in similar_positions:
+            for row in similar_positions:
+                px = int(row[0].item()) if hasattr(row[0], "item") else int(row[0])
+                py = int(row[1].item()) if hasattr(row[1], "item") else int(row[1])
                 if (px, py) != (x, y) and blocked_count < max_blocks_per_region:
                     # Блокировать только тот же z-уровень
                     if len(pivot) >= 3:
@@ -887,3 +906,4 @@ class TensorTubeQRDecomposition:
 
 # Backward compatibility alias
 TensorBasedTubeFiberPivotQRFactorization = TensorTubeQRDecomposition
+TensorQRConfig = SensorPlacementConfig

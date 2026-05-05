@@ -1,45 +1,128 @@
 """
-TBMD‑CS (Algorithm 3) — Core + Extensions
-=========================================
-
-Idea
-----
-The **core** strictly follows formulas (32–36); everything else is pushed into pluggable
-strategies: linear solver choice, δ update policy, stopping policy, and optional logging/metrics.
-
-Module Layout
--------------
-- ``CoreCompressiveSensingConfig``  — minimal hyperparameters for the algorithm core.
-- ``ExtensionCompressiveSensingConfig`` — convenient toggles for "extensions" (not part of the strict algorithm).
-- ``LinearSolver`` API  — abstraction over solving (Aᵀ A + δI) x = rhs.
-- ``DeltaPolicy`` API   — strategy for updating δ.
-- ``StopPolicy`` API    — strategy for termination (tol, relative drop, etc.).
-- ``MetricsHook``       — optional metric collection / logging callback.
-- ``TensorCompressiveSensingCore`` — class implementing ADMM based only on the provided strategies.
-
-Dependencies: ``torch``, ``numpy``, ``TBMD.utils.tbmd_utils`` (``get_torch_device``, ``to_torch_tensor``).
+# Tensor-based Compressive Sensing (TBMD‑CS) — *revised implementation*
+# ====================================================================
+# Version : 2.1  (2025‑06‑26)
+#
+# This version integrates the existing utility helpers `get_torch_device` and
+# `to_torch_tensor` from *TBMD.utils.utils* instead of redefining similar
+# functions locally.
+#
+# Key points vs. v2.0
+# -------------------
+# 1. **Removed duplicate helpers** `_torch_device`, `_to_tensor` ➜ now using the
+#    canonical versions exported by the TBMD utilities package.
+# 2. **Minor typing touch‑ups** so that passing `dtype=None` forwards the default
+#    chosen by `to_torch_tensor` (float32).
+# 3. **Imports cleaned**; module header, doc‑strings, and copyright
+#    notice retained.
+#
+# —————————————————————————————————————————————————————————————————————————
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union, Protocol
+import logging
 import time
-import torch
-import numpy as np
+import warnings
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
 
-from TBMD.core.utils.misc import get_torch_device, to_torch_tensor
+import numpy as np
+import torch
+from ..utils.misc import get_torch_device, to_torch_tensor
+
+__all__ = [
+    "CompressiveSensingConfig",
+    "ExtensionCompressiveSensingConfig",
+    "CompressiveSensingMetrics",
+    "TensorCompressiveSensing",
+    "LinearSolver",
+    "DeltaPolicy",
+    "StopPolicy",
+    "MetricsHook",
+]
 
 
 # ------------------------------------------------------------------
 # 1. Configs
 # ------------------------------------------------------------------
 
-from TBMD.config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
+
+@dataclass
+class CompressiveSensingConfig:
+    """Core hyperparameters for the TBMD-CS algorithm.
+
+    Attributes:
+        max_iter (int): The maximum number of ADMM iterations.
+        tol (float): The termination threshold for the maximum of the primal
+            and dual residuals.
+        epsilon_l1 (float): The L1 shrinkage parameter for the soft-thresholding
+            step.
+        delta_init (float): The initial value of the ADMM penalty parameter.
+        delta_max (float): The maximum cap for the penalty parameter.
+        relax_lambda (float): The over-relaxation mixing coefficient for `x`
+            and `d`. Must be in the range (0, 1).
+        device (str): The torch device to use for computations.
+        dtype (torch.dtype): The torch dtype for tensors in the algorithm.
+    """
+
+    max_iter: int = 1000
+    tol: float = 1e-4  # stop criterion on max(primal, dual)
+    epsilon_l1: float = 1e-2  # ε in (28)
+    delta_init: float = 1.0  # δ₀
+    delta_max: float = 1.0  # δ_max (36)
+    relax_lambda: float = 0.95  # mixing x and d
+    device: str = "cpu"
+    dtype: torch.dtype = torch.float32
+
+    def __post_init__(self) -> None:
+        """Validate parameter ranges right after dataclass construction."""
+        if not (0 < self.relax_lambda < 1):
+            raise ValueError("relax_lambda ∈ (0,1)")
+        if self.max_iter <= 0:
+            raise ValueError("max_iter > 0")
+        if self.epsilon_l1 <= 0:
+            raise ValueError("epsilon_l1 > 0")
+        if self.delta_init <= 0 or self.delta_max <= 0:
+            raise ValueError("delta values must be > 0")
+
+
+@dataclass
+class ExtensionCompressiveSensingConfig:
+    """Configuration for extended features of the TBMD-CS algorithm.
+
+    Attributes:
+        solver (str): The linear system solver to use in the x-update. Can be
+            'cholesky', 'direct', or 'svd'.
+        reg (float): A small diagonal regularization value for numerical
+            stability.
+        delta_policy (str): The strategy for adapting the penalty parameter
+            during iterations ('boyd' or 'cap_only').
+        stop_policy (str): The termination rule ('residual', 'relative', or
+            'both').
+        relative_window (int): The window size for the relative stopping rule.
+        relative_drop (float): The required relative decrease for the relative
+            stopping rule.
+        collect_history (bool): Whether to store residual history.
+    """
+
+    # Linear solver
+    solver: str = "cholesky"  # cholesky | direct | svd
+    reg: float = 1e-8  # diagonal regularization
+    # δ policy
+    delta_policy: str = "boyd"  # boyd | cap_only
+    # Stop conditions
+    stop_policy: str = "residual"  # residual | relative | both
+    relative_window: int = 5  # window for relative criterion
+    relative_drop: float = 1e-3  # required relative drop
+    # Metrics/logging
+    collect_history: bool = True
 
 
 # ------------------------------------------------------------------
 # 2. Strategy Protocols (interfaces)
 # ------------------------------------------------------------------
+
 
 class LinearSolver(Protocol):
     """Callable signature for linear solvers.
@@ -47,7 +130,8 @@ class LinearSolver(Protocol):
     Should solve (lhs) x = rhs and return x.
     """
 
-    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor: ...
+    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+        ...
 
 
 class DeltaPolicy(Protocol):
@@ -61,15 +145,24 @@ class DeltaPolicy(Protocol):
         Scaling factor applied to the dual variable p when δ changes.
     """
 
-    def __call__(self, delta: float, primal: float, dual: float, delta_max: float) -> Tuple[float, float]: ...
+    def __call__(
+        self, delta: float, primal: float, dual: float, delta_max: float
+    ) -> Tuple[float, float]:
+        ...
 
 
 class StopPolicy(Protocol):
     """Callable signature for stopping policies."""
 
-    def __call__(self, it: int, primal: float, dual: float,
-                 cfg: CompressiveSensingConfig,
-                 history: List[float]) -> bool: ...
+    def __call__(
+        self,
+        it: int,
+        primal: float,
+        dual: float,
+        cfg: CompressiveSensingConfig,
+        history: List[float],
+    ) -> bool:
+        ...
 
 
 class MetricsHook(Protocol):
@@ -89,104 +182,207 @@ class MetricsHook(Protocol):
         Current δ value.
     """
 
-    def __call__(self, it: int, primal: float, dual: float, obj: float, delta: float) -> None: ...
+    def __call__(
+        self, it: int, primal: float, dual: float, obj: float, delta: float
+    ) -> None:
+        ...
 
 
 # ------------------------------------------------------------------
 # 3. Default strategy implementations
 # ------------------------------------------------------------------
 
-def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
-    """Factory for a ``LinearSolver`` based on ``cfg.solver``.
 
-    Returns a callable that solves (lhs)x = rhs. Falls back to SVD if the chosen
-    solver fails with a ``LinAlgError``.
+def _svd_solve(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+    """Pseudo‑inverse via SVD with thresholding of small singular values."""
+    U, S, Vh = torch.linalg.svd(lhs, full_matrices=False)
+    eps = torch.finfo(S.dtype).eps
+    thresh = eps * max(lhs.shape) * S.max()
+    S_inv = torch.where(S > thresh, S.reciprocal(), torch.zeros_like(S))
+    return Vh.T @ (S_inv.unsqueeze(1) * (U.T @ rhs))
+
+
+class CholeskyCachedSolver:
+    """A linear solver that caches the Cholesky factorization.
+
+    It updates the factorization only when `delta` changes.
     """
-    reg = cfg.reg
 
-    def cholesky(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        """Cholesky factorization with diagonal regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+    def __init__(self, reg: float, svd_fallback_fn: Callable = _svd_solve):
+        self.reg = reg
+        self.svd_fallback = svd_fallback_fn
+        self.L: Optional[torch.Tensor] = None
+        self.AtA: Optional[torch.Tensor] = None
+        self.delta: Optional[float] = None
+
+    def update(self, AtA: torch.Tensor, delta: float) -> None:
+        """Update the cached factorization for the new AtA and delta."""
+        self.AtA = AtA
+        self.delta = delta
+        lhs_reg = AtA.clone()
+        # Add to diagonal: delta * I + reg * I
+        lhs_reg.diagonal().add_(delta + self.reg)
+        try:
+            self.L = torch.linalg.cholesky(lhs_reg)
+        except torch.linalg.LinAlgError:
+            self.L = None
+
+    def solve(self, rhs: torch.Tensor) -> torch.Tensor:
+        """Solve for rhs using the cached factorization (or fallback)."""
+        if self.L is not None:
+            return torch.cholesky_solve(rhs, self.L, upper=False)
+        else:
+            # Fallback to SVD using stored AtA and delta
+            if self.AtA is None or self.delta is None:
+                raise RuntimeError("Solver not updated before solve")
+            lhs_reg = self.AtA + (self.delta + self.reg) * torch.eye(
+                self.AtA.shape[0], device=self.AtA.device, dtype=self.AtA.dtype
+            )
+            return self.svd_fallback(lhs_reg, rhs)
+
+    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
+        """Stateless solve (compatible with LinearSolver protocol)."""
+        if not hasattr(self, "eye_cache"):
+            self.eye_cache = {}
+
+        key = (lhs.shape[0], lhs.device, lhs.dtype)
+        if key not in self.eye_cache:
+            self.eye_cache[key] = self.reg * torch.eye(key[0], device=key[1], dtype=key[2])
+
+        lhs_reg = lhs + self.eye_cache[key]
         try:
             L = torch.linalg.cholesky(lhs_reg)
             return torch.cholesky_solve(rhs, L, upper=False)
         except torch.linalg.LinAlgError:
-            return svd(lhs_reg, rhs)
+            return self.svd_fallback(lhs_reg, rhs)
+
+
+def make_linear_solver(cfg: ExtensionCompressiveSensingConfig) -> LinearSolver:
+    """Creates a factory for a `LinearSolver` based on `cfg.solver`.
+
+    Args:
+        cfg (ExtensionCompressiveSensingConfig): The extended configuration object.
+
+    Returns:
+        LinearSolver: A callable that solves (lhs)x = rhs. Falls back to SVD if
+        the chosen solver fails with a `LinAlgError`.
+    """
+    reg = cfg.reg
+
+    if cfg.solver == "cholesky":
+        return CholeskyCachedSolver(reg)
+
+    eye_cache = {}
 
     def direct(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
         """Direct linear solve (LU) with regularization and SVD fallback."""
-        lhs_reg = lhs + reg * torch.eye(lhs.shape[0], device=lhs.device, dtype=lhs.dtype)
+        key = (lhs.shape[0], lhs.device, lhs.dtype)
+        if key not in eye_cache:
+            eye_cache[key] = reg * torch.eye(key[0], device=key[1], dtype=key[2])
+
+        lhs_reg = lhs + eye_cache[key]
         try:
             return torch.linalg.solve(lhs_reg, rhs)
         except torch.linalg.LinAlgError:
-            return svd(lhs_reg, rhs)
+            return _svd_solve(lhs_reg, rhs)
 
-    def svd(lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        """Pseudo‑inverse via SVD with thresholding of small singular values."""
-        U, S, Vh = torch.linalg.svd(lhs, full_matrices=False)
-        eps = torch.finfo(S.dtype).eps
-        thresh = eps * max(lhs.shape) * S.max()
-        S_inv = torch.where(S > thresh, S.reciprocal(), torch.zeros_like(S))
-        return Vh.T @ (S_inv.unsqueeze(1) * (U.T @ rhs))
+    if cfg.solver == "direct":
+        return direct
 
-    return {"cholesky": cholesky, "direct": direct, "svd": svd}[cfg.solver]
+    # Fallback to SVD solver
+    return _svd_solve
 
 
 def make_delta_policy(name: str) -> DeltaPolicy:
-    """Factory for δ update rules.
+    """Creates a factory for delta update rules.
 
-    Available
-    ---------
-    "boyd"
-        If primal >> dual, increase δ and scale p downward. If dual >> primal, decrease δ and scale p upward.
-    "cap_only"
-        Keep δ unchanged (only cap is enforced externally).
+    Args:
+        name (str): The name of the policy. Can be 'boyd' or 'cap_only'.
+
+    Returns:
+        DeltaPolicy: A callable that implements the specified delta update rule.
     """
     if name == "boyd":
-        def boyd(delta: float, primal: float, dual: float, delta_max: float) -> Tuple[float, float]:
+
+        def boyd(
+            delta: float, primal: float, dual: float, delta_max: float
+        ) -> Tuple[float, float]:
             if primal > 10 * dual:
                 return min(delta * 2, delta_max), 0.5  # p /= 2
             if dual > 10 * primal:
-                return max(delta / 2, 1e-12), 2.0      # p *= 2
+                return max(delta / 2, 1e-12), 2.0  # p *= 2
             return min(delta, delta_max), 1.0
+
         return boyd
     else:  # cap_only
+
         def cap_only(delta: float, *_args) -> Tuple[float, float]:
             return delta, 1.0
+
         return cap_only
 
 
 def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
-    """Factory for stopping rules based on ``ext_cfg.stop_policy``."""
+    """Creates a factory for stopping rules based on `ext_cfg.stop_policy`.
+
+    Args:
+        ext_cfg (ExtensionCompressiveSensingConfig): The extended configuration
+            object.
+
+    Returns:
+        StopPolicy: A callable that implements the specified stopping rule.
+    """
     if ext_cfg.stop_policy == "residual":
-        def residual_stop(it: int, primal: float, dual: float,
-                          core_cfg: CompressiveSensingConfig,
-                          history: List[float]) -> bool:
+
+        def residual_stop(
+            it: int,
+            primal: float,
+            dual: float,
+            core_cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
             return max(primal, dual) < core_cfg.tol
+
         return residual_stop
     elif ext_cfg.stop_policy == "relative":
-        def relative_stop(it: int, _p: float, _d: float,
-                          _cfg: CompressiveSensingConfig,
-                          history: List[float]) -> bool:
-            # Require history collection for relative stopping
-            if not history or len(history) < ext_cfg.relative_window:
-                return False
+
+        def relative_stop(
+            it: int,
+            _p: float,
+            _d: float,
+            _cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
             if it <= ext_cfg.relative_window:
                 return False
             before = history[-ext_cfg.relative_window]
             now = history[-1]
             return (before - now) / max(before, 1e-12) < ext_cfg.relative_drop
+
         return relative_stop
     else:  # both
-        residual = make_stop_policy(ExtensionCompressiveSensingConfig(stop_policy="residual"))
-        relative = make_stop_policy(ExtensionCompressiveSensingConfig(stop_policy="relative",
-                                                                      relative_window=ext_cfg.relative_window,
-                                                                      relative_drop=ext_cfg.relative_drop))
+        residual = make_stop_policy(
+            ExtensionCompressiveSensingConfig(stop_policy="residual")
+        )
+        relative = make_stop_policy(
+            ExtensionCompressiveSensingConfig(
+                stop_policy="relative",
+                relative_window=ext_cfg.relative_window,
+                relative_drop=ext_cfg.relative_drop,
+            )
+        )
 
-        def both(it: int, p: float, d: float,
-                 cfg: CompressiveSensingConfig,
-                 history: List[float]) -> bool:
-            return residual(it, p, d, cfg, history) or relative(it, p, d, cfg, history)
+        def both(
+            it: int,
+            p: float,
+            d: float,
+            cfg: CompressiveSensingConfig,
+            history: List[float],
+        ) -> bool:
+            return residual(it, p, d, cfg, history) or relative(
+                it, p, d, cfg, history
+            )
+
         return both
 
 
@@ -199,28 +395,21 @@ def noop_metrics_hook(*_args, **_kwargs) -> None:
 # 4. Metrics container
 # ------------------------------------------------------------------
 
+
 @dataclass
 class CompressiveSensingMetrics:
-    """Summary statistics returned after ``solve``.
+    """Summary statistics returned after `solve`.
 
-    Attributes
-    ----------
-    iterations : int
-        Number of iterations actually performed.
-    converged : bool
-        Whether a stopping policy triggered before ``max_iter``.
-    primal_residual : float
-        Final primal residual norm.
-    dual_residual : float
-        Final dual residual norm.
-    objective : float
-        Final objective value.
-    delta_final : float
-        Final δ value.
-    history : list[float]
-        Residual history if ``collect_history`` is True; empty otherwise.
-    time_sec : float
-        Wall-clock time for ``solve`` in seconds.
+    Attributes:
+        iterations (int): The number of iterations performed.
+        converged (bool): Whether the algorithm converged before reaching the
+            maximum number of iterations.
+        primal_residual (float): The final primal residual norm.
+        dual_residual (float): The final dual residual norm.
+        objective (float): The final objective value.
+        delta_final (float): The final value of the penalty parameter.
+        history (List[float]): The residual history, if collected.
+        time_sec (float): The wall-clock time for the `solve` method, in seconds.
     """
 
     iterations: int
@@ -237,32 +426,32 @@ class CompressiveSensingMetrics:
 # 5. Algorithm Core
 # ------------------------------------------------------------------
 
+
 class TensorCompressiveSensing:
-    """ADMM-based solver for tensor compressive sensing (TBMD‑CS core).
+    """An ADMM-based solver for tensor compressive sensing.
 
-    The class is agnostic to most implementation details through dependency
-    injection of strategies (solver, δ policy, stopping policy, hooks).
+    This class provides a flexible implementation of the TBMD-CS core algorithm,
+    allowing for dependency injection of strategies for solving, updating
+    parameters, and stopping.
 
-    Parameters
-    ----------
-    A : (… , W) array_like
-        Forward model flattened along the last axis. Spatial dims must match ``P`` and ``Y``.
-    P : bool array_like, shape = A.shape[:-1]
-        Sensor mask. Only entries with ``True`` are used.
-    Y : array_like, shape = A.shape[:-1]
-        Measurements corresponding to A.
-    core_cfg : CoreCompressiveSensingConfig, optional
-        Core algorithm configuration.
-    ext_cfg : ExtensionCompressiveSensingConfig, optional
-        Extensions configuration.
-    solver : LinearSolver, optional
-        Custom linear solver. If ``None``, a solver is built from ``ext_cfg``.
-    delta_policy : DeltaPolicy, optional
-        Custom δ policy. If ``None``, created from ``ext_cfg``.
-    stop_policy : StopPolicy, optional
-        Custom stop policy. If ``None``, created from ``ext_cfg``.
-    hook : MetricsHook, optional
-        Callback executed each iteration.
+    Args:
+        A (Union[np.ndarray, torch.Tensor]): The forward model, flattened
+            along the last axis.
+        P (Union[np.ndarray, torch.Tensor]): The sensor mask, with `True` for
+            active sensors.
+        Y (Union[np.ndarray, torch.Tensor]): The measurements corresponding to
+            `A`.
+        core_cfg (Optional[CompressiveSensingConfig]): The core algorithm
+            configuration.
+        ext_cfg (Optional[ExtensionCompressiveSensingConfig]): The extended
+            features configuration.
+        solver (Optional[LinearSolver]): A custom linear solver. If `None`, a
+            solver is created from `ext_cfg`.
+        delta_policy (Optional[DeltaPolicy]): A custom delta policy. If
+            `None`, a policy is created from `ext_cfg`.
+        stop_policy (Optional[StopPolicy]): A custom stop policy. If `None`, a
+            policy is created from `ext_cfg`.
+        hook (Optional[MetricsHook]): A callback executed at each iteration.
     """
 
     def __init__(
@@ -298,8 +487,8 @@ class TensorCompressiveSensing:
 
         A_flat = A_t.reshape(-1, W)
         Y_flat = Y_t.reshape(-1, 1)
-        self.As = A_flat[mask]       # Ns×W
-        self.Ys = Y_flat[mask]       # Ns×1
+        self.As = A_flat[mask]  # Ns×W
+        self.Ys = Y_flat[mask]  # Ns×1
 
         # --- precomputations ---
         self.W = W
@@ -323,6 +512,7 @@ class TensorCompressiveSensing:
         self.hook = hook or noop_metrics_hook
 
         self.history: List[float] = []
+        self._cached_delta = -1.0
 
     def reset(self) -> None:
         """Reset ADMM variables for a fresh solve.
@@ -362,7 +552,9 @@ class TensorCompressiveSensing:
         Objective: 0.5‖Ax−y‖² + ε‖d‖₁
         """
         res = self.As @ self.x - self.Ys
-        return 0.5 * torch.norm(res).pow(2).item() + self.cfg.epsilon_l1 * torch.norm(self.d, p=1).item()
+        return 0.5 * torch.norm(res).pow(2).item() + self.cfg.epsilon_l1 * torch.norm(
+            self.d, p=1
+        ).item()
 
     def _admm_step(self) -> Tuple[float, float, float]:
         """Perform one ADMM iteration and return residuals & objective.
@@ -378,9 +570,16 @@ class TensorCompressiveSensing:
         """
         cfg = self.cfg
         # x‑update (32)
-        lhs = self.AtA + self.delta * self.I
         rhs = self.AtY + self.delta * (self.d - self.p)
-        self.x = self.solver(lhs, rhs)
+
+        if hasattr(self.solver, "update") and hasattr(self.solver, "solve"):
+            if self.delta != self._cached_delta:
+                self.solver.update(self.AtA, self.delta)
+                self._cached_delta = self.delta
+            self.x = self.solver.solve(rhs)
+        else:
+            lhs = self.AtA + self.delta * self.I
+            self.x = self.solver(lhs, rhs)
 
         # relaxation
         x_hat = cfg.relax_lambda * self.x + (1 - cfg.relax_lambda) * self.d
@@ -397,7 +596,9 @@ class TensorCompressiveSensing:
         dual = torch.norm(self.delta * (self.d - self._d_prev)).item()
 
         # δ‑update
-        new_delta, p_scale = self.delta_policy(self.delta, primal, dual, self.cfg.delta_max)
+        new_delta, p_scale = self.delta_policy(
+            self.delta, primal, dual, self.cfg.delta_max
+        )
         if new_delta != self.delta:
             self.delta = new_delta
             if p_scale != 1.0:
@@ -408,14 +609,13 @@ class TensorCompressiveSensing:
 
     # --- public API ------------------------------------------------
     def solve(self) -> Tuple[torch.Tensor, CompressiveSensingMetrics]:
-        """Run ADMM until convergence or ``max_iter``.
+        """Runs the ADMM algorithm until convergence or `max_iter`.
 
-        Returns
-        -------
-        x_vec : torch.Tensor, shape = (W,)
-            Recovered coefficients (detached CPU tensor).
-        metrics : CompressiveSensingMetrics
-            Summary metrics and diagnostics.
+        Returns:
+            Tuple[torch.Tensor, CompressiveSensingMetrics]: A tuple containing:
+                - x_vec (torch.Tensor): The recovered coefficients, with shape (W,).
+                - metrics (CompressiveSensingMetrics): Summary metrics and
+                  diagnostics.
         """
         start = time.perf_counter()
         converged = False
@@ -444,17 +644,17 @@ class TensorCompressiveSensing:
         return x_vec, metrics
 
     def reconstruction_error(self, x: Union[np.ndarray, torch.Tensor]) -> float:
-        """Relative reconstruction error w.r.t. the observed measurements.
+        """Calculates the relative reconstruction error.
 
-        Parameters
-        ----------
-        x : array_like
-            Ground-truth or reference vector of shape (W,) or (W, 1).
+        This method computes the error with respect to the observed
+        measurements.
 
-        Returns
-        -------
-        float
-            ‖A_s x − y_s‖ / ‖y_s‖, where the subscript ``s`` denotes rows selected by mask ``P``.
+        Args:
+            x (Union[np.ndarray, torch.Tensor]): The ground-truth or reference
+                vector, with shape (W,) or (W, 1).
+
+        Returns:
+            float: The relative reconstruction error.
         """
         x_t = to_torch_tensor(x, device=self.device, dtype=self.dtype).view(-1, 1)
         res = self.As @ x_t - self.Ys

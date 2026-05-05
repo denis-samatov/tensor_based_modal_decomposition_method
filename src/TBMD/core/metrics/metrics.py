@@ -14,25 +14,38 @@ The code supports **NumPy** arrays and **PyTorch** tensors, arbitrary spatial
 dimensions (2-D, 3-D, …) and optional foreground masks.
 """
 
-import math
-import warnings
 from typing import Optional, Tuple, Union
+
+import logging
 
 import numpy as np
 import torch
 from skimage.metrics import structural_similarity as _ssim
 
 
+logger = logging.getLogger(__name__)
+
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
 def _to_numpy(a: ArrayLike) -> np.ndarray:
-    """Detach/clone to CPU if *a* is a torch tensor, else np.asarray."""
+    """Detaches a torch tensor and converts it to a NumPy array.
+
+    Args:
+        a (ArrayLike): The array-like object to convert.
+
+    Returns:
+        np.ndarray: The converted NumPy array.
+    """
     if torch.is_tensor(a):
         a = a.detach().cpu()
     return np.asarray(a)
 
 def _supports_mask() -> bool:
-    """Return True if the installed skimage.ssims supports the *mask* keyword."""
+    """Checks if the installed `skimage.ssims` supports the `mask` keyword.
+
+    Returns:
+        bool: True if the `mask` keyword is supported, False otherwise.
+    """
     from inspect import signature
 
     return "mask" in signature(_ssim).parameters
@@ -45,30 +58,29 @@ def compute_metrics(
     mask: Optional[np.ndarray] = None,
     max_val: float | None = None,
 ) -> Tuple[float, float, float, float]:
-    """
-    Parameters
-    ----------
-    A_rec, A_ref
-        Reconstructed and reference volumes (any ndim ≥ 2).  NumPy or PyTorch.
-    background_value
-        Intensity value that represents background.  Voxels equal to this
-        value are excluded **unless** an explicit *mask* is supplied.
-    mask
-        Boolean array selecting the *foreground*; overrides *background_value*.
-    max_val
-        Maximum possible pixel / voxel value used for PSNR.  If ``None``,
-        defaults to ``A_ref.max() – A_ref.min()`` (data range).
+    """Computes quality metrics for reconstructed volumes.
 
-    Returns
-    -------
-    err_norm  : float
-        Normalised Frobenius error (eq. 40, foreground only).
-    mse       : float
-        Mean-squared error on the foreground.
-    ssim_val  : float
-        Structural similarity index (mean across channels if any).
-    psnr      : float
-        PSNR [dB] on the foreground region.
+    This function calculates the normalized Frobenius error, mean-squared
+    error, structural similarity index (SSIM), and peak signal-to-noise ratio
+    (PSNR) for a reconstructed volume, with optional masking of background
+    voxels.
+
+    Args:
+        A_rec (ArrayLike): The reconstructed volume, as a NumPy array or
+            PyTorch tensor.
+        A_ref (ArrayLike): The reference volume, as a NumPy array or PyTorch
+            tensor.
+        background_value (Optional[float]): The intensity value that
+            represents the background. Voxels with this value are excluded
+            unless an explicit `mask` is supplied. Defaults to None.
+        mask (Optional[np.ndarray]): A boolean array selecting the foreground.
+            Overrides `background_value`. Defaults to None.
+        max_val (Optional[float]): The maximum possible pixel/voxel value,
+            used for PSNR. If None, defaults to the data range of `A_ref`.
+
+    Returns:
+        Tuple[float, float, float, float]: A tuple containing the normalized
+        Frobenius error, mean-squared error, SSIM, and PSNR.
     """
     # -- convert & validate -------------------------------------------------
     A_rec = _to_numpy(A_rec)
@@ -97,7 +109,7 @@ def compute_metrics(
 
     mse = float(np.mean(diff_fg**2))
     denom = float(np.sum(ref_fg**2))
-    err_norm = math.inf if denom == 0 else float(np.sqrt(np.sum(diff_fg**2)) / np.sqrt(denom))
+    err_norm = np.inf if denom == 0 else float(np.sqrt(np.sum(diff_fg**2)) / np.sqrt(denom))
 
     # -- SSIM ---------------------------------------------------------------
     C1_paper, C2_paper = 0.012, 0.032          # (K₁L)² and (K₂L)² in eq. 41
@@ -105,10 +117,13 @@ def compute_metrics(
     if data_range < 1e-12:
         ssim_val = 1.0 if np.allclose(A_rec, A_ref) else 0.0
     else:
-        K1 = math.sqrt(C1_paper) / data_range
-        K2 = math.sqrt(C2_paper) / data_range
+        K1 = np.sqrt(C1_paper) / data_range
+        K2 = np.sqrt(C2_paper) / data_range
 
         if A_ref.ndim == 2:                        # single-channel
+            win_size = min(7, min(A_ref.shape))
+            if win_size % 2 == 0:
+                win_size -= 1
             ssim_val = _ssim(
                 A_ref,
                 A_rec,
@@ -118,9 +133,10 @@ def compute_metrics(
                 gaussian_weights=True,
                 channel_axis=None,
                 mask=mask if _supports_mask() else None,  # falls back gracefully
+                win_size=win_size,
             )
             if not _supports_mask() and mask is not None:
-                warnings.warn("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
+                logger.warning("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
         else:                                      # channel-last ≥ 3-D
             ssim_vals = []
             for c in range(A_ref.shape[-1]):
@@ -141,13 +157,13 @@ def compute_metrics(
 
     # -- PSNR ---------------------------------------------------------------
     if mse == 0:
-        psnr = math.inf
+        psnr = np.inf
     else:
         max_I = float(max_val) if max_val is not None else data_range
         if max_I < 1e-12:
             psnr = 0.0
         else:
-            psnr = float(20 * math.log10(max_I / math.sqrt(mse)))
+            psnr = float(20 * np.log10(max_I / np.sqrt(mse)))
 
     return err_norm, mse, ssim_val, psnr
 

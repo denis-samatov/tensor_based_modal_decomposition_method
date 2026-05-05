@@ -83,7 +83,9 @@ def visualize_tensor(
                 if current_zmin is None:
                     # Calculate min non-zero value, default to 0 if all zero
                     non_zero_frame = frame[frame != 0]
-                    if non_zero_frame.size > 0:
+                    if hasattr(non_zero_frame, 'numel') and non_zero_frame.numel() > 0:
+                        current_zmin = non_zero_frame.min()
+                    elif not hasattr(non_zero_frame, 'numel') and non_zero_frame.size > 0:
                         current_zmin = non_zero_frame.min()
                     else:
                          current_zmin = 0 # Frame is all zeros
@@ -139,7 +141,8 @@ def visualize_tensor(
                  if tensor.ndim == 3:
                      cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Pressure, psi")
                      cbar.ax.tick_params(labelsize=16)
-                     cbar.set_label("Pressure, psi", size=18)                 # else: # Optional: add colorbar logic for 4D if needed
+                     cbar.set_label("Pressure, psi", size=18)
+                 # else: # Optional: add colorbar logic for 4D if needed
                  #    pass 
         ax.axis("off")
 

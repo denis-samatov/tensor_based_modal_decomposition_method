@@ -21,8 +21,7 @@ from typing import Union, List, Dict, Optional, Tuple, TypeVar, Generic, Protoco
 from enum import Enum
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-
-from ...core.utils.misc import to_torch_tensor, get_torch_device
+from TBMD.core.utils.misc import to_torch_tensor, get_torch_device
 
 # Create logger
 logger = logging.getLogger(__name__)
@@ -31,29 +30,28 @@ logger = logging.getLogger(__name__)
 TensorType = TypeVar('TensorType', bound=torch.Tensor)
 
 class TensorLike(Protocol):
-    """Protocol for tensor-like objects"""
+    """A protocol for tensor-like objects."""
     shape: Tuple[int, ...]
     
     def norm(self) -> float:
-        """Compute tensor norm"""
+        """Compute the tensor norm."""
         ...
 
 # Custom exceptions
 class TensorDecompositionError(Exception):
-    """Base exception for tensor decomposition errors"""
-    pass
+    """A base exception for tensor decomposition errors."""
+
 
 class InvalidRankError(TensorDecompositionError):
-    """Invalid rank values provided"""
-    pass
+    """An exception for invalid rank values."""
+
 
 class StateError(TensorDecompositionError):
-    """Invalid state for operation"""
-    pass
+    """An exception for invalid state for an operation."""
+
 
 class ValidationError(TensorDecompositionError):
-    """Input validation failed"""
-    pass
+    """An exception for a failed input validation."""
 
 # Constants
 DEFAULT_EPSILON = 1e-2
@@ -63,42 +61,40 @@ from TBMD.config import DecompositionConfig
 
 # State management
 class DecomposerState(Enum):
-    """States of the decomposer"""
+    """The states of the decomposer."""
     INITIALIZED = "initialized"
     DECOMPOSED = "decomposed" 
     RECONSTRUCTED = "reconstructed"
 
 @dataclass
 class DecompositionResult:
-    """Result of Tucker decomposition"""
+    """The result of a Tucker decomposition."""
     core: torch.Tensor
     factors: List[torch.Tensor]
     
 @dataclass
 class ReconstructionResult:
-    """Result of tensor reconstruction"""
+    """The result of a tensor reconstruction."""
     tensor: torch.Tensor
     error: float
 
 # Processing strategies
 class ProcessingStrategy(ABC):
-    """Abstract base class for processing strategies"""
+    """An abstract base class for processing strategies."""
     
     @abstractmethod
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
-        """Process decomposition for multiple tensors"""
-        pass
-    
+        """Process the decomposition for multiple tensors."""
+
     @abstractmethod
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
-        """Process reconstruction for multiple tensors"""
-        pass
+        """Process the reconstruction for multiple tensors."""
 
 class CPUStrategy(ProcessingStrategy):
-    """CPU-based parallel processing strategy"""
+    """A CPU-based parallel processing strategy."""
     
     def __init__(self, max_workers: Optional[int] = None):
         # По умолчанию: min(8, cpu_count)
@@ -106,7 +102,17 @@ class CPUStrategy(ProcessingStrategy):
     
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
-        """Process decomposition using ThreadPoolExecutor"""
+        """Processes the decomposition for multiple tensors.
+
+        Args:
+            tensors (Dict[str, torch.Tensor]): A dictionary of tensors to
+                decompose.
+            decomposer_func: The function to use for decomposition.
+
+        Returns:
+            Dict[str, DecompositionResult]: A dictionary of decomposition
+            results.
+        """
         results = {}
         
         def decompose_single(item: Tuple[str, torch.Tensor]) -> Tuple[str, DecompositionResult]:
@@ -130,16 +136,54 @@ class CPUStrategy(ProcessingStrategy):
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
-        """Process reconstruction using ThreadPoolExecutor"""
+        """Processes the reconstruction for multiple tensors.
+
+        Args:
+            cores (Dict[str, torch.Tensor]): A dictionary of core tensors.
+            factors (Dict[str, List[torch.Tensor]]): A dictionary of factor
+                matrices.
+            original_tensors (Dict[str, torch.Tensor]): A dictionary of the
+                original tensors.
+
+        Returns:
+            Dict[str, ReconstructionResult]: A dictionary of reconstruction
+            results.
+        """
         results = {}
         
+        # Identify unique tensors to compute norms efficiently
+        unique_tensors = {}
+        key_to_id = {}
+        for key in cores:
+            tensor = original_tensors[key]
+            tid = id(tensor)
+            unique_tensors[tid] = tensor
+            key_to_id[key] = tid
+
+        id_to_norm = {}
+
+        def compute_norm(t):
+            return float(tl.norm(t))
+
         def reconstruct_single(key: str) -> Tuple[str, ReconstructionResult]:
             reconstructed = tucker_to_tensor((cores[key], factors[key]))
-            error = float(tl.norm(original_tensors[key] - reconstructed) / tl.norm(original_tensors[key]))
+            norm_val = id_to_norm[key_to_id[key]]
+            error = float(tl.norm(original_tensors[key] - reconstructed) / norm_val)
             return key, ReconstructionResult(tensor=reconstructed, error=error)
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(reconstruct_single, key) for key in cores.keys()]
+            # Phase 1: Compute norms in parallel
+            norm_futures = {executor.submit(compute_norm, t): tid for tid, t in unique_tensors.items()}
+            for future in concurrent.futures.as_completed(norm_futures):
+                tid = norm_futures[future]
+                try:
+                    id_to_norm[tid] = future.result()
+                except Exception as e:
+                    logger.error(f"Norm calculation failed: {e}")
+                    raise e
+
+            # Phase 2: Reconstruct
+            futures = [executor.submit(reconstruct_single, key) for key in cores]
             
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -152,32 +196,32 @@ class CPUStrategy(ProcessingStrategy):
         return results
 
 class GPUStrategy(ProcessingStrategy):
-    """GPU-based sequential processing strategy with CPU fallback"""
+    """A GPU-based sequential processing strategy with a CPU fallback."""
     
     def __init__(self, fallback_to_cpu: bool = True):
         self.fallback_to_cpu = fallback_to_cpu
         self._cpu_strategy = None
     
     def _get_cpu_strategy(self):
-        """Lazy initialization of CPU strategy for fallback"""
+        """Lazily initialize the CPU strategy for fallback."""
         if self._cpu_strategy is None:
             self._cpu_strategy = CPUStrategy()
         return self._cpu_strategy
     
     def _clear_gpu_memory(self):
-        """Clear GPU memory cache"""
+        """Clear the GPU memory cache."""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             # Clear MPS cache if available (PyTorch 2.0+)
             try:
                 torch.mps.empty_cache()
-            except AttributeError:
+            except AttributeError as e:
                 # Fallback for older PyTorch versions
-                pass
+                logger.debug(f"MPS cache clear failed: {e}")
     
     def _is_memory_error(self, error: Exception) -> bool:
-        """Check if error is related to GPU memory"""
+        """Check if an error is related to GPU memory."""
         error_str = str(error).lower()
         return any(keyword in error_str for keyword in [
             'out of memory', 'memory', 'mps backend out of memory',
@@ -185,7 +229,7 @@ class GPUStrategy(ProcessingStrategy):
         ])
     
     def _get_gpu_memory_info(self) -> tuple:
-        """Get GPU memory usage information"""
+        """Get GPU memory usage information."""
         if torch.cuda.is_available():
             return torch.cuda.memory_allocated(), torch.cuda.memory_reserved()
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
@@ -194,12 +238,25 @@ class GPUStrategy(ProcessingStrategy):
         return 0, 0
     
     def _should_use_cpu_fallback(self, tensor_size_mb: float, threshold_mb: float = 1000) -> bool:
-        """Determine if tensor is too large and should use CPU"""
+        """Determine if a tensor is too large and should use the CPU."""
         return tensor_size_mb > threshold_mb
     
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
                             decomposer_func) -> Dict[str, DecompositionResult]:
-        """Process decomposition sequentially on GPU with CPU fallback"""
+        """Processes the decomposition sequentially on the GPU.
+
+        If a memory error occurs and `fallback_to_cpu` is `True`, this method
+        will attempt to perform the decomposition on the CPU.
+
+        Args:
+            tensors (Dict[str, torch.Tensor]): A dictionary of tensors to
+                decompose.
+            decomposer_func: The function to use for decomposition.
+
+        Returns:
+            Dict[str, DecompositionResult]: A dictionary of decomposition
+            results.
+        """
         results = {}
         
         for key, tensor in tensors.items():
@@ -229,10 +286,25 @@ class GPUStrategy(ProcessingStrategy):
     def process_reconstruction(self, cores: Dict[str, torch.Tensor],
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor]) -> Dict[str, ReconstructionResult]:
-        """Process reconstruction sequentially on GPU with CPU fallback"""
+        """Processes the reconstruction sequentially on the GPU.
+
+        If a memory error occurs and `fallback_to_cpu` is `True`, this method
+        will attempt to perform the reconstruction on the CPU.
+
+        Args:
+            cores (Dict[str, torch.Tensor]): A dictionary of core tensors.
+            factors (Dict[str, List[torch.Tensor]]): A dictionary of factor
+                matrices.
+            original_tensors (Dict[str, torch.Tensor]): A dictionary of the
+                original tensors.
+
+        Returns:
+            Dict[str, ReconstructionResult]: A dictionary of reconstruction
+            results.
+        """
         results = {}
         
-        for key in cores.keys():
+        for key in cores:
             try:
                 # Clear memory before processing
                 self._clear_gpu_memory()
@@ -263,16 +335,27 @@ class GPUStrategy(ProcessingStrategy):
 
 # Validation utilities
 class TensorValidator:
-    """Utilities for tensor validation"""
+    """A collection of utilities for tensor validation."""
     
     @staticmethod
-    def validate_ranks(ranks: Optional[Union[int, List[int]]], tensor_shape: Tuple[int, ...], min_rank: int = 1) -> List[int]:
-        """Validate and normalize ranks
-        
-        Args:
-            ranks: Desired ranks
-            tensor_shape: Shape of tensor
-            min_rank: Minimum allowed rank (default: 1)
+    def validate_ranks(
+        ranks: Optional[Union[int, List[int]]],
+        tensor_shape: Tuple[int, ...],
+        min_rank: int = 1,
+    ) -> List[int]:
+        """Validate and normalize the ranks.
+
+        Parameters
+        ----------
+        ranks : Optional[Union[int, List[int]]]
+            The ranks to validate.
+        tensor_shape : Tuple[int, ...]
+            The shape of the tensor.
+
+        Returns
+        -------
+        List[int]
+            The validated and normalized ranks.
         """
         if ranks is None:
             if not tensor_shape:
@@ -302,7 +385,18 @@ class TensorValidator:
     
     @staticmethod
     def validate_epsilon(epsilon: float) -> float:
-        """Validate epsilon parameter"""
+        """Validate the epsilon parameter.
+
+        Parameters
+        ----------
+        epsilon : float
+            The epsilon parameter to validate.
+
+        Returns
+        -------
+        float
+            The validated epsilon parameter.
+        """
         if not isinstance(epsilon, (int, float)):
             raise ValidationError(f"Epsilon must be numeric, got {type(epsilon)}")
         if epsilon <= 0:
@@ -311,7 +405,15 @@ class TensorValidator:
     
     @staticmethod
     def validate_tensor_shape(tensor: torch.Tensor, min_dims: int = 2) -> None:
-        """Validate tensor shape"""
+        """Validate the tensor shape.
+
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The tensor to validate.
+        min_dims : int, optional
+            The minimum number of dimensions, by default 2.
+        """
         if len(tensor.shape) < min_dims:
             raise ValidationError(f"Tensor must have at least {min_dims} dimensions, got {len(tensor.shape)}")
         if any(dim <= 0 for dim in tensor.shape):
@@ -319,7 +421,7 @@ class TensorValidator:
 
 # Core classes
 class TensorProcessor:
-    """Handles tensor management and device operations"""
+    """Handles tensor management and device operations."""
     
     def __init__(self, device: str = 'cpu', dtype: torch.dtype = torch.float32):
         self.device = get_torch_device(device)
@@ -328,7 +430,18 @@ class TensorProcessor:
     
     def process_tensors(self, tensors: Union[torch.Tensor, np.ndarray, tl.tensor, 
                                           Dict[str, Union[torch.Tensor, np.ndarray, tl.tensor]]]) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Process and convert tensors to the target device and dtype"""
+        """Process and convert tensors to the target device and dtype.
+
+        Parameters
+        ----------
+        tensors : Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str, Union[torch.Tensor, np.ndarray, tl.tensor]]]
+            The tensor or dictionary of tensors to process.
+
+        Returns
+        -------
+        Union[torch.Tensor, Dict[str, torch.Tensor]]
+            The processed tensor or dictionary of tensors.
+        """
         try:
             if isinstance(tensors, dict):
                 processed = {}
@@ -345,7 +458,7 @@ class TensorProcessor:
             raise ValidationError(f"Failed to process tensors: {e}")
 
 class TuckerDecomposerCore:
-    """Handles Tucker decomposition operations"""
+    """Handles Tucker decomposition operations."""
     
     def __init__(self, ranks: Optional[Union[int, List[int]]] = None,
                  epsilon: float = 1e-2,
@@ -358,7 +471,18 @@ class TuckerDecomposerCore:
         logger.info(f"TuckerDecomposerCore initialized with epsilon: {self.epsilon}")
     
     def decompose_single(self, tensor: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-        """Decompose a single tensor"""
+        """Decompose a single tensor.
+
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            The tensor to decompose.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, List[torch.Tensor]]
+            A tuple containing the core tensor and a list of factor matrices.
+        """
         TensorValidator.validate_tensor_shape(tensor)
         ranks = TensorValidator.validate_ranks(self.ranks, tensor.shape, self.min_rank)
         
@@ -369,19 +493,47 @@ class TuckerDecomposerCore:
     
     def decompose_collection(self, tensors: Dict[str, torch.Tensor], 
                            strategy: ProcessingStrategy) -> Dict[str, DecompositionResult]:
-        """Decompose a collection of tensors using the specified strategy"""
+        """Decompose a collection of tensors using the specified strategy.
+
+        Parameters
+        ----------
+        tensors : Dict[str, torch.Tensor]
+            A dictionary of tensors to decompose.
+        strategy : ProcessingStrategy
+            The processing strategy to use.
+
+        Returns
+        -------
+        Dict[str, DecompositionResult]
+            A dictionary of decomposition results.
+        """
         if not tensors:
             raise ValidationError("Cannot decompose empty tensor collection")
         
         return strategy.process_decomposition(tensors, self.decompose_single)
 
 class TensorReconstructor:
-    """Handles tensor reconstruction operations"""
+    """Handles tensor reconstruction operations."""
     
     @staticmethod
     def reconstruct_single(core: torch.Tensor, factors: List[torch.Tensor], 
                           original: torch.Tensor) -> ReconstructionResult:
-        """Reconstruct a single tensor and compute error"""
+        """Reconstruct a single tensor and compute the error.
+
+        Parameters
+        ----------
+        core : torch.Tensor
+            The core tensor.
+        factors : List[torch.Tensor]
+            A list of factor matrices.
+        original : torch.Tensor
+            The original tensor.
+
+        Returns
+        -------
+        ReconstructionResult
+            The result of the reconstruction.
+        """
         try:
             reconstructed = tucker_to_tensor((core, factors))
             error = float(tl.norm(original - reconstructed) / tl.norm(original))
@@ -394,19 +546,46 @@ class TensorReconstructor:
                              factors: Dict[str, List[torch.Tensor]],
                              original_tensors: Dict[str, torch.Tensor],
                              strategy: ProcessingStrategy) -> Dict[str, ReconstructionResult]:
-        """Reconstruct a collection of tensors using the specified strategy"""
+        """Reconstruct a collection of tensors using the specified strategy.
+
+        Parameters
+        ----------
+        cores : Dict[str, torch.Tensor]
+            A dictionary of core tensors.
+        factors : Dict[str, List[torch.Tensor]]
+            A dictionary of factor matrices.
+        original_tensors : Dict[str, torch.Tensor]
+            A dictionary of original tensors.
+        strategy : ProcessingStrategy
+            The processing strategy to use.
+
+        Returns
+        -------
+        Dict[str, ReconstructionResult]
+            A dictionary of reconstruction results.
+        """
         if not cores or not factors or not original_tensors:
             raise ValidationError("Cannot reconstruct with empty inputs")
         
         return strategy.process_reconstruction(cores, factors, original_tensors)
 
 class TensorVisualizer:
-    """Handles tensor visualization"""
+    """Handles tensor visualization."""
     
     @staticmethod
     def visualize_single(original: torch.Tensor, reconstructed: torch.Tensor, 
                         title: str = "Tensor Comparison") -> None:
-        """Visualize original vs reconstructed tensor"""
+        """Visualize the original vs. the reconstructed tensor.
+
+        Parameters
+        ----------
+        original : torch.Tensor
+            The original tensor.
+        reconstructed : torch.Tensor
+            The reconstructed tensor.
+        title : str, optional
+            The title for the plot, by default "Tensor Comparison".
+        """
         if len(original.shape) != 3:
             raise ValidationError("Can only visualize 3D tensors")
         
@@ -431,8 +610,18 @@ class TensorVisualizer:
     def visualize_collection(original_tensors: Dict[str, torch.Tensor],
                            reconstructed_tensors: Dict[str, torch.Tensor],
                            subjects: Optional[List[str]] = None) -> None:
-        """Visualize a collection of tensors"""
-        subjects = subjects or list(original_tensors.keys())
+        """Visualize a collection of tensors.
+
+        Parameters
+        ----------
+        original_tensors : Dict[str, torch.Tensor]
+            A dictionary of original tensors.
+        reconstructed_tensors : Dict[str, torch.Tensor]
+            A dictionary of reconstructed tensors.
+        subjects : Optional[List[str]], optional
+            A list of subjects to visualize, by default None.
+        """
+        subjects = subjects or original_tensors
         
         for subject in subjects:
             if subject not in original_tensors or subject not in reconstructed_tensors:
@@ -447,84 +636,59 @@ class TensorVisualizer:
 
 # Main interface class
 class TuckerDecomposerInterface:
-    """
-    Main interface for Tucker decomposition with improved architecture.
-    
-    This class provides a clean API while delegating responsibilities to specialized components.
-    
-    Examples:
-        >>> # Single tensor decomposition
-        >>> decomposer = TuckerDecomposerInterface(
-        ...     tensors=my_tensor,
-        ...     ranks=[50, 20, 100],
-        ...     device='cuda'
-        ... )
-        >>> decomposer.decompose()
-        >>> core = decomposer.cores
-        >>> factors = decomposer.factors
-        >>> 
-        >>> # Collection decomposition
-        >>> tensors_dict = {'subj1': tensor1, 'subj2': tensor2}
-        >>> decomposer = TuckerDecomposerInterface(
-        ...     tensors=tensors_dict,
-        ...     ranks=30,
-        ...     max_workers=4
-        ... )
-        >>> decomposer.decompose()
-        >>> decomposer.reconstruct()
-        >>> errors = decomposer.reconstruction_errors
+    """The main interface for Tucker decomposition.
+
+    This class provides a high-level API for performing Tucker decomposition,
+    delegating responsibilities to specialized components for processing,
+    decomposition, and reconstruction.
+
+    Args:
+        tensors (Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str,
+            Union[torch.Tensor, np.ndarray, tl.tensor]]]): The input tensor or
+            a dictionary of tensors to decompose.
+        ranks (Optional[Union[int, List[int]]]): The Tucker ranks. Can be
+            `None` for automatic rank selection, an `int` for a uniform rank,
+            or a `list` for per-mode ranks.
+        epsilon (float): The convergence tolerance.
+        random_state (Optional[int]): The random seed for reproducibility.
+        device (str): The computing device ('cpu', 'cuda', 'mps').
+        dtype (torch.dtype): The tensor data type.
+        max_workers (Optional[int]): The maximum number of workers for parallel
+            processing.
     """
     
-    def __init__(self, 
-                tensors: Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str, Union[torch.Tensor, np.ndarray, tl.tensor]]],
-                ranks: Optional[Union[int, List[int]]] = None,
-                epsilon: float = DEFAULT_EPSILON,
-                random_state: Optional[int] = None,
-                device: str = 'cpu',
-                dtype: torch.dtype = torch.float32,
-                max_workers: Optional[int] = None,
-                min_rank: int = 1,
-                config: Optional[DecompositionConfig] = None):
-        """
-        Initialize Tucker decomposer with improved architecture.
-        
-        Args:
-            tensors: Input tensor(s) for decomposition.
-            ranks: Tucker ranks (None for auto, int for uniform, list for per-mode).
-            epsilon: Convergence tolerance.
-            random_state: Random seed for reproducibility.
-            device: Computing device ('cpu', 'cuda', 'mps').
-            dtype: Tensor data type.
-            max_workers: Maximum workers for parallel processing.
-            min_rank: Minimum allowed rank for any mode.
-            config: An optional DecompositionConfig object to specify parameters.
-                    If provided, other parameters (ranks, epsilon, etc.) will be ignored.
-        """
-        # Handle configuration
-        if config is None:
+    def __init__(self,
+                 tensors: Union[torch.Tensor, np.ndarray, tl.tensor, Dict[str, Union[torch.Tensor, np.ndarray, tl.tensor]]],
+                 ranks: Optional[Union[int, List[int]]] = None,
+                 epsilon: float = DEFAULT_EPSILON,
+                 random_state: Optional[int] = None,
+                 device: str = 'cpu',
+                 dtype: torch.dtype = torch.float32,
+                 max_workers: Optional[int] = None,
+                 config: Optional[DecompositionConfig] = None):
+        if config is not None:
+            self.config = config
+            ranks = config.ranks
+            epsilon = config.epsilon
+            random_state = config.random_state
+            device = config.device
+            dtype = torch.float64 if config.dtype == 'float64' else torch.float32
+            max_workers = config.max_workers
+            min_rank = config.min_rank
+        else:
             self.config = DecompositionConfig(
                 ranks=ranks,
                 epsilon=epsilon,
-                min_rank=min_rank,
                 random_state=random_state,
                 device=device,
-                dtype=str(dtype).split('.')[-1] if isinstance(dtype, torch.dtype) else str(dtype),
-                max_workers=max_workers
+                dtype='float64' if dtype == torch.float64 else 'float32',
+                max_workers=max_workers,
             )
-        else:
-            self.config = config
+            min_rank = self.config.min_rank
 
-        # Initialize processor with config values
-        dtype_val = getattr(torch, self.config.dtype) if isinstance(self.config.dtype, str) else self.config.dtype
-        self.processor = TensorProcessor(self.config.device, dtype_val)
-        
-        # Initialize decomposer core with config values
-        self.decomposer = TuckerDecomposerCore(
-            self.config.ranks, 
-            self.config.epsilon, 
-            self.config.random_state, 
-            self.config.min_rank
-        )
+        # Initialize components
+        self.processor = TensorProcessor(device, dtype)
+        self.decomposer = TuckerDecomposerCore(ranks, epsilon, random_state, min_rank=min_rank)
         
         # Process input tensors
         self.tensors = self.processor.process_tensors(tensors)
@@ -548,7 +712,7 @@ class TuckerDecomposerInterface:
         logger.info(f"TuckerDecomposerInterface initialized in {'collection' if self.is_collection else 'single'} mode")
     
     def decompose(self) -> None:
-        """Perform Tucker decomposition"""
+        """Performs Tucker decomposition on the input tensor(s)."""
         if self.state != DecomposerState.INITIALIZED:
             raise StateError(f"Cannot decompose in state {self.state.value}")
         
@@ -570,7 +734,7 @@ class TuckerDecomposerInterface:
             raise
     
     def reconstruct(self) -> None:
-        """Reconstruct tensors from decomposition"""
+        """Reconstructs the tensor(s) from the decomposition."""
         if self.state != DecomposerState.DECOMPOSED:
             raise StateError(f"Cannot reconstruct in state {self.state.value}. Call decompose() first.")
         
@@ -596,7 +760,12 @@ class TuckerDecomposerInterface:
             raise
     
     def visualize(self, subjects: Optional[List[str]] = None) -> None:
-        """Visualize results"""
+        """Visualizes the results of the decomposition.
+
+        Args:
+            subjects (Optional[List[str]]): A list of subjects to visualize. If
+                `None`, all subjects are visualized.
+        """
         if self.state != DecomposerState.RECONSTRUCTED:
             raise StateError(f"Cannot visualize in state {self.state.value}. Call reconstruct() first.")
         
@@ -615,34 +784,45 @@ class TuckerDecomposerInterface:
     # Property accessors with validation
     @property
     def cores(self) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Get decomposition cores"""
+        """Get the decomposition cores."""
         if self.state == DecomposerState.INITIALIZED:
             raise StateError("Call decompose() first")
         return self._cores
+
+    @property
+    def core_tensor(self) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Backward-compatible alias for ``cores``."""
+        return self.cores
     
     @property
     def factors(self) -> Union[List[torch.Tensor], Dict[str, List[torch.Tensor]]]:
-        """Get decomposition factors"""
+        """Get the decomposition factors."""
         if self.state == DecomposerState.INITIALIZED:
             raise StateError("Call decompose() first")
         return self._factors
     
     @property
     def reconstructed_tensors(self) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Get reconstructed tensors"""
+        """Get the reconstructed tensors."""
         if self.state != DecomposerState.RECONSTRUCTED:
             raise StateError("Call reconstruct() first")
         return self._reconstructed
     
     @property
     def reconstruction_errors(self) -> Union[float, Dict[str, float]]:
-        """Get reconstruction errors"""
+        """Get the reconstruction errors."""
         if self.state != DecomposerState.RECONSTRUCTED:
             raise StateError("Call reconstruct() first")
         return self._errors
     
     def set_ranks(self, ranks: Optional[Union[int, List[int]]]) -> None:
-        """Update ranks (only allowed in INITIALIZED state)"""
+        """Updates the ranks for the decomposition.
+
+        This method is only allowed in the `INITIALIZED` state.
+
+        Args:
+            ranks (Optional[Union[int, List[int]]]): The new ranks to set.
+        """
         if self.state != DecomposerState.INITIALIZED:
             raise StateError("Cannot change ranks after decomposition")
         self.decomposer.ranks = ranks
