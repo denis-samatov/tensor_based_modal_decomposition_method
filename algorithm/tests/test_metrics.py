@@ -34,5 +34,22 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(ssim, 1.0)
         self.assertTrue(np.isinf(psnr))
 
+
+
+    def test_compute_metrics_constant_arrays(self):
+        # Test with identical constant arrays (e.g. all tens) to ensure no division-by-zero
+        # and PSNR is handled correctly (infinity for 0 MSE).
+        tens1 = np.full((5, 5), 10.0)
+        tens2 = np.full((5, 5), 10.0)
+
+        # When comparing identical arrays, err_norm should be 0.0, mse 0.0,
+        # ssim 1.0, and psnr should be infinity because mse is 0.
+        error, mse, ssim, psnr = compute_metrics(tens1, tens2)
+
+        self.assertEqual(error, 0.0)
+        self.assertEqual(mse, 0.0)
+        self.assertEqual(ssim, 1.0)
+        self.assertEqual(psnr, float('inf'))
+
 if __name__ == "__main__":
     unittest.main()
