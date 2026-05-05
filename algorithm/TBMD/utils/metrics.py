@@ -14,14 +14,16 @@ The code supports **NumPy** arrays and **PyTorch** tensors, arbitrary spatial
 dimensions (2-D, 3-D, …) and optional foreground masks.
 """
 
-import math
-import warnings
 from typing import Optional, Tuple, Union
+
+import logging
 
 import numpy as np
 import torch
 from skimage.metrics import structural_similarity as _ssim
 
+
+logger = logging.getLogger(__name__)
 
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
@@ -107,7 +109,7 @@ def compute_metrics(
 
     mse = float(np.mean(diff_fg**2))
     denom = float(np.sum(ref_fg**2))
-    err_norm = math.inf if denom == 0 else float(np.sqrt(np.sum(diff_fg**2)) / np.sqrt(denom))
+    err_norm = np.inf if denom == 0 else float(np.sqrt(np.sum(diff_fg**2)) / np.sqrt(denom))
 
     # -- SSIM ---------------------------------------------------------------
     C1_paper, C2_paper = 0.012, 0.032          # (K₁L)² and (K₂L)² in eq. 41
@@ -115,8 +117,8 @@ def compute_metrics(
     if data_range < 1e-12:
         ssim_val = 1.0 if np.allclose(A_rec, A_ref) else 0.0
     else:
-        K1 = math.sqrt(C1_paper) / data_range
-        K2 = math.sqrt(C2_paper) / data_range
+        K1 = np.sqrt(C1_paper) / data_range
+        K2 = np.sqrt(C2_paper) / data_range
 
         if A_ref.ndim == 2:                        # single-channel
             win_size = min(7, min(A_ref.shape))
@@ -134,7 +136,7 @@ def compute_metrics(
                 win_size=win_size,
             )
             if not _supports_mask() and mask is not None:
-                warnings.warn("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
+                logger.warning("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
         else:                                      # channel-last ≥ 3-D
             ssim_vals = []
             for c in range(A_ref.shape[-1]):
@@ -155,13 +157,13 @@ def compute_metrics(
 
     # -- PSNR ---------------------------------------------------------------
     if mse == 0:
-        psnr = math.inf
+        psnr = np.inf
     else:
         max_I = float(max_val) if max_val is not None else data_range
         if max_I < 1e-12:
             psnr = 0.0
         else:
-            psnr = float(20 * math.log10(max_I / math.sqrt(mse)))
+            psnr = float(20 * np.log10(max_I / np.sqrt(mse)))
 
     return err_norm, mse, ssim_val, psnr
 
