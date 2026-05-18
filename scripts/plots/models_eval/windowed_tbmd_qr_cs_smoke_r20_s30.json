@@ -1,0 +1,172 @@
+{
+  "protocol": "Windowed TBMD recovery diagnostics. Tucker/HOSVD dictionary is fit only on train trajectory windows; probe windows are causal fixed-length history windows. No forecasting model is trained in this script.",
+  "config": {
+    "n_dictionary_trajectories": 20,
+    "n_probe_trajectories": 8,
+    "window_length": 7,
+    "window_stride": 2,
+    "max_dictionary_windows": 128,
+    "max_probe_windows": 64,
+    "r_tau": 5,
+    "r_x": 16,
+    "r_y": 16,
+    "r_window": 20,
+    "n_sensors": 30,
+    "cs_max_iter": 50,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.001,
+    "sensor_rcond": 1e-06,
+    "random_state": 0,
+    "output": "scripts/plots/models_eval/windowed_tbmd_qr_cs_smoke_r20_s30.json"
+  },
+  "train_shape": [
+    20,
+    20,
+    64,
+    64
+  ],
+  "dictionary_window_shape": [
+    7,
+    64,
+    64,
+    128
+  ],
+  "probe_window_shape": [
+    7,
+    64,
+    64,
+    56
+  ],
+  "tbmd_summary": {
+    "core_shape": [
+      5,
+      16,
+      16,
+      20
+    ],
+    "factor_shapes": [
+      [
+        7,
+        5
+      ],
+      [
+        64,
+        16
+      ],
+      [
+        64,
+        16
+      ],
+      [
+        128,
+        20
+      ]
+    ],
+    "reconstruction_rel_frob": 0.33458831906318665
+  },
+  "dictionary_shape": [
+    7,
+    64,
+    64,
+    20
+  ],
+  "sensor_summary": {
+    "requested_sensors": 30,
+    "actual_sensors": 30,
+    "selection_method": "qr_plus_leverage",
+    "sensor_indices": [
+      105,
+      14733,
+      17767,
+      20574,
+      24068,
+      24879,
+      24918,
+      25200,
+      25734,
+      25752,
+      25967,
+      26173,
+      26336,
+      26370,
+      26805,
+      26806,
+      26868,
+      26869,
+      26870,
+      26898,
+      26932,
+      26933,
+      26995,
+      26996,
+      27059,
+      27311,
+      27443,
+      27728,
+      27748,
+      27971
+    ]
+  },
+  "sources": {
+    "full_window_projection": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.0,
+        "rel_frob_err": 0.0,
+        "r2": 1.0
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.3437216371652391,
+        "window_rmse": 0.21737668988880107,
+        "window_r2": 0.8734332483212346,
+        "last_frame_rel_frob_err": 0.3852301687388484,
+        "last_frame_rmse": 0.2982806360589965,
+        "last_frame_r2": 0.843339507021937
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.3044896228651774,
+        "sensor_rel_frob_err": 0.3399652562053606
+      }
+    },
+    "window_sensor_lstsq": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.07956252852343257,
+        "rel_frob_err": 0.92981939688264,
+        "r2": 0.0819165133660762
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.5588351253056792,
+        "window_rmse": 0.35341891983990315,
+        "window_r2": 0.6654405649803552,
+        "last_frame_rel_frob_err": 0.5438644026570015,
+        "last_frame_rmse": 0.42110985358561087,
+        "last_frame_r2": 0.687751633502225
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.11177801616073392,
+        "sensor_rel_frob_err": 0.1248011066670632
+      }
+    },
+    "window_sensor_cs": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.07947743669722092,
+        "rel_frob_err": 0.9288249585208118,
+        "r2": 0.08387923694132926
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.5585220365517695,
+        "window_rmse": 0.353220916020511,
+        "window_r2": 0.665815335461136,
+        "last_frame_rel_frob_err": 0.5436379761448894,
+        "last_frame_rmse": 0.42093453334972547,
+        "last_frame_r2": 0.6880115754682432
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.11177830577054303,
+        "sensor_rel_frob_err": 0.12480143001888065
+      },
+      "cs_mean_iterations": 6.517857142857143,
+      "cs_convergence_rate": 1.0,
+      "cs_mean_objective": 0.18915208630366914
+    }
+  }
+}

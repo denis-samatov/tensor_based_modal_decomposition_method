@@ -14,6 +14,29 @@ import numpy as np
 import imageio.v2 as imageio
 
 
+def split_train_dev_trajectories(
+    train_states: np.ndarray,
+    *,
+    dev_split: float = 0.2,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Create a deterministic trajectory-level tuning split."""
+
+    states = np.asarray(train_states)
+    if states.ndim < 1:
+        raise ValueError("train_states must include a trajectory axis")
+    if not 0.0 < dev_split < 1.0:
+        raise ValueError("dev_split must be in (0, 1)")
+    if states.shape[0] < 2:
+        raise ValueError("Need at least two trajectories to create a tuning holdout")
+
+    dev_count = max(1, int(round(states.shape[0] * dev_split)))
+    if dev_count >= states.shape[0]:
+        raise ValueError("dev_split leaves no training trajectories")
+
+    split_idx = states.shape[0] - dev_count
+    return states[:split_idx], states[split_idx:]
+
+
 def _select_evenly_spaced_indices(total_count: int, count: int) -> list[int]:
     if total_count <= 0:
         return []
@@ -72,16 +95,40 @@ def compute_spatial_metrics(target: np.ndarray, pred: np.ndarray) -> dict[str, f
 
     target_arr = np.asarray(target, dtype=np.float64)
     pred_arr = np.asarray(pred, dtype=np.float64)
-    mse = float(np.mean((target_arr - pred_arr) ** 2))
+    if target_arr.shape != pred_arr.shape:
+        raise ValueError("target and pred must have identical shapes")
+
+    diff = pred_arr - target_arr
+    abs_diff = np.abs(diff)
+    mse = float(np.mean(diff ** 2))
     rmse = float(np.sqrt(mse))
-    rel_frob = float(np.linalg.norm(target_arr - pred_arr) / max(np.linalg.norm(target_arr), 1e-12))
+    mae = float(np.mean(abs_diff))
+    max_abs_err = float(np.max(abs_diff))
+    bias = float(np.mean(diff))
+    rel_frob = float(np.linalg.norm(diff) / max(np.linalg.norm(target_arr), 1e-12))
 
     target_2d = target_arr.reshape(target_arr.shape[0], -1)
     pred_2d = pred_arr.reshape(pred_arr.shape[0], -1)
     ss_res = float(np.sum((target_2d - pred_2d) ** 2))
     ss_tot = float(np.sum((target_2d - np.mean(target_2d, axis=0)) ** 2))
     r2 = float(1.0 - ss_res / max(ss_tot, 1e-10))
-    return {"r2": r2, "rmse": rmse, "rel_frob": rel_frob}
+
+    diff_2d = diff.reshape(diff.shape[0], -1)
+    target_norms = np.linalg.norm(target_2d, axis=1)
+    diff_norms = np.linalg.norm(diff_2d, axis=1)
+    per_sample_rmse = np.sqrt(np.mean(diff_2d ** 2, axis=1))
+    per_sample_rel_frob = diff_norms / np.maximum(target_norms, 1e-12)
+
+    return {
+        "r2": r2,
+        "rmse": rmse,
+        "mae": mae,
+        "max_abs_err": max_abs_err,
+        "bias": bias,
+        "rel_frob": rel_frob,
+        "per_sample_rmse": per_sample_rmse.tolist(),
+        "per_sample_rel_frob": per_sample_rel_frob.tolist(),
+    }
 
 
 def extract_common_horizon_predictions(
@@ -137,6 +184,59 @@ def compute_common_horizon_metrics(
         }
     )
     return metrics
+
+
+def compute_common_horizon_diagnostics(
+    eval_result: dict[str, Any],
+    test_states: np.ndarray,
+    common_warmup_steps: int,
+    *,
+    worst_count: int = 5,
+) -> dict[str, Any]:
+    """Compute time- and trajectory-resolved errors on the common horizon."""
+
+    if worst_count <= 0:
+        raise ValueError("worst_count must be positive")
+
+    target_common, pred_common = extract_common_horizon_predictions(
+        eval_result,
+        test_states,
+        common_warmup_steps,
+    )
+    diff = np.asarray(pred_common - target_common, dtype=np.float64)
+    abs_diff = np.abs(diff)
+    n_trajectories, n_steps = diff.shape[:2]
+    flat_per_step = diff.reshape(n_trajectories, n_steps, -1)
+    abs_flat_per_step = abs_diff.reshape(n_trajectories, n_steps, -1)
+    target_flat_per_traj = target_common.reshape(n_trajectories, -1)
+    diff_flat_per_traj = diff.reshape(n_trajectories, -1)
+
+    per_step_rmse = np.sqrt(np.mean(flat_per_step ** 2, axis=(0, 2)))
+    per_step_mae = np.mean(abs_flat_per_step, axis=(0, 2))
+    per_step_max_abs_err = np.max(abs_flat_per_step, axis=(0, 2))
+    per_trajectory_rmse = np.sqrt(np.mean(diff_flat_per_traj ** 2, axis=1))
+    per_trajectory_mae = np.mean(np.abs(diff_flat_per_traj), axis=1)
+    per_trajectory_rel_frob = (
+        np.linalg.norm(diff_flat_per_traj, axis=1)
+        / np.maximum(np.linalg.norm(target_flat_per_traj, axis=1), 1e-12)
+    )
+
+    worst_order = np.argsort(per_trajectory_rmse)[::-1]
+    worst_indices = worst_order[: min(worst_count, len(worst_order))]
+
+    return {
+        "warmup_steps": int(common_warmup_steps),
+        "n_trajectories": int(n_trajectories),
+        "n_eval_steps_per_trajectory": int(n_steps),
+        "per_step_rmse": per_step_rmse.tolist(),
+        "per_step_mae": per_step_mae.tolist(),
+        "per_step_max_abs_err": per_step_max_abs_err.tolist(),
+        "per_trajectory_rmse": per_trajectory_rmse.tolist(),
+        "per_trajectory_mae": per_trajectory_mae.tolist(),
+        "per_trajectory_rel_frob": per_trajectory_rel_frob.tolist(),
+        "worst_trajectory_indices": worst_indices.astype(int).tolist(),
+        "worst_trajectory_rmse": per_trajectory_rmse[worst_indices].tolist(),
+    }
 
 
 def _render_triptych_figure(
@@ -400,9 +500,11 @@ def save_comparison_sheet(
 
 
 __all__ = [
+    "compute_common_horizon_diagnostics",
     "compute_common_horizon_metrics",
     "compute_spatial_metrics",
     "extract_common_horizon_predictions",
+    "split_train_dev_trajectories",
     "build_examples_manifest",
     "make_frame_filename",
     "save_comparison_sheet",

@@ -1,0 +1,150 @@
+{
+  "protocol": "Experimental CS-based forecasting: QR sensor placement, sparse sensor measurements, coefficient recovery, LSTM coefficient rollout, dictionary reconstruction.",
+  "coefficient_source": "sensor_cs",
+  "train_shape": [
+    80,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    64,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    16,
+    20,
+    64,
+    64
+  ],
+  "official_test_shape": [
+    40,
+    20,
+    64,
+    64
+  ],
+  "common_warmup_steps": 7,
+  "config": {
+    "rank": 30,
+    "n_sensors": 30,
+    "coefficient_source": "sensor_cs",
+    "n_train_trajectories": 80,
+    "n_test_trajectories": 40,
+    "lstm_hidden_size": 128,
+    "lstm_num_layers": 2,
+    "lstm_seq_length": 7,
+    "lstm_num_epochs": 50,
+    "lstm_batch_size": 32,
+    "cs_max_iter": 100,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.01,
+    "common_warmup_steps": 7,
+    "skip_official_test": false,
+    "verbose": false,
+    "output": "scripts/plots/models_eval/cs_forecasting_r30_s30_cs100_probe.json"
+  },
+  "sensor_summary": {
+    "rank": 30,
+    "requested_sensors": 30,
+    "actual_sensors": 30,
+    "sensor_indices": [
+      280,
+      431,
+      485,
+      690,
+      733,
+      777,
+      846,
+      892,
+      1299,
+      1376,
+      1478,
+      1508,
+      1519,
+      1659,
+      2195,
+      2246,
+      2265,
+      2359,
+      2414,
+      2527,
+      3003,
+      3085,
+      3172,
+      3204,
+      3558,
+      3777,
+      3897,
+      3917,
+      3949,
+      3991
+    ],
+    "coefficient_source": "sensor_cs",
+    "feature_mode": "coeff_plus_delta",
+    "fit_cs_mean_iterations": 100.0,
+    "fit_cs_convergence_rate": 0.0,
+    "fit_reconstruction": {
+      "mse": 0.17712230526039227,
+      "rmse": 0.42085900876706,
+      "rel_frob_err": 0.5470696187281395,
+      "r2": 0.7007148322646489
+    }
+  },
+  "fit_time": 12.96942400932312,
+  "dev_result": {
+    "one_step_r2_common": 0.5191583144663341,
+    "one_step_rmse_common": 0.5903529316483895,
+    "rollout_r2_common": 0.34571680046762765,
+    "rollout_rmse_common": 0.6886420738791249,
+    "rollout_mae_common": 0.4884091874128641,
+    "rollout_rel_frob_common": 0.5064934935857788,
+    "stability_gap_r2_common": 0.17344151399870644,
+    "first_step_rmse": 0.2767690795984042,
+    "last_step_rmse": 1.1508443903178591,
+    "worst_trajectory_indices": [
+      2,
+      7,
+      5,
+      9,
+      8
+    ],
+    "worst_trajectory_rmse": [
+      0.9819809955327748,
+      0.84691201178861,
+      0.713139967477069,
+      0.7020096615184994,
+      0.6865944733221203
+    ],
+    "n_eval_steps_per_trajectory": 13,
+    "time": 3.073169231414795
+  },
+  "final_test_result": {
+    "one_step_r2_common": 0.6513313229006705,
+    "one_step_rmse_common": 0.4896503368252633,
+    "rollout_r2_common": 0.589473710663583,
+    "rollout_rmse_common": 0.5313125537774834,
+    "rollout_mae_common": 0.38133521948388416,
+    "rollout_rel_frob_common": 0.3904572686447434,
+    "stability_gap_r2_common": 0.06185761223708752,
+    "first_step_rmse": 0.23034114065600889,
+    "last_step_rmse": 0.8803786261019746,
+    "worst_trajectory_indices": [
+      25,
+      17,
+      29,
+      34,
+      36
+    ],
+    "worst_trajectory_rmse": [
+      0.675620221397169,
+      0.6293326814861497,
+      0.625773862951988,
+      0.6234316614828009,
+      0.6063109519321893
+    ],
+    "n_eval_steps_per_trajectory": 13,
+    "time": 7.507400989532471
+  }
+}

@@ -25,7 +25,7 @@ import os
 import matplotlib.pyplot as plt
 from typing import List
 
-# from algorithm.TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
+# from TBMD.core.digital_twin.system import DigitalTwinTBMD, DigitalTwinConfig, WellControl
 from TBMD.digital_twin import DigitalTwin as DigitalTwinTBMD
 from TBMD.config import (
     DecompositionConfig,

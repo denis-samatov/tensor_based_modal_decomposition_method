@@ -1,0 +1,467 @@
+{
+  "protocol": "Hybrid strict autoregressive rollout. The SVD/TBMD latent residual-corrected LSTM is the stable backbone. A windowed TBMD dictionary is fit only on training history+target segments; QR spatial sensors and CS/ADMM recover history coefficients, reconstruct a next-step sensor forecast, and beta blends that forecast into the backbone. Beta is selected on dev rollout only; official test is evaluated once with the selected beta.",
+  "config": {
+    "n_train_trajectories": 160,
+    "n_test_trajectories": 40,
+    "n_dev_eval_trajectories": 20,
+    "backbone_ranks": [
+      64,
+      64,
+      15
+    ],
+    "backbone_seq_length": 10,
+    "backbone_hidden_size": 128,
+    "backbone_num_layers": 2,
+    "backbone_epochs": 40,
+    "backbone_ss_unroll_steps": 5,
+    "backbone_ss_decay_rate": 0.01,
+    "correction_hidden_size": 64,
+    "correction_num_layers": 2,
+    "correction_epochs": 30,
+    "sensor_history_length": 7,
+    "segment_stride": 1,
+    "max_train_segments": 1024,
+    "sensor_r_tau": 8,
+    "sensor_r_x": 32,
+    "sensor_r_y": 32,
+    "sensor_r_segment": 120,
+    "n_spatial_sensors": 160,
+    "sensor_recovery_source": "sensor_cs",
+    "sensor_rcond": 1e-06,
+    "cs_max_iter": 50,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.001,
+    "sensor_ridge_alpha": 1e-08,
+    "sensor_ridge_scale": 1.5,
+    "beta_grid": [
+      0.0,
+      0.1,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "random_state": 0,
+    "output": "scripts/plots/models_eval/hybrid_tbmd_qr_cs_diagnostic_summary.json"
+  },
+  "train_shape": [
+    160,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    128,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    32,
+    20,
+    64,
+    64
+  ],
+  "dev_eval_shape": [
+    20,
+    20,
+    64,
+    64
+  ],
+  "official_test_shape": [
+    40,
+    20,
+    64,
+    64
+  ],
+  "backbone_fit_time": 24.992328882217407,
+  "sensor_fit_time": 9.630614042282104,
+  "sensor_summary": {
+    "dictionary_shape": [
+      8,
+      64,
+      64,
+      120
+    ],
+    "train_segment_shape": [
+      8,
+      64,
+      64,
+      1024
+    ],
+    "tbmd_summary": {
+      "core_shape": [
+        8,
+        32,
+        32,
+        120
+      ],
+      "factor_shapes": [
+        [
+          8,
+          8
+        ],
+        [
+          64,
+          32
+        ],
+        [
+          64,
+          32
+        ],
+        [
+          1024,
+          120
+        ]
+      ],
+      "segment_reconstruction_rel_frob": 0.2428092211484909
+    },
+    "requested_spatial_sensors": 160,
+    "actual_spatial_sensors": 160,
+    "total_history_measurements_per_prediction": 1120,
+    "sensor_recovery_source": "sensor_cs",
+    "ridge_train_metrics": {
+      "mse": 0.08516215314430063,
+      "rmse": 0.2918255525897289,
+      "rel_frob_err": 0.35089622204916443,
+      "r2": 0.8679837151154447
+    }
+  },
+  "dev_beta_candidates": [
+    {
+      "beta": 0.0,
+      "dev": {
+        "spatial_mse": 0.2947869631425708,
+        "spatial_rmse": 0.5429428728168101,
+        "spatial_rel_frob_err": 0.3683021021791828,
+        "spatial_r2": 0.6399397172519217,
+        "backbone_spatial_r2": 0.6399397172519217,
+        "backbone_spatial_rmse": 0.5429428728168101,
+        "sensor_spatial_r2": 0.6216607503865375,
+        "sensor_spatial_rmse": 0.5565538950518423,
+        "beta": 0.0,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.798218562102708,
+          0.7592688693328188,
+          0.7178629219937449,
+          0.6993752595272227,
+          0.6800028935377129,
+          0.6439770726110496,
+          0.619637142458243,
+          0.6024792666706956,
+          0.5771111375915148,
+          0.5347805723058487
+        ],
+        "per_step_spatial_rmse": [
+          0.2090032965736762,
+          0.25927049942077124,
+          0.31588141644379253,
+          0.3696363872523883,
+          0.43433942597942005,
+          0.5136892799067785,
+          0.594894884329072,
+          0.6820727395570272,
+          0.7647156528292325,
+          0.8626200468112071
+        ],
+        "cs_mean_iterations": 8.475,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 6.8189102759861955
+      },
+      "test": null
+    },
+    {
+      "beta": 0.1,
+      "dev": {
+        "spatial_mse": 0.28231219122261736,
+        "spatial_rmse": 0.5313305856268933,
+        "spatial_rel_frob_err": 0.36042497551028235,
+        "spatial_r2": 0.6551767204654725,
+        "backbone_spatial_r2": 0.6507807481964367,
+        "backbone_spatial_rmse": 0.5347066880145767,
+        "sensor_spatial_r2": 0.6300576632906433,
+        "sensor_spatial_rmse": 0.5503431244967146,
+        "beta": 0.1,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.8115753655778996,
+          0.770495358706965,
+          0.7298890213434361,
+          0.709534067360656,
+          0.6909748229570214,
+          0.6586390863987445,
+          0.6349999673571581,
+          0.6181570697691405,
+          0.59581764268842,
+          0.5560407434172348
+        ],
+        "per_step_spatial_rmse": [
+          0.20196744462415545,
+          0.25315278689962073,
+          0.3090758788942329,
+          0.3633372787608814,
+          0.4268282534430437,
+          0.5030004982729352,
+          0.5827571829337979,
+          0.6684873247928883,
+          0.7476107411096723,
+          0.8426790230444862
+        ],
+        "cs_mean_iterations": 8.765,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 6.017551838575005
+      },
+      "test": null
+    },
+    {
+      "beta": 0.25,
+      "dev": {
+        "spatial_mse": 0.27180991706249846,
+        "spatial_rmse": 0.5213539268697402,
+        "spatial_rel_frob_err": 0.3536573677619371,
+        "spatial_r2": 0.668004464824579,
+        "backbone_spatial_r2": 0.6608959097820108,
+        "backbone_spatial_rmse": 0.526905875679431,
+        "sensor_spatial_r2": 0.636043093879015,
+        "sensor_spatial_rmse": 0.5458728692712883,
+        "beta": 0.25,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.8268542775077325,
+          0.781716676657175,
+          0.7402815461806918,
+          0.7162712701274538,
+          0.6966615069149158,
+          0.6690676950390388,
+          0.6476574626505742,
+          0.632138134445973,
+          0.6107377874207569,
+          0.5760414661189553
+        ],
+        "per_step_spatial_rmse": [
+          0.19360582218364691,
+          0.24688645004614718,
+          0.3030717097631299,
+          0.3590988501120041,
+          0.42288276936312946,
+          0.49525754586944265,
+          0.5725635835365251,
+          0.6561349692250331,
+          0.7336821946695136,
+          0.8234785974405343
+        ],
+        "cs_mean_iterations": 8.605,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 5.0811488905215265
+      },
+      "test": null
+    },
+    {
+      "beta": 0.5,
+      "dev": {
+        "spatial_mse": 0.27794012509405414,
+        "spatial_rmse": 0.5272002703850351,
+        "spatial_rel_frob_err": 0.3576232004757432,
+        "spatial_r2": 0.6605168730613064,
+        "backbone_spatial_r2": 0.6568143002418423,
+        "backbone_spatial_rmse": 0.5300674288678617,
+        "sensor_spatial_r2": 0.62722917696807,
+        "sensor_spatial_rmse": 0.5524430110882623,
+        "beta": 0.5,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.839635681969576,
+          0.7833582570569477,
+          0.7354556328038668,
+          0.7045036603225263,
+          0.6772648838396749,
+          0.6538364098868035,
+          0.639192441666535,
+          0.6242848147795705,
+          0.6006054255474049,
+          0.573747077975463
+        ],
+        "per_step_spatial_rmse": [
+          0.18632297109963009,
+          0.24595635422985584,
+          0.3058744870483613,
+          0.3664699849212677,
+          0.4361936498177414,
+          0.506526547857143,
+          0.5794006751852585,
+          0.6631017499993966,
+          0.7431696007348777,
+          0.8257038506514203
+        ],
+        "cs_mean_iterations": 8.77,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 4.136689347642362
+      },
+      "test": null
+    },
+    {
+      "beta": 0.75,
+      "dev": {
+        "spatial_mse": 0.31733962383492736,
+        "spatial_rmse": 0.5633290546695842,
+        "spatial_rel_frob_err": 0.3821309486521655,
+        "spatial_r2": 0.6123933247688726,
+        "backbone_spatial_r2": 0.6191102879641601,
+        "backbone_spatial_rmse": 0.5584266661059425,
+        "sensor_spatial_r2": 0.5882422417314582,
+        "sensor_spatial_rmse": 0.5806138921744807,
+        "beta": 0.75,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.8365627754882385,
+          0.7599819643248251,
+          0.6983280196155792,
+          0.6630463798776463,
+          0.6213615507142511,
+          0.5909387038536597,
+          0.5860694989831581,
+          0.5635984132326957,
+          0.5397072620181675,
+          0.5296128445012891
+        ],
+        "per_step_spatial_rmse": [
+          0.18809966376000545,
+          0.2588862084198261,
+          0.32663406954731794,
+          0.39133385472345494,
+          0.4724638491485693,
+          0.5506247318266932,
+          0.6205901785499344,
+          0.714650925480847,
+          0.7978181602537714,
+          0.8673978722624401
+        ],
+        "cs_mean_iterations": 8.53,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 3.899390647515655
+      },
+      "test": null
+    },
+    {
+      "beta": 1.0,
+      "dev": {
+        "spatial_mse": 0.41439127525712427,
+        "spatial_rmse": 0.6437323009272754,
+        "spatial_rel_frob_err": 0.4366720175220935,
+        "spatial_r2": 0.4938519731442297,
+        "backbone_spatial_r2": 0.5454194518828617,
+        "backbone_spatial_rmse": 0.610059158610295,
+        "sensor_spatial_r2": 0.4938519731442297,
+        "sensor_spatial_rmse": 0.6437323009272754,
+        "beta": 1.0,
+        "n_eval_samples": 200,
+        "n_trajectories": 20,
+        "n_rollout_steps": 10,
+        "warmup": 10,
+        "backbone_warmup": 10,
+        "sensor_history_length": 7,
+        "per_step_spatial_r2": [
+          0.8176355580637202,
+          0.7062236079258879,
+          0.6175302620171593,
+          0.580078898883896,
+          0.5191128445713351,
+          0.4608177307615473,
+          0.4595709931844113,
+          0.41551474033296176,
+          0.3807983543087007,
+          0.3935356240829032
+        ],
+        "per_step_spatial_rmse": [
+          0.1986930200714319,
+          0.2864147783773615,
+          0.36778374761467175,
+          0.43686394854810096,
+          0.5324487551312826,
+          0.6321633594466147,
+          0.7091049371644678,
+          0.827061074792972,
+          0.9253433475243925,
+          0.9849025751304495
+        ],
+        "cs_mean_iterations": 9.02,
+        "cs_convergence_rate": 1.0,
+        "cs_mean_objective": 4.5209555234131225
+      },
+      "test": null
+    }
+  ],
+  "selected_beta": 0.25,
+  "selection_metric": "dev strict rollout spatial_r2",
+  "final_test": {
+    "spatial_mse": 0.1996877460452488,
+    "spatial_rmse": 0.44686434859501695,
+    "spatial_rel_frob_err": 0.30441822971422017,
+    "spatial_r2": 0.7575890539823351,
+    "backbone_spatial_r2": 0.7572535862354991,
+    "backbone_spatial_rmse": 0.44717344509127366,
+    "sensor_spatial_r2": 0.7053328404318582,
+    "sensor_spatial_rmse": 0.49268060113270246,
+    "beta": 0.25,
+    "n_eval_samples": 400,
+    "n_trajectories": 40,
+    "n_rollout_steps": 10,
+    "warmup": 10,
+    "backbone_warmup": 10,
+    "sensor_history_length": 7,
+    "per_step_spatial_r2": [
+      0.8609581760811675,
+      0.8400813075634814,
+      0.8243381019983457,
+      0.8119122429112345,
+      0.7957047161846645,
+      0.7775790979014043,
+      0.7565421296798244,
+      0.7377322085203791,
+      0.7300613987756814,
+      0.6672424754373814
+    ],
+    "per_step_spatial_rmse": [
+      0.1817329183477763,
+      0.22077030663142266,
+      0.26090191389831086,
+      0.306117657479226,
+      0.36217887866361503,
+      0.4220811012581417,
+      0.4873170135926458,
+      0.5634218700222203,
+      0.6172109545080157,
+      0.7128364579232602
+    ],
+    "cs_mean_iterations": 8.4925,
+    "cs_convergence_rate": 1.0,
+    "cs_mean_objective": 4.982239416796565
+  },
+  "total_time": 39.60060691833496
+}

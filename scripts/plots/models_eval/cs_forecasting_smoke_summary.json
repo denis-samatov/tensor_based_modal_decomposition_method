@@ -1,0 +1,112 @@
+{
+  "protocol": "Experimental CS-based forecasting: QR sensor placement, sparse sensor measurements, coefficient recovery, LSTM coefficient rollout, dictionary reconstruction.",
+  "coefficient_source": "sensor_cs",
+  "train_shape": [
+    10,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    8,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    2,
+    20,
+    64,
+    64
+  ],
+  "official_test_shape": [
+    5,
+    20,
+    64,
+    64
+  ],
+  "common_warmup_steps": 3,
+  "config": {
+    "rank": 8,
+    "n_sensors": 4,
+    "coefficient_source": "sensor_cs",
+    "n_train_trajectories": 10,
+    "n_test_trajectories": 5,
+    "lstm_hidden_size": 32,
+    "lstm_num_layers": 1,
+    "lstm_seq_length": 3,
+    "lstm_num_epochs": 3,
+    "lstm_batch_size": 8,
+    "cs_max_iter": 10,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.01,
+    "common_warmup_steps": 3,
+    "skip_official_test": false,
+    "verbose": false,
+    "output": "scripts/plots/models_eval/cs_forecasting_smoke_summary.json"
+  },
+  "sensor_summary": {
+    "rank": 8,
+    "requested_sensors": 4,
+    "actual_sensors": 4,
+    "sensor_indices": [
+      558,
+      1818,
+      2360,
+      3174
+    ],
+    "coefficient_source": "sensor_cs",
+    "feature_mode": "coeff_plus_delta",
+    "fit_cs_mean_iterations": 10.0,
+    "fit_cs_convergence_rate": 0.0
+  },
+  "fit_time": 0.8905489444732666,
+  "dev_result": {
+    "one_step_r2_common": -0.06723952162496905,
+    "one_step_rmse_common": 0.812166713088176,
+    "rollout_r2_common": -0.06861910488112843,
+    "rollout_rmse_common": 0.8126914733306386,
+    "rollout_mae_common": 0.6324452644996451,
+    "rollout_rel_frob_common": 0.6635953103380345,
+    "stability_gap_r2_common": 0.001379583256159389,
+    "first_step_rmse": 0.5073473163423816,
+    "last_step_rmse": 1.30910668543245,
+    "worst_trajectory_indices": [
+      1,
+      0
+    ],
+    "worst_trajectory_rmse": [
+      0.8646498755392055,
+      0.7571759731916252
+    ],
+    "n_eval_steps_per_trajectory": 17,
+    "time": 0.05930590629577637
+  },
+  "final_test_result": {
+    "one_step_r2_common": -0.037294111210597114,
+    "one_step_rmse_common": 0.7787797786723839,
+    "rollout_r2_common": -0.039145250163306056,
+    "rollout_rmse_common": 0.7794743680680689,
+    "rollout_mae_common": 0.6061064770773529,
+    "rollout_rel_frob_common": 0.6429478105897628,
+    "stability_gap_r2_common": 0.0018511389527089417,
+    "first_step_rmse": 0.4903571152035483,
+    "last_step_rmse": 1.3222644454081645,
+    "worst_trajectory_indices": [
+      1,
+      2,
+      0,
+      3,
+      4
+    ],
+    "worst_trajectory_rmse": [
+      0.8258566826432305,
+      0.8252517246978986,
+      0.7731436697914343,
+      0.7427453816787043,
+      0.7248447743128368
+    ],
+    "n_eval_steps_per_trajectory": 17,
+    "time": 0.144913911819458
+  }
+}

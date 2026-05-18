@@ -19,8 +19,8 @@ matplotlib.use("Agg")
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from TBMD.experiments import (
-    TrajectoryAwareMultiResolutionForecaster,
     build_examples_manifest,
+    compute_common_horizon_diagnostics,
     compute_common_horizon_metrics,
     extract_common_horizon_predictions,
     get_navier_stokes_model_specs,
@@ -56,10 +56,7 @@ def load_data():
 
 
 def fit_forecaster(forecaster, train_states, test_states):
-    if isinstance(forecaster, TrajectoryAwareMultiResolutionForecaster):
-        forecaster.fit(train_states, test_states)
-    else:
-        forecaster.fit(train_states)
+    forecaster.fit(train_states)
     return forecaster
 
 
@@ -74,6 +71,11 @@ def evaluate_spec(spec, train_states, test_states):
         DEFAULT_COMMON_WARMUP_STEPS,
     )
     rollout_common = compute_common_horizon_metrics(
+        rollout,
+        test_states,
+        DEFAULT_COMMON_WARMUP_STEPS,
+    )
+    rollout_diagnostics = compute_common_horizon_diagnostics(
         rollout,
         test_states,
         DEFAULT_COMMON_WARMUP_STEPS,
@@ -96,10 +98,17 @@ def evaluate_spec(spec, train_states, test_states):
         "metrics": {
             "one_step_r2_raw": one_step["spatial_r2"],
             "one_step_r2_common": one_step_common["r2"],
+            "one_step_rmse_common": one_step_common["rmse"],
+            "one_step_mae_common": one_step_common["mae"],
+            "one_step_rel_frob_common": one_step_common["rel_frob"],
             "rollout_r2_raw": rollout["spatial_r2"],
             "rollout_r2_common": rollout_common["r2"],
             "rollout_rmse_common": rollout_common["rmse"],
+            "rollout_mae_common": rollout_common["mae"],
             "rollout_rel_frob_common": rollout_common["rel_frob"],
+            "stability_gap_r2_common": one_step_common["r2"] - rollout_common["r2"],
+            "rollout_worst_trajectory_indices": rollout_diagnostics["worst_trajectory_indices"],
+            "rollout_worst_trajectory_rmse": rollout_diagnostics["worst_trajectory_rmse"],
         },
     }
 

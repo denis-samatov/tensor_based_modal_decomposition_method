@@ -111,7 +111,12 @@ class LSTMForecasterConfig(ForecasterConfig):
     # LSTM обучение
     num_epochs: int = 300
     early_stopping_patience: int = 20
-
+    
+    # Scheduled Sampling
+    use_scheduled_sampling: bool = False
+    ss_unroll_steps: int = 5
+    ss_decay_rate: float = 0.01
+    ss_min_prob: float = 0.0
 
 @dataclass
 class LatentModalForecasterConfig(BaseConfig):
@@ -162,6 +167,12 @@ class LatentModalForecasterConfig(BaseConfig):
     lstm_batch_size: int = 32
     lstm_val_split: float = 0.2
     lstm_early_stopping_patience: int = 20
+    
+    # Scheduled Sampling
+    lstm_use_scheduled_sampling: bool = False
+    lstm_ss_unroll_steps: int = 5
+    lstm_ss_decay_rate: float = 0.01
+    lstm_ss_min_prob: float = 0.0
     
     def _validate(self):
         """Validate latent modal forecaster parameters."""

@@ -1,0 +1,292 @@
+{
+  "protocol": "Windowed TBMD recovery diagnostics. Tucker/HOSVD dictionary is fit only on train trajectory windows; probe windows are causal fixed-length history windows. No forecasting model is trained in this script.",
+  "config": {
+    "n_dictionary_trajectories": 40,
+    "n_probe_trajectories": 12,
+    "window_length": 7,
+    "window_stride": 1,
+    "max_dictionary_windows": 256,
+    "max_probe_windows": 96,
+    "r_tau": 7,
+    "r_x": 32,
+    "r_y": 32,
+    "r_window": 45,
+    "n_sensors": 150,
+    "cs_max_iter": 100,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.001,
+    "sensor_rcond": 1e-06,
+    "random_state": 0,
+    "output": "scripts/plots/models_eval/windowed_tbmd_qr_cs_r45_s150_train40_probe12.json"
+  },
+  "train_shape": [
+    40,
+    20,
+    64,
+    64
+  ],
+  "dictionary_window_shape": [
+    7,
+    64,
+    64,
+    256
+  ],
+  "probe_window_shape": [
+    7,
+    64,
+    64,
+    96
+  ],
+  "tbmd_summary": {
+    "core_shape": [
+      7,
+      32,
+      32,
+      45
+    ],
+    "factor_shapes": [
+      [
+        7,
+        7
+      ],
+      [
+        64,
+        32
+      ],
+      [
+        64,
+        32
+      ],
+      [
+        256,
+        45
+      ]
+    ],
+    "reconstruction_rel_frob": 0.2486664354801178
+  },
+  "dictionary_shape": [
+    7,
+    64,
+    64,
+    45
+  ],
+  "sensor_summary": {
+    "requested_sensors": 150,
+    "actual_sensors": 150,
+    "selection_method": "qr_plus_leverage",
+    "sensor_indices": [
+      892,
+      3757,
+      8409,
+      10326,
+      12691,
+      14456,
+      18144,
+      20410,
+      20786,
+      21231,
+      21982,
+      22014,
+      22648,
+      22900,
+      23089,
+      23152,
+      23215,
+      23715,
+      23913,
+      24000,
+      24598,
+      24599,
+      24631,
+      24632,
+      24661,
+      24662,
+      24694,
+      24695,
+      24724,
+      24725,
+      24757,
+      24788,
+      24789,
+      24852,
+      24857,
+      24885,
+      24915,
+      24941,
+      24953,
+      25036,
+      25041,
+      25297,
+      25625,
+      25856,
+      25972,
+      26003,
+      26020,
+      26124,
+      26305,
+      26457,
+      26462,
+      26554,
+      26583,
+      26617,
+      26618,
+      26646,
+      26679,
+      26680,
+      26681,
+      26710,
+      26741,
+      26742,
+      26743,
+      26744,
+      26805,
+      26806,
+      26807,
+      26808,
+      26868,
+      26869,
+      26870,
+      26871,
+      26931,
+      26932,
+      26933,
+      26934,
+      26957,
+      26995,
+      26996,
+      26997,
+      27058,
+      27059,
+      27060,
+      27064,
+      27117,
+      27121,
+      27122,
+      27123,
+      27184,
+      27185,
+      27186,
+      27247,
+      27248,
+      27249,
+      27310,
+      27311,
+      27312,
+      27313,
+      27373,
+      27374,
+      27375,
+      27376,
+      27422,
+      27437,
+      27438,
+      27533,
+      27534,
+      27563,
+      27626,
+      27627,
+      27655,
+      27689,
+      27690,
+      27693,
+      27748,
+      27751,
+      27752,
+      27753,
+      27986,
+      28004,
+      28066,
+      28067,
+      28128,
+      28129,
+      28130,
+      28131,
+      28191,
+      28192,
+      28193,
+      28217,
+      28221,
+      28254,
+      28255,
+      28256,
+      28317,
+      28318,
+      28319,
+      28354,
+      28380,
+      28381,
+      28443,
+      28444,
+      28507,
+      28601,
+      28621,
+      28630,
+      28631,
+      28632,
+      28664,
+      28665
+    ]
+  },
+  "sources": {
+    "full_window_projection": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.0,
+        "rel_frob_err": 0.0,
+        "r2": 1.0
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.25303588099572805,
+        "window_rmse": 0.16460437131586236,
+        "window_r2": 0.9312756247106468,
+        "last_frame_rel_frob_err": 0.29614075533220013,
+        "last_frame_rmse": 0.23790149854478004,
+        "last_frame_r2": 0.9056263040290511
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.2756658129125493,
+        "sensor_rel_frob_err": 0.28254467479695106
+      }
+    },
+    "window_sensor_lstsq": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.04839679270150097,
+        "rel_frob_err": 0.7778070358388856,
+        "r2": 0.37062447645290564
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.444596378602074,
+        "window_rmse": 0.2892179049908697,
+        "window_r2": 0.7878327126385619,
+        "last_frame_rel_frob_err": 0.4138099611198615,
+        "last_frame_rmse": 0.33242979255840355,
+        "last_frame_r2": 0.8157292151709505
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.14212784810990509,
+        "sensor_rel_frob_err": 0.1456744534243095
+      }
+    },
+    "window_sensor_cs": {
+      "coefficient_error_vs_projection": {
+        "rmse": 0.048368725739334595,
+        "rel_frob_err": 0.7773559588267729,
+        "r2": 0.37135425774008946
+      },
+      "reconstruction": {
+        "window_rel_frob_err": 0.4444396795383269,
+        "window_rmse": 0.2891159694441307,
+        "window_r2": 0.7879822440247701,
+        "last_frame_rel_frob_err": 0.4137147384057985,
+        "last_frame_rmse": 0.3323532964126916,
+        "last_frame_r2": 0.8158140113191359
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.1421278901401151,
+        "sensor_rel_frob_err": 0.1456744965033257
+      },
+      "cs_mean_iterations": 6.489583333333333,
+      "cs_convergence_rate": 1.0,
+      "cs_mean_objective": 1.5175523080571247
+    }
+  }
+}

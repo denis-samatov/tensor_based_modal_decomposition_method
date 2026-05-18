@@ -1,0 +1,190 @@
+{
+  "protocol": "Causal next-step forecasting with windowed TBMD dictionary. The Tucker/HOSVD dictionary is fit on train segments containing history and next target; dev/test coefficients are recovered only from history measurements, then the target slice is reconstructed.",
+  "config": {
+    "n_train_trajectories": 80,
+    "n_test_trajectories": 20,
+    "history_length": 7,
+    "segment_stride": 1,
+    "max_train_segments": 256,
+    "max_dev_segments": null,
+    "max_test_segments": null,
+    "r_tau": 8,
+    "r_x": 24,
+    "r_y": 24,
+    "r_segment": 30,
+    "n_spatial_sensors": 30,
+    "cs_max_iter": 50,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.001,
+    "sensor_rcond": 1e-06,
+    "random_state": 0,
+    "skip_official_test": false,
+    "output": "scripts/plots/models_eval/windowed_tbmd_qr_cs_forecasting_smoke_r30_s30.json"
+  },
+  "train_shape": [
+    80,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    64,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    16,
+    20,
+    64,
+    64
+  ],
+  "official_test_shape": [
+    20,
+    20,
+    64,
+    64
+  ],
+  "train_segment_shape": [
+    8,
+    64,
+    64,
+    256
+  ],
+  "dictionary_shape": [
+    8,
+    64,
+    64,
+    30
+  ],
+  "tbmd_summary": {
+    "core_shape": [
+      8,
+      24,
+      24,
+      30
+    ],
+    "factor_shapes": [
+      [
+        8,
+        8
+      ],
+      [
+        64,
+        24
+      ],
+      [
+        64,
+        24
+      ],
+      [
+        256,
+        30
+      ]
+    ],
+    "segment_reconstruction_rel_frob": 0.3084799349308014
+  },
+  "sensor_summary": {
+    "mode": "fixed_spatial_repeated_over_history",
+    "requested_spatial_sensors": 30,
+    "actual_spatial_sensors": 30,
+    "total_history_measurements_per_prediction": 210,
+    "sensor_indices": [
+      66,
+      92,
+      554,
+      688,
+      721,
+      904,
+      957,
+      1114,
+      1124,
+      1363,
+      1382,
+      1472,
+      1781,
+      2045,
+      2058,
+      2190,
+      2196,
+      2293,
+      2393,
+      2495,
+      2803,
+      3051,
+      3086,
+      3108,
+      3414,
+      3645,
+      3734,
+      3903,
+      3993,
+      4018
+    ]
+  },
+  "fit_time": 1.3985137939453125,
+  "dev_result": {
+    "full_history_lstsq": {
+      "spatial_rmse": 0.5062307161818341,
+      "spatial_rel_frob_err": 0.5722657563017957,
+      "spatial_r2": 0.6464298047893893,
+      "coeff_rmse_vs_full_history": 0.0,
+      "coeff_rel_frob_vs_full_history": 0.0,
+      "coeff_r2_vs_full_history": 1.0,
+      "n_eval_samples": 208
+    },
+    "fixed_sensor_lstsq": {
+      "spatial_rmse": 0.5702910938330013,
+      "spatial_rel_frob_err": 0.6446824613607514,
+      "spatial_r2": 0.5512837051313293,
+      "coeff_rmse_vs_full_history": 0.03147163969689062,
+      "coeff_rel_frob_vs_full_history": 0.5063697765009697,
+      "coeff_r2_vs_full_history": 0.7302430333163223,
+      "n_eval_samples": 208
+    },
+    "fixed_sensor_cs": {
+      "spatial_rmse": 0.5702702381552862,
+      "spatial_rel_frob_err": 0.6446588851734529,
+      "spatial_r2": 0.5513165238494021,
+      "coeff_rmse_vs_full_history": 0.03146703456207877,
+      "coeff_rel_frob_vs_full_history": 0.5062956811850634,
+      "coeff_r2_vs_full_history": 0.730321972724734,
+      "n_eval_samples": 208,
+      "cs_mean_iterations": 4.538461538461538,
+      "cs_convergence_rate": 1.0,
+      "cs_mean_objective": 8.248763922903112
+    }
+  },
+  "final_test_result": {
+    "full_history_lstsq": {
+      "spatial_rmse": 0.343336060627977,
+      "spatial_rel_frob_err": 0.4040591098727908,
+      "spatial_r2": 0.8194686760888537,
+      "coeff_rmse_vs_full_history": 0.0,
+      "coeff_rel_frob_vs_full_history": 0.0,
+      "coeff_r2_vs_full_history": 1.0,
+      "n_eval_samples": 260
+    },
+    "fixed_sensor_lstsq": {
+      "spatial_rmse": 0.37269087502414705,
+      "spatial_rel_frob_err": 0.4386056709118584,
+      "spatial_r2": 0.7872785686538872,
+      "coeff_rmse_vs_full_history": 0.01892466450447625,
+      "coeff_rel_frob_vs_full_history": 0.298326809621826,
+      "coeff_r2_vs_full_history": 0.9081366736703008,
+      "n_eval_samples": 260
+    },
+    "fixed_sensor_cs": {
+      "spatial_rmse": 0.37267853344905977,
+      "spatial_rel_frob_err": 0.43859114658302684,
+      "spatial_r2": 0.7872926568659964,
+      "coeff_rmse_vs_full_history": 0.01892121165704629,
+      "coeff_rel_frob_vs_full_history": 0.29827237922716043,
+      "coeff_r2_vs_full_history": 0.9081701919516032,
+      "n_eval_samples": 260,
+      "cs_mean_iterations": 4.523076923076923,
+      "cs_convergence_rate": 1.0,
+      "cs_mean_objective": 3.263582657688856
+    }
+  }
+}

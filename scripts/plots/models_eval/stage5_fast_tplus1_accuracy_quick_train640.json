@@ -1,0 +1,493 @@
+{
+  "stage": "stage5_fast_tplus1_accuracy_sweep",
+  "protocol": "Train/dev sweep only. The official test split is not loaded or evaluated. Use this output to choose a future final-refit candidate.",
+  "groups": [
+    "quick"
+  ],
+  "train_shape": [
+    640,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    512,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    64,
+    20,
+    64,
+    64
+  ],
+  "max_train_segments": 2048,
+  "random_state": 0,
+  "results": [
+    {
+      "candidate": "baseline_h7_rt8_r300_s300",
+      "groups": "quick,baseline",
+      "history_length": 7,
+      "r_tau": 8,
+      "r_x": 32,
+      "r_y": 32,
+      "r_segment": 300,
+      "n_spatial_sensors": 300,
+      "dev_spatial_r2": 0.7579127763318994,
+      "dev_spatial_rmse": 0.41615911795933247,
+      "dev_spatial_mae": 0.26459199595389393,
+      "dev_spatial_rel_frob_err": 0.30733523521472117,
+      "fit_time_seconds": 27.136220875006984,
+      "dev_eval_time_seconds": 0.7591494169901125,
+      "n_dev_eval_samples": 832
+    },
+    {
+      "candidate": "history10_rt10_r300_s300",
+      "groups": "quick,history_length",
+      "history_length": 10,
+      "r_tau": 10,
+      "r_x": 32,
+      "r_y": 32,
+      "r_segment": 300,
+      "n_spatial_sensors": 300,
+      "dev_spatial_r2": 0.755703262372026,
+      "dev_spatial_rmse": 0.4571395359860157,
+      "dev_spatial_mae": 0.30417540783571784,
+      "dev_spatial_rel_frob_err": 0.313207147275453,
+      "fit_time_seconds": 37.722478124997,
+      "dev_eval_time_seconds": 0.7290865419927286,
+      "n_dev_eval_samples": 640
+    },
+    {
+      "candidate": "spatial40_r300_s300",
+      "groups": "quick,spatial_rank",
+      "history_length": 7,
+      "r_tau": 8,
+      "r_x": 40,
+      "r_y": 40,
+      "r_segment": 300,
+      "n_spatial_sensors": 300,
+      "dev_spatial_r2": 0.7557569019815593,
+      "dev_spatial_rmse": 0.41800803455240865,
+      "dev_spatial_mae": 0.2662124696461503,
+      "dev_spatial_rel_frob_err": 0.30870066778967437,
+      "fit_time_seconds": 32.17548554200039,
+      "dev_eval_time_seconds": 0.7908621249953285,
+      "n_dev_eval_samples": 832
+    },
+    {
+      "candidate": "rsegment350_s350",
+      "groups": "quick,segment_rank,sensor_budget",
+      "history_length": 7,
+      "r_tau": 8,
+      "r_x": 32,
+      "r_y": 32,
+      "r_segment": 350,
+      "n_spatial_sensors": 350,
+      "dev_spatial_r2": 0.7534979807979361,
+      "dev_spatial_rmse": 0.41993659260536814,
+      "dev_spatial_mae": 0.26572686801076606,
+      "dev_spatial_rel_frob_err": 0.3101249159131757,
+      "fit_time_seconds": 32.2737474579917,
+      "dev_eval_time_seconds": 0.9780401250027353,
+      "n_dev_eval_samples": 832
+    }
+  ],
+  "selected_by_dev": {
+    "candidate": "baseline_h7_rt8_r300_s300",
+    "groups": "quick,baseline",
+    "history_length": 7,
+    "r_tau": 8,
+    "r_x": 32,
+    "r_y": 32,
+    "r_segment": 300,
+    "n_spatial_sensors": 300,
+    "dev_spatial_r2": 0.7579127763318994,
+    "dev_spatial_rmse": 0.41615911795933247,
+    "dev_spatial_mae": 0.26459199595389393,
+    "dev_spatial_rel_frob_err": 0.30733523521472117,
+    "fit_time_seconds": 27.136220875006984,
+    "dev_eval_time_seconds": 0.7591494169901125,
+    "n_dev_eval_samples": 832
+  },
+  "details": [
+    {
+      "candidate": {
+        "name": "baseline_h7_rt8_r300_s300",
+        "groups": [
+          "quick",
+          "baseline"
+        ],
+        "history_length": 7,
+        "r_tau": 8,
+        "r_x": 32,
+        "r_y": 32,
+        "r_segment": 300,
+        "n_spatial_sensors": 300,
+        "notes": {
+          "purpose": "current practical reference"
+        }
+      },
+      "config": {
+        "history_length": 7,
+        "ranks": [
+          8,
+          32,
+          32,
+          300
+        ],
+        "n_spatial_sensors": 300,
+        "segment_stride": 1,
+        "max_train_segments": 2048,
+        "sensor_rcond": 1e-06,
+        "correction_alpha": 1e-08,
+        "correction_scale": 1.0,
+        "random_state": 0,
+        "spatial_mean_centering": true,
+        "dtype": "float32"
+      },
+      "fit_metrics": {
+        "n_train_segments": 2048,
+        "train_base": {
+          "mse": 0.07582704632376326,
+          "rmse": 0.27536711191382907,
+          "rel_frob_err": 0.3317154534647198,
+          "r2": 0.8818572769576974
+        },
+        "train_corrected": {
+          "mse": 0.0566647382515181,
+          "rmse": 0.23804356376831132,
+          "rel_frob_err": 0.28675439180432455,
+          "r2": 0.9117132104957688
+        },
+        "tbmd_summary": {
+          "core_shape": [
+            8,
+            32,
+            32,
+            300
+          ],
+          "factor_shapes": [
+            [
+              8,
+              8
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              2048,
+              300
+            ]
+          ],
+          "segment_reconstruction_rel_frob": 0.17975005507469177
+        },
+        "dictionary_shape": [
+          8,
+          64,
+          64,
+          300
+        ],
+        "actual_spatial_sensors": 300,
+        "total_history_measurements_per_prediction": 2100
+      },
+      "dev_metrics": {
+        "spatial_r2": 0.7579127763318994,
+        "spatial_rmse": 0.41615911795933247,
+        "spatial_mae": 0.26459199595389393,
+        "spatial_rel_frob_err": 0.30733523521472117,
+        "spatial_mse": 0.17318841146068958,
+        "n_eval_samples": 832
+      }
+    },
+    {
+      "candidate": {
+        "name": "history10_rt10_r300_s300",
+        "groups": [
+          "quick",
+          "history_length"
+        ],
+        "history_length": 10,
+        "r_tau": 10,
+        "r_x": 32,
+        "r_y": 32,
+        "r_segment": 300,
+        "n_spatial_sensors": 300,
+        "notes": {
+          "hypothesis": "longer temporal context improves t+1"
+        }
+      },
+      "config": {
+        "history_length": 10,
+        "ranks": [
+          10,
+          32,
+          32,
+          300
+        ],
+        "n_spatial_sensors": 300,
+        "segment_stride": 1,
+        "max_train_segments": 2048,
+        "sensor_rcond": 1e-06,
+        "correction_alpha": 1e-08,
+        "correction_scale": 1.0,
+        "random_state": 0,
+        "spatial_mean_centering": true,
+        "dtype": "float32"
+      },
+      "fit_metrics": {
+        "n_train_segments": 2048,
+        "train_base": {
+          "mse": 0.10412924415663898,
+          "rmse": 0.3226906322728303,
+          "rel_frob_err": 0.349084854230557,
+          "r2": 0.8642748203731754
+        },
+        "train_corrected": {
+          "mse": 0.07917083169394254,
+          "rmse": 0.2813731182859204,
+          "rel_frob_err": 0.3043878072611404,
+          "r2": 0.8968063636695441
+        },
+        "tbmd_summary": {
+          "core_shape": [
+            10,
+            32,
+            32,
+            300
+          ],
+          "factor_shapes": [
+            [
+              11,
+              10
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              2048,
+              300
+            ]
+          ],
+          "segment_reconstruction_rel_frob": 0.19417092204093933
+        },
+        "dictionary_shape": [
+          11,
+          64,
+          64,
+          300
+        ],
+        "actual_spatial_sensors": 300,
+        "total_history_measurements_per_prediction": 3000
+      },
+      "dev_metrics": {
+        "spatial_r2": 0.755703262372026,
+        "spatial_rmse": 0.4571395359860157,
+        "spatial_mae": 0.30417540783571784,
+        "spatial_rel_frob_err": 0.313207147275453,
+        "spatial_mse": 0.20897655536150972,
+        "n_eval_samples": 640
+      }
+    },
+    {
+      "candidate": {
+        "name": "spatial40_r300_s300",
+        "groups": [
+          "quick",
+          "spatial_rank"
+        ],
+        "history_length": 7,
+        "r_tau": 8,
+        "r_x": 40,
+        "r_y": 40,
+        "r_segment": 300,
+        "n_spatial_sensors": 300,
+        "notes": {
+          "hypothesis": "higher spatial rank improves reconstruction"
+        }
+      },
+      "config": {
+        "history_length": 7,
+        "ranks": [
+          8,
+          40,
+          40,
+          300
+        ],
+        "n_spatial_sensors": 300,
+        "segment_stride": 1,
+        "max_train_segments": 2048,
+        "sensor_rcond": 1e-06,
+        "correction_alpha": 1e-08,
+        "correction_scale": 1.0,
+        "random_state": 0,
+        "spatial_mean_centering": true,
+        "dtype": "float32"
+      },
+      "fit_metrics": {
+        "n_train_segments": 2048,
+        "train_base": {
+          "mse": 0.07373022030678839,
+          "rmse": 0.2715330924708596,
+          "rel_frob_err": 0.32709687904863316,
+          "r2": 0.8851242476152862
+        },
+        "train_corrected": {
+          "mse": 0.05652126829483371,
+          "rmse": 0.23774202046511195,
+          "rel_frob_err": 0.28639114372845664,
+          "r2": 0.9119367446063431
+        },
+        "tbmd_summary": {
+          "core_shape": [
+            8,
+            40,
+            40,
+            300
+          ],
+          "factor_shapes": [
+            [
+              8,
+              8
+            ],
+            [
+              64,
+              40
+            ],
+            [
+              64,
+              40
+            ],
+            [
+              2048,
+              300
+            ]
+          ],
+          "segment_reconstruction_rel_frob": 0.17681336402893066
+        },
+        "dictionary_shape": [
+          8,
+          64,
+          64,
+          300
+        ],
+        "actual_spatial_sensors": 300,
+        "total_history_measurements_per_prediction": 2100
+      },
+      "dev_metrics": {
+        "spatial_r2": 0.7557569019815593,
+        "spatial_rmse": 0.41800803455240865,
+        "spatial_mae": 0.2662124696461503,
+        "spatial_rel_frob_err": 0.30870066778967437,
+        "spatial_mse": 0.17473071695036768,
+        "n_eval_samples": 832
+      }
+    },
+    {
+      "candidate": {
+        "name": "rsegment350_s350",
+        "groups": [
+          "quick",
+          "segment_rank",
+          "sensor_budget"
+        ],
+        "history_length": 7,
+        "r_tau": 8,
+        "r_x": 32,
+        "r_y": 32,
+        "r_segment": 350,
+        "n_spatial_sensors": 350,
+        "notes": {
+          "hypothesis": "higher latent rank with matched sensors"
+        }
+      },
+      "config": {
+        "history_length": 7,
+        "ranks": [
+          8,
+          32,
+          32,
+          350
+        ],
+        "n_spatial_sensors": 350,
+        "segment_stride": 1,
+        "max_train_segments": 2048,
+        "sensor_rcond": 1e-06,
+        "correction_alpha": 1e-08,
+        "correction_scale": 1.0,
+        "random_state": 0,
+        "spatial_mean_centering": true,
+        "dtype": "float32"
+      },
+      "fit_metrics": {
+        "n_train_segments": 2048,
+        "train_base": {
+          "mse": 0.06738123613311808,
+          "rmse": 0.25957895934208164,
+          "rel_frob_err": 0.3126965729843738,
+          "r2": 0.895016315356224
+        },
+        "train_corrected": {
+          "mse": 0.04929900679800818,
+          "rmse": 0.22203379652207944,
+          "rel_frob_err": 0.2674685476632482,
+          "r2": 0.9231894266126465
+        },
+        "tbmd_summary": {
+          "core_shape": [
+            8,
+            32,
+            32,
+            350
+          ],
+          "factor_shapes": [
+            [
+              8,
+              8
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              64,
+              32
+            ],
+            [
+              2048,
+              350
+            ]
+          ],
+          "segment_reconstruction_rel_frob": 0.16533339023590088
+        },
+        "dictionary_shape": [
+          8,
+          64,
+          64,
+          350
+        ],
+        "actual_spatial_sensors": 350,
+        "total_history_measurements_per_prediction": 2450
+      },
+      "dev_metrics": {
+        "spatial_r2": 0.7534979807979361,
+        "spatial_rmse": 0.41993659260536814,
+        "spatial_mae": 0.26572686801076606,
+        "spatial_rel_frob_err": 0.3101249159131757,
+        "spatial_mse": 0.17634674180900695,
+        "n_eval_samples": 832
+      }
+    }
+  ]
+}

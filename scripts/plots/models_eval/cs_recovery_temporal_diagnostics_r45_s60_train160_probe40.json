@@ -1,0 +1,389 @@
+{
+  "protocol": "Recovery-only diagnostics on train trajectories; no temporal forecaster selection.",
+  "config": {
+    "rank": 45,
+    "n_sensors": 60,
+    "n_dictionary_trajectories": 160,
+    "n_probe_trajectories": 40,
+    "cs_max_iter": 100,
+    "cs_tol": 0.0001,
+    "cs_epsilon_l1": 0.001,
+    "temporal_window_length": 7,
+    "temporal_weights": [
+      0.1,
+      1.0,
+      5.0,
+      10.0,
+      30.0
+    ],
+    "temporal_ridge_weight": 1e-06,
+    "output": "scripts/plots/models_eval/cs_recovery_temporal_diagnostics_r45_s60_train160_probe40.json"
+  },
+  "dictionary_shape": [
+    64,
+    64,
+    45
+  ],
+  "basis_shape": [
+    45,
+    4096
+  ],
+  "sensor_summary": {
+    "requested_sensors": 60,
+    "actual_sensors": 60,
+    "selection_method": "qr_plus_leverage",
+    "indices": [
+      119,
+      125,
+      353,
+      394,
+      488,
+      495,
+      538,
+      654,
+      659,
+      879,
+      888,
+      899,
+      1246,
+      1316,
+      1347,
+      1352,
+      1379,
+      1380,
+      1396,
+      1442,
+      1443,
+      1505,
+      1506,
+      1511,
+      1551,
+      1720,
+      1749,
+      1757,
+      1758,
+      1821,
+      1897,
+      1946,
+      2008,
+      2009,
+      2072,
+      2110,
+      2183,
+      2266,
+      2284,
+      2356,
+      2445,
+      2701,
+      2702,
+      2740,
+      2765,
+      2828,
+      2898,
+      3001,
+      3044,
+      3112,
+      3136,
+      3331,
+      3400,
+      3411,
+      3623,
+      3674,
+      3760,
+      3850,
+      3894,
+      3995
+    ]
+  },
+  "sensor_matrix": {
+    "shape": [
+      60,
+      45
+    ],
+    "rank": 45,
+    "condition_number": 13.932345570531883,
+    "min_singular_value": 0.02810805180800027,
+    "max_singular_value": 0.39161109110347325,
+    "column_coherence": 0.5905464273505371
+  },
+  "sources": {
+    "full_projection": {
+      "coefficient_error_vs_projection": {
+        "mse": 0.0,
+        "rmse": 0.0,
+        "rel_frob_err": 0.0,
+        "r2": 1.0
+      },
+      "centered_reconstruction": {
+        "mse": 0.05251383129691693,
+        "rmse": 0.22915896512446754,
+        "rel_frob_err": 0.29757065286978834,
+        "r2": 0.9113267661445512
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.6057002671712173,
+        "mean_participation_ratio": 13.414552650657464,
+        "mean_abs_coeff": 3.498835568855368,
+        "median_abs_coeff": 1.4775518028545247,
+        "mean_count_abs_gt_0.001": 44.98125,
+        "mean_count_abs_gt_0.01": 44.7925,
+        "top_3_energy_fraction_mean": 0.7524959675519552,
+        "top_5_energy_fraction_mean": 0.8473370162152395,
+        "top_10_energy_fraction_mean": 0.9312041649988643,
+        "top_15_energy_fraction_mean": 0.9639608489329323
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.23607274718478002,
+        "sensor_rel_frob_err": 0.293249440721701
+      }
+    },
+    "sensor_lstsq": {
+      "coefficient_error_vs_projection": {
+        "mse": 7.708246548602629,
+        "rmse": 2.7763729123809413,
+        "rel_frob_err": 0.39581340263679193,
+        "r2": 0.7853342050054086
+      },
+      "centered_reconstruction": {
+        "mse": 0.13719915714826433,
+        "rmse": 0.37040404580439495,
+        "rel_frob_err": 0.4809821587200743,
+        "r2": 0.7683297400680654
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.9166522263829058,
+        "mean_participation_ratio": 15.874273767834909,
+        "mean_abs_coeff": 4.069513583132779,
+        "median_abs_coeff": 1.8908035572668447,
+        "mean_count_abs_gt_0.001": 44.985,
+        "mean_count_abs_gt_0.01": 44.85625,
+        "top_3_energy_fraction_mean": 0.7028667757144202,
+        "top_5_energy_fraction_mean": 0.7963421712859082,
+        "top_10_energy_fraction_mean": 0.8956177653048766,
+        "top_15_energy_fraction_mean": 0.9423858355788246
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.08972274751729797,
+        "sensor_rel_frob_err": 0.11145354914206863
+      }
+    },
+    "sensor_cs": {
+      "coefficient_error_vs_projection": {
+        "mse": 6.7674281240732,
+        "rmse": 2.601428093196735,
+        "rel_frob_err": 0.3708724071940739,
+        "r2": 0.8115349153451397
+      },
+      "centered_reconstruction": {
+        "mse": 0.12686301723033838,
+        "rmse": 0.3561783503111024,
+        "rel_frob_err": 0.4625096128470963,
+        "r2": 0.7857830267445357
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 4.010559648948644,
+        "mean_participation_ratio": 16.399789872592645,
+        "mean_abs_coeff": 3.388761681377514,
+        "median_abs_coeff": 1.6835927367210388,
+        "mean_count_abs_gt_0.001": 44.6825,
+        "mean_count_abs_gt_0.01": 44.42625,
+        "top_3_energy_fraction_mean": 0.6867440245325281,
+        "top_5_energy_fraction_mean": 0.7836295410421166,
+        "top_10_energy_fraction_mean": 0.8901915956486497,
+        "top_15_energy_fraction_mean": 0.9401348870080054
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.14506205304735872,
+        "sensor_rel_frob_err": 0.18019600497461513
+      },
+      "cs_mean_iterations": 100.0,
+      "cs_convergence_rate": 0.0,
+      "cs_mean_objective": 0.7837660789276287
+    },
+    "sensor_temporal_ridge_lam_t_0.1": {
+      "coefficient_error_vs_projection": {
+        "mse": 15.767939440434983,
+        "rmse": 3.9708864804266293,
+        "rel_frob_err": 0.5661091427211146,
+        "r2": 0.5608810338297806
+      },
+      "centered_reconstruction": {
+        "mse": 0.22574558784466472,
+        "rmse": 0.4751269176174559,
+        "rel_frob_err": 0.6169683433272782,
+        "r2": 0.6188129715844799
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.541315734883197,
+        "mean_participation_ratio": 13.027945820346076,
+        "mean_abs_coeff": 2.803256483674544,
+        "median_abs_coeff": 1.3710609361829489,
+        "mean_count_abs_gt_0.001": 44.98125,
+        "mean_count_abs_gt_0.01": 44.78125,
+        "top_3_energy_fraction_mean": 0.7728395134068075,
+        "top_5_energy_fraction_mean": 0.8537702931056249,
+        "top_10_energy_fraction_mean": 0.9294111828096954,
+        "top_15_energy_fraction_mean": 0.9617773070079149
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.3953781177681941,
+        "sensor_rel_frob_err": 0.4911384871476469
+      },
+      "temporal_regularization": {
+        "causal": true,
+        "window_length": 7,
+        "temporal_weight": 0.1,
+        "ridge_weight": 1e-06,
+        "objective": "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"
+      }
+    },
+    "sensor_temporal_ridge_lam_t_1": {
+      "coefficient_error_vs_projection": {
+        "mse": 25.57809997334887,
+        "rmse": 5.057479606814927,
+        "rel_frob_err": 0.7210192128776018,
+        "r2": 0.2876793534548465
+      },
+      "centered_reconstruction": {
+        "mse": 0.3335232304181816,
+        "rmse": 0.5775147014736348,
+        "rel_frob_err": 0.7499223373873642,
+        "r2": 0.4368229726016496
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.3927058022343677,
+        "mean_participation_ratio": 11.954016149357685,
+        "mean_abs_coeff": 2.4834652377374433,
+        "median_abs_coeff": 1.1942567934267185,
+        "mean_count_abs_gt_0.001": 44.98,
+        "mean_count_abs_gt_0.01": 44.78125,
+        "top_3_energy_fraction_mean": 0.7980776937399097,
+        "top_5_energy_fraction_mean": 0.8749358589625216,
+        "top_10_energy_fraction_mean": 0.9408165379265883,
+        "top_15_energy_fraction_mean": 0.9680861132895038
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.5628351441517345,
+        "sensor_rel_frob_err": 0.6991535160635232
+      },
+      "temporal_regularization": {
+        "causal": true,
+        "window_length": 7,
+        "temporal_weight": 1.0,
+        "ridge_weight": 1e-06,
+        "objective": "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"
+      }
+    },
+    "sensor_temporal_ridge_lam_t_5": {
+      "coefficient_error_vs_projection": {
+        "mse": 27.588542687078046,
+        "rmse": 5.25247967031554,
+        "rel_frob_err": 0.748819382769901,
+        "r2": 0.23169083768636822
+      },
+      "centered_reconstruction": {
+        "mse": 0.3556106137477256,
+        "rmse": 0.5963309599104558,
+        "rel_frob_err": 0.7743558842249069,
+        "r2": 0.3995268991888803
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.3599164368989745,
+        "mean_participation_ratio": 11.716438222382472,
+        "mean_abs_coeff": 2.433436281729854,
+        "median_abs_coeff": 1.1620550398856344,
+        "mean_count_abs_gt_0.001": 44.98,
+        "mean_count_abs_gt_0.01": 44.7975,
+        "top_3_energy_fraction_mean": 0.8029131722652139,
+        "top_5_energy_fraction_mean": 0.8791091036223648,
+        "top_10_energy_fraction_mean": 0.9433594736953721,
+        "top_15_energy_fraction_mean": 0.9695537361940417
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.6134950395014228,
+        "sensor_rel_frob_err": 0.7620832110642249
+      },
+      "temporal_regularization": {
+        "causal": true,
+        "window_length": 7,
+        "temporal_weight": 5.0,
+        "ridge_weight": 1e-06,
+        "objective": "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"
+      }
+    },
+    "sensor_temporal_ridge_lam_t_10": {
+      "coefficient_error_vs_projection": {
+        "mse": 27.895713325895493,
+        "rmse": 5.281639265028945,
+        "rel_frob_err": 0.7529765182726836,
+        "r2": 0.22313648891651772
+      },
+      "centered_reconstruction": {
+        "mse": 0.3589852911761401,
+        "rmse": 0.5991538126192139,
+        "rel_frob_err": 0.778021453769804,
+        "r2": 0.3938285230962171
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.3563094564323617,
+        "mean_participation_ratio": 11.690863302544553,
+        "mean_abs_coeff": 2.42755934074093,
+        "median_abs_coeff": 1.1569305935919063,
+        "mean_count_abs_gt_0.001": 44.985,
+        "mean_count_abs_gt_0.01": 44.77625,
+        "top_3_energy_fraction_mean": 0.8035066581879516,
+        "top_5_energy_fraction_mean": 0.8795257867665859,
+        "top_10_energy_fraction_mean": 0.943596549286672,
+        "top_15_energy_fraction_mean": 0.9696901304076406
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.6228134230005193,
+        "sensor_rel_frob_err": 0.7736585020799284
+      },
+      "temporal_regularization": {
+        "causal": true,
+        "window_length": 7,
+        "temporal_weight": 10.0,
+        "ridge_weight": 1e-06,
+        "objective": "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"
+      }
+    },
+    "sensor_temporal_ridge_lam_t_30": {
+      "coefficient_error_vs_projection": {
+        "mse": 28.111510998077645,
+        "rmse": 5.302028951078789,
+        "rel_frob_err": 0.7558833723837056,
+        "r2": 0.2171267721067509
+      },
+      "centered_reconstruction": {
+        "mse": 0.3613561152113441,
+        "rmse": 0.601129033745122,
+        "rel_frob_err": 0.7805863450874074,
+        "r2": 0.3898252228434682
+      },
+      "sparsity": {
+        "mean_l1_over_l2": 3.354362344613884,
+        "mean_participation_ratio": 11.677217327486167,
+        "mean_abs_coeff": 2.4240192225108554,
+        "median_abs_coeff": 1.1544789421557278,
+        "mean_count_abs_gt_0.001": 44.985,
+        "mean_count_abs_gt_0.01": 44.78125,
+        "top_3_energy_fraction_mean": 0.8038688005930128,
+        "top_5_energy_fraction_mean": 0.8797582170934705,
+        "top_10_energy_fraction_mean": 0.9437198982744238,
+        "top_15_energy_fraction_mean": 0.9697556734135969
+      },
+      "sensor_equation": {
+        "sensor_rmse": 0.6296818747326647,
+        "sensor_rel_frob_err": 0.7821904891605849
+      },
+      "temporal_regularization": {
+        "causal": true,
+        "window_length": 7,
+        "temporal_weight": 30.0,
+        "ridge_weight": 1e-06,
+        "objective": "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"
+      }
+    }
+  }
+}

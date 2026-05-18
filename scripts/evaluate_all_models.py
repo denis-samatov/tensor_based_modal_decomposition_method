@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from TBMD.experiments import (
-    TrajectoryAwareMultiResolutionForecaster,
+    compute_common_horizon_diagnostics,
     compute_common_horizon_metrics,
     extract_common_horizon_predictions,
     get_navier_stokes_model_specs,
@@ -43,10 +43,7 @@ def load_data():
 
 
 def fit_forecaster(forecaster, train_states, test_states):
-    if isinstance(forecaster, TrajectoryAwareMultiResolutionForecaster):
-        forecaster.fit(train_states, test_states)
-    else:
-        forecaster.fit(train_states)
+    forecaster.fit(train_states)
     return forecaster
 
 
@@ -88,6 +85,11 @@ def run_model(spec, train_states, test_states, out_dir, common_warmup_steps):
 
     one_step_common = compute_common_horizon_metrics(one_step, test_states, common_warmup_steps)
     rollout_common = compute_common_horizon_metrics(rollout, test_states, common_warmup_steps)
+    rollout_diagnostics = compute_common_horizon_diagnostics(
+        rollout,
+        test_states,
+        common_warmup_steps,
+    )
     plot_info = save_benchmark_frames(
         spec.name,
         spec.slug,
@@ -113,10 +115,16 @@ def run_model(spec, train_states, test_states, out_dir, common_warmup_steps):
         "notes": spec.notes,
         "one_step_r2_raw": one_step["spatial_r2"],
         "one_step_r2_common": one_step_common["r2"],
+        "one_step_rmse_common": one_step_common["rmse"],
+        "one_step_mae_common": one_step_common["mae"],
+        "one_step_rel_frob_common": one_step_common["rel_frob"],
         "rollout_r2_raw": rollout["spatial_r2"],
         "rollout_r2_common": rollout_common["r2"],
         "rollout_rmse_common": rollout_common["rmse"],
+        "rollout_mae_common": rollout_common["mae"],
         "rollout_rel_frob_common": rollout_common["rel_frob"],
+        "stability_gap_r2_common": one_step_common["r2"] - rollout_common["r2"],
+        "rollout_diagnostics_common": rollout_diagnostics,
         "common_warmup_steps": common_warmup_steps,
         "time": elapsed,
         "benchmark_frames": plot_info,

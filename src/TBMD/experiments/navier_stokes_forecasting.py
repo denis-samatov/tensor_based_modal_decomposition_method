@@ -8,6 +8,8 @@ changing the shared forecaster APIs.
 
 from __future__ import annotations
 
+import contextlib
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -18,9 +20,11 @@ from sklearn.utils.extmath import randomized_svd
 from torch.utils.data import DataLoader, TensorDataset
 
 from TBMD.config import (
+    CompressiveSensingConfig,
     LatentModalForecasterConfig,
     LinearForecasterConfig,
     MLPForecasterConfig,
+    SensorPlacementConfig,
     LSTMForecasterConfig,
     MultiResolutionTBMDConfig,
 )
@@ -28,6 +32,12 @@ from TBMD.core.forecasting.LatentModalForecaster import LatentModalForecaster, L
 from TBMD.core.forecasting.LinearForecaster import LinearForecaster
 from TBMD.core.forecasting.MLPForecaster import MLPForecaster
 from TBMD.core.forecasting.LSTMForecaster import LSTMForecaster
+from TBMD.core.forecasting.ScheduledSamplingLSTMForecaster import ScheduledSamplingLSTMForecaster
+from TBMD.core.reconstruction.tensor_compressive_sensing import (
+    ExtensionCompressiveSensingConfig,
+    TensorCompressiveSensing,
+)
+from TBMD.core.sensor_placement import TensorTubeQRDecomposition
 
 
 @dataclass
@@ -234,6 +244,50 @@ def build_lagged_windows(
     return np.asarray(windows), np.asarray(targets)
 
 
+def build_unrolled_lagged_windows(
+    trajectory_series: np.ndarray,
+    seq_length: int,
+    unroll_steps: int,
+    *,
+    predict_deltas: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Build trajectory-safe lagged windows and unrolled targets for sequence models.
+
+    Accepts arrays shaped `(B, T, ...)` and returns:
+    - windows: `(N, seq_length, W)`
+    - targets: `(N, unroll_steps, W)`
+    """
+    series = np.asarray(trajectory_series, dtype=np.float64)
+    if series.ndim < 3:
+        raise ValueError("trajectory_series must have shape `(B, T, ...)`")
+    if seq_length <= 0 or unroll_steps <= 0:
+        raise ValueError("seq_length and unroll_steps must be positive")
+
+    batch, steps = series.shape[:2]
+    if steps <= seq_length + unroll_steps - 1:
+        raise ValueError(
+            f"Need more than {seq_length + unroll_steps - 1} steps per trajectory, got {steps}"
+        )
+
+    feature_dim = int(np.prod(series.shape[2:]))
+    flattened = series.reshape(batch, steps, feature_dim)
+
+    windows = []
+    targets = []
+    for trajectory in flattened:
+        for end_idx in range(seq_length, steps - unroll_steps + 1):
+            windows.append(trajectory[end_idx - seq_length : end_idx])
+            
+            target_seq = trajectory[end_idx : end_idx + unroll_steps]
+            if predict_deltas:
+                prev_seq = trajectory[end_idx - 1 : end_idx + unroll_steps - 1]
+                target_seq = target_seq - prev_seq
+            targets.append(target_seq)
+
+    return np.asarray(windows), np.asarray(targets)
+
+
 def _split_trajectory_series_for_validation(
     trajectory_series: np.ndarray,
     val_split: float,
@@ -408,6 +462,1083 @@ def _compute_regression_metrics(target: np.ndarray, pred: np.ndarray) -> Dict[st
         "rel_frob_err": rel_frob,
         "r2": r2,
     }
+
+
+class TrajectoryAwarePersistenceForecaster:
+    """
+    Trajectory-aware persistence baseline for Navier-Stokes.
+
+    One-step mode predicts `x_t` as `x_{t+1}` from the ground-truth current
+    state. Rollout mode holds the first state fixed for the whole trajectory.
+    """
+
+    def __init__(self):
+        self._fitted = False
+
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwarePersistenceForecaster":
+        states = np.asarray(train_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("train_states must have shape `(B, T, H, W)`")
+        self._fitted = True
+        return self
+
+    def evaluate_one_step(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("test_states must have shape `(B, T, H, W)`")
+        spatial_shape = states.shape[2:]
+        target = states[:, 1:, :, :].reshape(-1, *spatial_shape)
+        pred = states[:, :-1, :, :].reshape(-1, *spatial_shape)
+        spatial_metrics = _compute_regression_metrics(target, pred)
+
+        return {
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "n_eval_samples": int(target.shape[0]),
+            "target_spatial": target,
+            "pred_spatial": pred,
+        }
+
+    def evaluate_rollout(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("test_states must have shape `(B, T, H, W)`")
+        spatial_shape = states.shape[2:]
+        n_steps = states.shape[1] - 1
+        target = states[:, 1:, :, :].reshape(-1, *spatial_shape)
+        pred = np.repeat(states[:, :1, :, :], repeats=n_steps, axis=1).reshape(-1, *spatial_shape)
+        spatial_metrics = _compute_regression_metrics(target, pred)
+
+        return {
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "n_eval_samples": int(target.shape[0]),
+            "n_rollout_steps": int(n_steps),
+            "target_spatial": target,
+            "pred_spatial": pred,
+        }
+
+
+class TrajectoryAwareDMDForecaster:
+    """
+    Low-rank DMD/linear latent baseline over flattened spatial snapshots.
+
+    The basis is learned from train transitions only. The linear operator is
+    fit in the reduced coefficient space and then decoded back to the grid.
+    """
+
+    def __init__(
+        self,
+        *,
+        rank: int = 20,
+        spatial_mean_centering: bool = True,
+        rcond: float = 1e-6,
+        random_state: Optional[int] = 0,
+    ):
+        if rank <= 0:
+            raise ValueError("rank must be positive")
+        self.rank = rank
+        self.spatial_mean_centering = spatial_mean_centering
+        self.rcond = rcond
+        self.random_state = random_state
+        self._spatial_mean: Optional[np.ndarray] = None
+        self._basis: Optional[np.ndarray] = None
+        self._operator: Optional[np.ndarray] = None
+        self._spatial_shape: Optional[tuple[int, int]] = None
+        self._fitted = False
+
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwareDMDForecaster":
+        states = np.asarray(train_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("train_states must have shape `(B, T, H, W)`")
+
+        self._spatial_shape = states.shape[2:]
+        feature_dim = int(np.prod(self._spatial_shape))
+        x_train = states[:, :-1, :, :].reshape(-1, feature_dim)
+        y_train = states[:, 1:, :, :].reshape(-1, feature_dim)
+
+        if self.spatial_mean_centering:
+            self._spatial_mean = np.mean(x_train, axis=0)
+        else:
+            self._spatial_mean = np.zeros(feature_dim, dtype=np.float64)
+
+        x_centered = x_train - self._spatial_mean
+        y_centered = y_train - self._spatial_mean
+        effective_rank = min(self.rank, x_centered.shape[0], x_centered.shape[1])
+        if effective_rank == min(x_centered.shape):
+            _, _, right_t = np.linalg.svd(x_centered, full_matrices=False)
+            basis = right_t[:effective_rank]
+        else:
+            _, _, right_t = randomized_svd(
+                x_centered,
+                n_components=effective_rank,
+                n_iter=5,
+                random_state=self.random_state,
+            )
+            basis = right_t
+
+        x_coeffs = x_centered @ basis.T
+        y_coeffs = y_centered @ basis.T
+        self._operator = np.linalg.pinv(x_coeffs, rcond=self.rcond) @ y_coeffs
+        self._basis = np.asarray(basis, dtype=np.float64)
+        self._fitted = True
+        return self
+
+    def _predict_next_frame(self, frame: np.ndarray) -> np.ndarray:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before prediction")
+        flat = np.asarray(frame, dtype=np.float64).reshape(1, -1)
+        coeffs = (flat - self._spatial_mean) @ self._basis.T
+        next_flat = (coeffs @ self._operator) @ self._basis + self._spatial_mean
+        return next_flat.reshape(*self._spatial_shape)
+
+    def evaluate_one_step(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("test_states must have shape `(B, T, H, W)`")
+        spatial_shape = states.shape[2:]
+        inputs = states[:, :-1, :, :].reshape(-1, *spatial_shape)
+        target = states[:, 1:, :, :].reshape(-1, *spatial_shape)
+        pred = np.stack([self._predict_next_frame(frame) for frame in inputs], axis=0)
+        spatial_metrics = _compute_regression_metrics(target, pred)
+
+        return {
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "n_eval_samples": int(target.shape[0]),
+            "target_spatial": target,
+            "pred_spatial": pred,
+        }
+
+    def evaluate_rollout(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("test_states must have shape `(B, T, H, W)`")
+        spatial_shape = states.shape[2:]
+        n_steps = states.shape[1] - 1
+        target = states[:, 1:, :, :].reshape(-1, *spatial_shape)
+
+        pred_trajs = []
+        for traj_idx in range(states.shape[0]):
+            current = states[traj_idx, 0]
+            traj_pred = []
+            for _ in range(n_steps):
+                current = self._predict_next_frame(current)
+                traj_pred.append(current)
+            pred_trajs.append(np.asarray(traj_pred, dtype=np.float64))
+
+        pred = np.concatenate(pred_trajs, axis=0)
+        spatial_metrics = _compute_regression_metrics(target, pred)
+
+        return {
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "n_eval_samples": int(target.shape[0]),
+            "n_rollout_steps": int(n_steps),
+            "target_spatial": target,
+            "pred_spatial": pred,
+        }
+
+
+class TrajectoryAwareStableDMDForecaster(TrajectoryAwareDMDForecaster):
+    """
+    Spectral-radius constrained DMD baseline.
+
+    This tests whether the strong local fit of DMD can be made safer for
+    recursive rollout by constraining the reduced linear operator.
+    """
+
+    def __init__(
+        self,
+        *,
+        rank: int = 20,
+        spatial_mean_centering: bool = True,
+        rcond: float = 1e-6,
+        random_state: Optional[int] = 0,
+        max_spectral_radius: float = 1.0,
+    ):
+        if max_spectral_radius <= 0:
+            raise ValueError("max_spectral_radius must be positive")
+        super().__init__(
+            rank=rank,
+            spatial_mean_centering=spatial_mean_centering,
+            rcond=rcond,
+            random_state=random_state,
+        )
+        self.max_spectral_radius = max_spectral_radius
+        self._unconstrained_spectral_radius: Optional[float] = None
+        self._operator_scale: float = 1.0
+
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwareStableDMDForecaster":
+        super().fit(train_states)
+        eigenvalues = np.linalg.eigvals(self._operator)
+        spectral_radius = float(np.max(np.abs(eigenvalues))) if eigenvalues.size else 0.0
+        self._unconstrained_spectral_radius = spectral_radius
+        self._operator_scale = 1.0
+
+        if spectral_radius > self.max_spectral_radius:
+            self._operator_scale = self.max_spectral_radius / spectral_radius
+            self._operator = self._operator * self._operator_scale
+
+        return self
+
+
+class TrajectoryAwareEigenvalueProjectedDMDForecaster(TrajectoryAwareDMDForecaster):
+    """
+    DMD baseline with mode-wise eigenvalue projection.
+
+    Unlike uniform operator scaling, this only clips modes whose eigenvalue
+    magnitude exceeds the configured radius and leaves already stable modes
+    as close to the fitted operator as possible.
+    """
+
+    def __init__(
+        self,
+        *,
+        rank: int = 20,
+        spatial_mean_centering: bool = True,
+        rcond: float = 1e-6,
+        random_state: Optional[int] = 0,
+        max_spectral_radius: float = 1.0,
+    ):
+        if max_spectral_radius <= 0:
+            raise ValueError("max_spectral_radius must be positive")
+        super().__init__(
+            rank=rank,
+            spatial_mean_centering=spatial_mean_centering,
+            rcond=rcond,
+            random_state=random_state,
+        )
+        self.max_spectral_radius = max_spectral_radius
+        self._unconstrained_spectral_radius: Optional[float] = None
+        self._operator_scale: float = 1.0
+        self._n_projected_modes: int = 0
+        self._projection_imag_max: float = 0.0
+
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwareEigenvalueProjectedDMDForecaster":
+        super().fit(train_states)
+        eigenvalues, eigenvectors = np.linalg.eig(self._operator)
+        magnitudes = np.abs(eigenvalues)
+        self._unconstrained_spectral_radius = (
+            float(np.max(magnitudes)) if eigenvalues.size else 0.0
+        )
+        self._operator_scale = 1.0
+        self._n_projected_modes = int(np.sum(magnitudes > self.max_spectral_radius))
+
+        if self._n_projected_modes > 0:
+            safe_magnitudes = np.maximum(magnitudes, 1e-12)
+            projected_eigenvalues = np.where(
+                magnitudes > self.max_spectral_radius,
+                eigenvalues * (self.max_spectral_radius / safe_magnitudes),
+                eigenvalues,
+            )
+            try:
+                inverse_eigenvectors = np.linalg.inv(eigenvectors)
+            except np.linalg.LinAlgError:
+                inverse_eigenvectors = np.linalg.pinv(eigenvectors)
+            projected_operator = (
+                eigenvectors @ np.diag(projected_eigenvalues) @ inverse_eigenvectors
+            )
+            projected_operator = np.real_if_close(projected_operator, tol=1000)
+            if np.iscomplexobj(projected_operator):
+                self._projection_imag_max = float(np.max(np.abs(np.imag(projected_operator))))
+                projected_operator = np.real(projected_operator)
+            self._operator = np.asarray(projected_operator, dtype=np.float64)
+
+        return self
+
+
+class TrajectoryAwareCSForecaster:
+    """
+    QR/CS-based coefficient forecaster for the Navier-Stokes experiments.
+
+    Pipeline:
+    1. Learn a spatial dictionary ``Psi`` from centered train snapshots.
+    2. Select sensor locations by tube-pivot QR on ``Psi``.
+    3. Recover coefficient series ``x_t`` from sparse sensor measurements.
+    4. Train an LSTM on ``x_t`` and recursively forecast future coefficients.
+    5. Reconstruct fields as ``Psi @ x_hat + spatial_mean``.
+    """
+
+    _VALID_COEFFICIENT_SOURCES = {"sensor_cs", "sensor_lstsq", "full_projection"}
+    _VALID_FEATURE_MODES = {"coeff", "coeff_plus_delta"}
+    _VALID_CS_INITIALIZATIONS = {"zero", "sensor_lstsq"}
+    _VALID_CORRECTION_FEATURE_MODES = {"last", "window"}
+
+    def __init__(
+        self,
+        *,
+        rank: int = 30,
+        n_sensors: int = 15,
+        coefficient_source: str = "sensor_cs",
+        feature_mode: str = "coeff_plus_delta",
+        spatial_mean_centering: bool = True,
+        random_state: Optional[int] = 0,
+        lstm_hidden_size: int = 128,
+        lstm_num_layers: int = 2,
+        lstm_seq_length: int = 7,
+        lstm_num_epochs: int = 150,
+        lstm_learning_rate: float = 1e-3,
+        lstm_batch_size: int = 32,
+        lstm_val_split: float = 0.2,
+        lstm_early_stopping_patience: int = 20,
+        cs_max_iter: int = 100,
+        cs_tol: float = 1e-4,
+        cs_epsilon_l1: float = 1e-2,
+        cs_initialization: str = "zero",
+        cs_solver: str = "cholesky",
+        sensor_rcond: float = 1e-6,
+        correction_hidden_size: int = 64,
+        correction_num_layers: int = 2,
+        correction_dropout: float = 0.0,
+        correction_learning_rate: float = 1e-3,
+        correction_weight_decay: float = 1e-5,
+        correction_num_epochs: int = 0,
+        correction_batch_size: int = 32,
+        correction_val_split: float = 0.2,
+        correction_early_stopping_patience: int = 20,
+        correction_latent_loss_weight: float = 1.0,
+        correction_spatial_loss_weight: float = 0.0,
+        correction_rel_frob_loss_weight: float = 0.0,
+        correction_feature_mode: str = "last",
+        correction_scale: float = 1.0,
+        verbose: bool = False,
+    ):
+        if rank <= 0:
+            raise ValueError("rank must be positive")
+        if n_sensors <= 0:
+            raise ValueError("n_sensors must be positive")
+        if coefficient_source not in self._VALID_COEFFICIENT_SOURCES:
+            raise ValueError(f"Unsupported coefficient_source: {coefficient_source}")
+        if feature_mode not in self._VALID_FEATURE_MODES:
+            raise ValueError(f"Unsupported feature_mode: {feature_mode}")
+        if cs_initialization not in self._VALID_CS_INITIALIZATIONS:
+            raise ValueError(f"Unsupported cs_initialization: {cs_initialization}")
+        if correction_feature_mode not in self._VALID_CORRECTION_FEATURE_MODES:
+            raise ValueError(f"Unsupported correction_feature_mode: {correction_feature_mode}")
+
+        self.rank = int(rank)
+        self.requested_n_sensors = int(n_sensors)
+        self.n_sensors = int(n_sensors)
+        self.coefficient_source = coefficient_source
+        self.feature_mode = feature_mode
+        self.spatial_mean_centering = spatial_mean_centering
+        self.random_state = random_state
+        self.lstm_hidden_size = int(lstm_hidden_size)
+        self.lstm_num_layers = int(lstm_num_layers)
+        self.lstm_seq_length = int(lstm_seq_length)
+        self.lstm_num_epochs = int(lstm_num_epochs)
+        self.lstm_learning_rate = float(lstm_learning_rate)
+        self.lstm_batch_size = int(lstm_batch_size)
+        self.lstm_val_split = float(lstm_val_split)
+        self.lstm_early_stopping_patience = int(lstm_early_stopping_patience)
+        self.cs_max_iter = int(cs_max_iter)
+        self.cs_tol = float(cs_tol)
+        self.cs_epsilon_l1 = float(cs_epsilon_l1)
+        self.cs_initialization = cs_initialization
+        self.cs_solver = cs_solver
+        self.sensor_rcond = float(sensor_rcond)
+        self.correction_hidden_size = int(correction_hidden_size)
+        self.correction_num_layers = int(correction_num_layers)
+        self.correction_dropout = float(correction_dropout)
+        self.correction_learning_rate = float(correction_learning_rate)
+        self.correction_weight_decay = float(correction_weight_decay)
+        self.correction_num_epochs = int(correction_num_epochs)
+        self.correction_batch_size = int(correction_batch_size)
+        self.correction_val_split = float(correction_val_split)
+        self.correction_early_stopping_patience = int(correction_early_stopping_patience)
+        self.correction_latent_loss_weight = float(correction_latent_loss_weight)
+        self.correction_spatial_loss_weight = float(correction_spatial_loss_weight)
+        self.correction_rel_frob_loss_weight = float(correction_rel_frob_loss_weight)
+        self.correction_feature_mode = correction_feature_mode
+        self.correction_scale = float(correction_scale)
+        self.verbose = verbose
+
+        self._spatial_mean: Optional[np.ndarray] = None
+        self._basis_vectors: Optional[np.ndarray] = None
+        self._dictionary_tensor: Optional[np.ndarray] = None
+        self._sensor_mask: Optional[np.ndarray] = None
+        self._sensor_indices: Optional[np.ndarray] = None
+        self._sensor_selection_method: Optional[str] = None
+        self._sensor_lstsq_pinv: Optional[np.ndarray] = None
+        self._coeff_mean: Optional[np.ndarray] = None
+        self._coeff_std: Optional[np.ndarray] = None
+        self._train_coeffs: Optional[np.ndarray] = None
+        self._sub_forecaster: Optional[LSTMForecaster] = None
+        self._correction_model: Optional[MLPForecaster] = None
+        self._correction_target_mean: Optional[np.ndarray] = None
+        self._correction_target_std: Optional[np.ndarray] = None
+        self._correction_training_history: Optional[Dict[str, list[float]]] = None
+        self._spatial_shape: Optional[tuple[int, int]] = None
+        self._fit_cs_metrics: list[dict[str, float | int | bool]] = []
+        self._last_projection_metrics: list[dict[str, float | int | bool]] = []
+        self._fit_reconstruction_metrics: Optional[dict[str, float]] = None
+        self._fitted = False
+
+    @property
+    def sensor_mask(self) -> np.ndarray:
+        if self._sensor_mask is None:
+            raise RuntimeError("Call fit() before accessing sensor_mask")
+        return self._sensor_mask.copy()
+
+    @property
+    def sensor_indices(self) -> np.ndarray:
+        if self._sensor_indices is None:
+            raise RuntimeError("Call fit() before accessing sensor_indices")
+        return self._sensor_indices.copy()
+
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwareCSForecaster":
+        states = np.asarray(train_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("train_states must have shape `(B, T, H, W)`")
+
+        self._spatial_shape = states.shape[2:]
+        self._spatial_mean = (
+            np.mean(states, axis=(0, 1))
+            if self.spatial_mean_centering
+            else np.zeros(self._spatial_shape, dtype=np.float64)
+        )
+        centered_states = states - self._spatial_mean
+        self._fit_dictionary(centered_states)
+        self._place_sensors()
+        self._prepare_sensor_lstsq()
+
+        self._train_coeffs = self._states_to_coefficients(centered_states)
+        self._fit_cs_metrics = list(self._last_projection_metrics)
+        self._fit_reconstruction_metrics = self._compute_centered_reconstruction_metrics(
+            centered_states,
+            self._train_coeffs,
+        )
+        self._coeff_mean, self._coeff_std = _compute_latent_standardization_stats(self._train_coeffs)
+        self._fit_sub_forecaster()
+        self._fit_correction_head(states)
+        self._fitted = True
+        return self
+
+    def _fit_dictionary(self, centered_states: np.ndarray) -> None:
+        n_trajectories, steps, height, width = centered_states.shape
+        flat = centered_states.reshape(n_trajectories * steps, height * width)
+        effective_rank = min(self.rank, flat.shape[0], flat.shape[1])
+        if effective_rank <= 0:
+            raise ValueError("effective rank must be positive")
+
+        if effective_rank == min(flat.shape):
+            _, _, right_t = np.linalg.svd(flat, full_matrices=False)
+            basis = right_t[:effective_rank]
+        else:
+            _, _, basis = randomized_svd(
+                flat,
+                n_components=effective_rank,
+                n_iter=5,
+                random_state=self.random_state,
+            )
+
+        self.rank = int(effective_rank)
+        self._basis_vectors = np.asarray(basis, dtype=np.float64)
+        self._dictionary_tensor = self._basis_vectors.T.reshape(height, width, self.rank)
+
+    def _place_sensors(self) -> None:
+        effective_n_sensors = min(self.requested_n_sensors, self.rank)
+        config = SensorPlacementConfig(
+            n_sensors=effective_n_sensors,
+            random_state=self.random_state,
+            verbose=False,
+            dtype="float64",
+        )
+        qr = TensorTubeQRDecomposition(
+            self._dictionary_tensor,
+            N=effective_n_sensors,
+            config=config,
+            dtype=torch.float64,
+        )
+        if self.verbose:
+            placement, _, _ = qr.factorize()
+        else:
+            with contextlib.redirect_stdout(io.StringIO()):
+                placement, _, _ = qr.factorize()
+
+        mask = placement.detach().cpu().numpy().astype(bool)
+        if not np.any(mask):
+            raise RuntimeError("QR sensor placement produced an empty sensor mask")
+
+        if self.requested_n_sensors > int(mask.sum()):
+            mask = self._augment_sensor_mask_by_leverage(mask)
+            self._sensor_selection_method = "qr_plus_leverage"
+        else:
+            self._sensor_selection_method = "qr"
+
+        self._sensor_mask = mask
+        self._sensor_indices = np.flatnonzero(mask.reshape(-1))
+        self.n_sensors = int(mask.sum())
+
+    def _augment_sensor_mask_by_leverage(self, qr_mask: np.ndarray) -> np.ndarray:
+        flat_mask = np.asarray(qr_mask, dtype=bool).reshape(-1).copy()
+        n_available = flat_mask.size - int(flat_mask.sum())
+        n_extra = min(self.requested_n_sensors - int(flat_mask.sum()), n_available)
+        if n_extra <= 0:
+            return flat_mask.reshape(qr_mask.shape)
+
+        flat_dictionary = self._dictionary_tensor.reshape(-1, self.rank)
+        leverage_scores = np.sum(flat_dictionary * flat_dictionary, axis=1)
+        leverage_scores[flat_mask] = -np.inf
+        extra_indices = np.argpartition(-leverage_scores, n_extra - 1)[:n_extra]
+        extra_indices = extra_indices[np.argsort(-leverage_scores[extra_indices])]
+        flat_mask[extra_indices] = True
+        return flat_mask.reshape(qr_mask.shape)
+
+    def _prepare_sensor_lstsq(self) -> None:
+        flat_dictionary = self._dictionary_tensor.reshape(-1, self.rank)
+        sensor_dictionary = flat_dictionary[self._sensor_indices]
+        self._sensor_lstsq_pinv = np.linalg.pinv(
+            sensor_dictionary,
+            rcond=self.sensor_rcond,
+        )
+
+    def _states_to_coefficients(self, centered_states: np.ndarray) -> np.ndarray:
+        states = np.asarray(centered_states, dtype=np.float64)
+        if states.ndim != 4:
+            raise ValueError("states must have shape `(B, T, H, W)`")
+
+        if self.coefficient_source == "full_projection":
+            flat = states.reshape(-1, int(np.prod(states.shape[2:])))
+            coeffs = flat @ self._basis_vectors.T
+            self._last_projection_metrics = []
+        elif self.coefficient_source == "sensor_lstsq":
+            coeffs = self._recover_sensor_lstsq_coefficients(states)
+            self._last_projection_metrics = []
+        else:
+            coeffs, metrics = self._recover_sensor_cs_coefficients(states)
+            self._last_projection_metrics = metrics
+
+        return coeffs.reshape(states.shape[0], states.shape[1], self.rank)
+
+    def _recover_sensor_lstsq_coefficients(self, centered_states: np.ndarray) -> np.ndarray:
+        flat = centered_states.reshape(-1, int(np.prod(centered_states.shape[2:])))
+        measurements = flat[:, self._sensor_indices]
+        return measurements @ self._sensor_lstsq_pinv.T
+
+    def _recover_sensor_cs_coefficients(
+        self,
+        centered_states: np.ndarray,
+    ) -> tuple[np.ndarray, list[dict[str, float | int | bool]]]:
+        flat_states = centered_states.reshape(-1, *centered_states.shape[2:])
+        coeffs = np.zeros((flat_states.shape[0], self.rank), dtype=np.float64)
+        metrics_out: list[dict[str, float | int | bool]] = []
+        initial_coeffs = None
+        if self.cs_initialization == "sensor_lstsq":
+            initial_coeffs = self._recover_sensor_lstsq_coefficients(centered_states)
+
+        core_cfg = CompressiveSensingConfig(
+            max_iter=self.cs_max_iter,
+            tol=self.cs_tol,
+            epsilon_l1=self.cs_epsilon_l1,
+            device="cpu",
+            dtype=torch.float32,
+        )
+        ext_cfg = ExtensionCompressiveSensingConfig(
+            solver=self.cs_solver,
+            collect_history=False,
+        )
+
+        for idx, field in enumerate(flat_states):
+            solver = TensorCompressiveSensing(
+                self._dictionary_tensor.astype(np.float32),
+                self._sensor_mask,
+                field.astype(np.float32),
+                core_cfg=core_cfg,
+                ext_cfg=ext_cfg,
+            )
+            if initial_coeffs is not None:
+                initial = torch.as_tensor(
+                    initial_coeffs[idx],
+                    dtype=solver.dtype,
+                    device=solver.device,
+                ).reshape(-1, 1)
+                solver.x = initial.clone()
+                solver.d = initial.clone()
+                solver._d_prev = initial.clone()
+                solver.p = torch.zeros_like(initial)
+            coeff, metrics = solver.solve()
+            coeffs[idx] = coeff.numpy().astype(np.float64, copy=False)
+            metrics_out.append(
+                {
+                    "iterations": int(metrics.iterations),
+                    "converged": bool(metrics.converged),
+                    "primal_residual": float(metrics.primal_residual),
+                    "dual_residual": float(metrics.dual_residual),
+                    "objective": float(metrics.objective),
+                    "time_sec": float(metrics.time_sec),
+                }
+            )
+            if self.verbose and (idx + 1) % 500 == 0:
+                print(f"Recovered CS coefficients for {idx + 1}/{flat_states.shape[0]} states")
+
+        return coeffs, metrics_out
+
+    def _to_model_coeffs(self, coeff_series: np.ndarray) -> np.ndarray:
+        standardized = _apply_latent_standardization(coeff_series, self._coeff_mean, self._coeff_std)
+        if self.feature_mode == "coeff":
+            return standardized
+        return _augment_latent_series_with_deltas(standardized)
+
+    def _from_model_coeffs(self, coeff_series: np.ndarray) -> np.ndarray:
+        series = np.asarray(coeff_series, dtype=np.float64)
+        if self.feature_mode == "coeff_plus_delta":
+            series = series[..., : self.rank]
+        return _invert_latent_standardization(series, self._coeff_mean, self._coeff_std)
+
+    def _fit_sub_forecaster(self) -> None:
+        model_series = self._to_model_coeffs(self._train_coeffs)
+        model_dim = model_series.shape[-1]
+        model = LSTMForecaster(
+            in_dim=model_dim,
+            out_dim=model_dim,
+            config=LSTMForecasterConfig(
+                in_dim=model_dim,
+                out_dim=model_dim,
+                seq_length=self.lstm_seq_length,
+                hidden_size=self.lstm_hidden_size,
+                num_layers=self.lstm_num_layers,
+                learning_rate=self.lstm_learning_rate,
+                num_epochs=self.lstm_num_epochs,
+                batch_size=self.lstm_batch_size,
+                val_split=self.lstm_val_split,
+                early_stopping_patience=self.lstm_early_stopping_patience,
+                delta_forecast=False,
+                verbose=self.verbose,
+            ),
+        )
+        train_series, val_series = _split_trajectory_series_for_validation(
+            model_series,
+            self.lstm_val_split,
+        )
+        train_windows, train_targets = build_lagged_windows(
+            train_series,
+            self.lstm_seq_length,
+            predict_deltas=False,
+        )
+        if val_series is not None:
+            val_windows, val_targets = build_lagged_windows(
+                val_series,
+                self.lstm_seq_length,
+                predict_deltas=False,
+            )
+        else:
+            val_windows, val_targets = None, None
+        _fit_explicit_lstm(model, train_windows, train_targets, val_windows, val_targets)
+        self._sub_forecaster = model
+
+    def _predict_next_model_coeff(self, current_input: np.ndarray) -> np.ndarray:
+        return self._sub_forecaster.predict_next(current_input)
+
+    def _make_latest_model_state(self, raw_history: list[np.ndarray]) -> np.ndarray:
+        if self.feature_mode == "coeff":
+            latest = np.asarray(raw_history[-1], dtype=np.float64).reshape(1, 1, -1)
+            return self._to_model_coeffs(latest)[0, -1]
+
+        tail = np.asarray(raw_history[-2:], dtype=np.float64)
+        if tail.shape[0] == 1:
+            tail = np.concatenate([tail, tail], axis=0)
+        return self._to_model_coeffs(tail[np.newaxis, ...])[0, -1]
+
+    def _split_correction_trajectories(
+        self,
+        raw_series: np.ndarray,
+        model_series: np.ndarray,
+        spatial_states: np.ndarray,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        Optional[np.ndarray],
+        Optional[np.ndarray],
+        Optional[np.ndarray],
+    ]:
+        if self.correction_val_split <= 0 or raw_series.shape[0] < 2:
+            return raw_series, model_series, spatial_states, None, None, None
+
+        val_count = max(1, int(round(raw_series.shape[0] * self.correction_val_split)))
+        if val_count >= raw_series.shape[0]:
+            return raw_series, model_series, spatial_states, None, None, None
+
+        split_idx = raw_series.shape[0] - val_count
+        return (
+            raw_series[:split_idx],
+            model_series[:split_idx],
+            spatial_states[:split_idx],
+            raw_series[split_idx:],
+            model_series[split_idx:],
+            spatial_states[split_idx:],
+        )
+
+    def _build_correction_dataset(
+        self,
+        raw_coeff_series: np.ndarray,
+        model_coeff_series: np.ndarray,
+        spatial_states: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        windows, _ = build_lagged_windows(model_coeff_series, self.lstm_seq_length)
+        baseline_pred_model = np.stack(
+            [self._predict_next_model_coeff(window) for window in windows],
+            axis=0,
+        )
+        target_raw = raw_coeff_series[:, self.lstm_seq_length :, :].reshape(
+            -1,
+            raw_coeff_series.shape[-1],
+        )
+        target_spatial = spatial_states[:, self.lstm_seq_length :, :, :].reshape(
+            -1,
+            *spatial_states.shape[2:],
+        )
+        baseline_pred_raw = self._from_model_coeffs(baseline_pred_model)
+        correction_features = self._build_correction_features(windows, baseline_pred_model)
+        correction_targets = target_raw - baseline_pred_raw
+        return correction_features, correction_targets, baseline_pred_raw, target_spatial
+
+    def _build_correction_features(
+        self,
+        current_input_model: np.ndarray,
+        baseline_pred_model: np.ndarray,
+    ) -> np.ndarray:
+        current = np.asarray(current_input_model, dtype=np.float64)
+        baseline = np.asarray(baseline_pred_model, dtype=np.float64)
+
+        if current.ndim == 1:
+            if baseline.ndim != 1:
+                raise ValueError("Single correction input requires a 1-D baseline prediction")
+            return _build_t_plus_one_correction_features(current, baseline)
+
+        if current.ndim == 2:
+            if baseline.ndim == 1:
+                last_state = current[-1]
+                if self.correction_feature_mode == "window":
+                    return np.concatenate(
+                        [current.reshape(-1), baseline, baseline - last_state],
+                        axis=-1,
+                    )
+                return _build_t_plus_one_correction_features(last_state, baseline)
+
+            if baseline.ndim == 2:
+                return _build_t_plus_one_correction_features(current, baseline)
+
+        if current.ndim == 3:
+            if baseline.ndim != 2 or baseline.shape[0] != current.shape[0]:
+                raise ValueError("Batched correction windows require `(N, D)` baseline predictions")
+            last_states = current[:, -1, :]
+            if self.correction_feature_mode == "window":
+                return np.concatenate(
+                    [
+                        current.reshape(current.shape[0], -1),
+                        baseline,
+                        baseline - last_states,
+                    ],
+                    axis=-1,
+                )
+            return _build_t_plus_one_correction_features(last_states, baseline)
+
+        raise ValueError("correction input must have shape `(D,)`, `(T, D)`, or `(N, T, D)`")
+
+    def _fit_correction_head(self, train_states: np.ndarray) -> None:
+        if self.correction_num_epochs <= 0:
+            self._correction_model = None
+            self._correction_target_mean = np.zeros(self.rank, dtype=np.float64)
+            self._correction_target_std = np.ones(self.rank, dtype=np.float64)
+            self._correction_training_history = None
+            return
+
+        raw_coeffs = np.asarray(self._train_coeffs, dtype=np.float64)
+        model_coeffs = self._to_model_coeffs(raw_coeffs)
+        spatial_states = np.asarray(train_states, dtype=np.float64)
+        train_raw, train_model, train_states_split, val_raw, val_model, val_states = (
+            self._split_correction_trajectories(raw_coeffs, model_coeffs, spatial_states)
+        )
+        train_x, train_y_raw, train_baseline_raw, train_target_spatial = (
+            self._build_correction_dataset(train_raw, train_model, train_states_split)
+        )
+        self._correction_target_mean, self._correction_target_std = (
+            _compute_vector_standardization_stats(train_y_raw)
+        )
+
+        if val_raw is not None and val_model is not None and val_states is not None:
+            val_x, val_y_raw, val_baseline_raw, val_target_spatial = (
+                self._build_correction_dataset(val_raw, val_model, val_states)
+            )
+        else:
+            val_x = val_y_raw = val_baseline_raw = val_target_spatial = None
+
+        self._correction_model = MLPForecaster(
+            in_dim=train_x.shape[-1],
+            out_dim=train_y_raw.shape[-1],
+            config=MLPForecasterConfig(
+                in_dim=train_x.shape[-1],
+                out_dim=train_y_raw.shape[-1],
+                hidden_size=self.correction_hidden_size,
+                num_layers=self.correction_num_layers,
+                dropout=self.correction_dropout,
+                learning_rate=self.correction_learning_rate,
+                weight_decay=self.correction_weight_decay,
+                num_epochs=self.correction_num_epochs,
+                batch_size=self.correction_batch_size,
+                val_split=self.correction_val_split,
+                early_stopping_patience=self.correction_early_stopping_patience,
+                delta_forecast=False,
+                device="cpu",
+                verbose=self.verbose,
+            ),
+        )
+        if self.correction_spatial_loss_weight <= 0.0 and self.correction_rel_frob_loss_weight <= 0.0:
+            train_y = (train_y_raw - self._correction_target_mean) / self._correction_target_std
+            if val_y_raw is not None:
+                val_y = (val_y_raw - self._correction_target_mean) / self._correction_target_std
+            else:
+                val_y = None
+            _fit_explicit_mlp(self._correction_model, train_x, train_y, val_x, val_y)
+            self._correction_training_history = dict(self._correction_model.training_history)
+            return
+
+        decoder_basis = self._basis_vectors.reshape(self.rank, *self._spatial_shape)
+        self._correction_training_history = _fit_explicit_mlp_with_mixed_loss(
+            self._correction_model,
+            train_x=train_x,
+            train_residual_raw=train_y_raw,
+            train_baseline_raw=train_baseline_raw,
+            train_target_spatial=train_target_spatial,
+            residual_mean=self._correction_target_mean,
+            residual_std=self._correction_target_std,
+            decoder_basis=decoder_basis,
+            spatial_mean=self._spatial_mean,
+            latent_loss_weight=self.correction_latent_loss_weight,
+            spatial_loss_weight=self.correction_spatial_loss_weight,
+            rel_frob_loss_weight=self.correction_rel_frob_loss_weight,
+            val_x=val_x,
+            val_residual_raw=val_y_raw,
+            val_baseline_raw=val_baseline_raw,
+            val_target_spatial=val_target_spatial,
+        )
+
+    def _predict_residual_raw(self, correction_features: np.ndarray) -> np.ndarray:
+        if self._correction_model is None:
+            return np.zeros(self.rank, dtype=np.float64)
+
+        residual_normalized = self._correction_model.predict_next(correction_features)
+        return residual_normalized * self._correction_target_std + self._correction_target_mean
+
+    def _predict_corrected_next_raw(
+        self,
+        current_input_model: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        baseline_pred_model = self._predict_next_model_coeff(current_input_model)
+        baseline_pred_raw = self._from_model_coeffs(
+            np.asarray(baseline_pred_model, dtype=np.float64).reshape(1, -1)
+        )[0]
+
+        correction_features = self._build_correction_features(
+            current_input_model,
+            baseline_pred_model,
+        )
+        corrected_raw = (
+            baseline_pred_raw
+            + self.correction_scale * self._predict_residual_raw(correction_features)
+        )
+        return baseline_pred_model, baseline_pred_raw, corrected_raw
+
+    def _reconstruct_coeff_batch(self, coeff_vectors: np.ndarray) -> np.ndarray:
+        vectors = np.asarray(coeff_vectors, dtype=np.float64)
+        recon = (vectors @ self._basis_vectors).reshape(vectors.shape[0], *self._spatial_shape)
+        return recon + self._spatial_mean
+
+    def _compute_centered_reconstruction_metrics(
+        self,
+        centered_states: np.ndarray,
+        coeff_series: np.ndarray,
+    ) -> dict[str, float]:
+        target = np.asarray(centered_states, dtype=np.float64).reshape(-1, *self._spatial_shape)
+        coeffs = np.asarray(coeff_series, dtype=np.float64).reshape(-1, self.rank)
+        recon = (coeffs @ self._basis_vectors).reshape(-1, *self._spatial_shape)
+        metrics = _compute_regression_metrics(target, recon)
+        return {
+            "mse": metrics["mse"],
+            "rmse": metrics["rmse"],
+            "rel_frob_err": metrics["rel_frob_err"],
+            "r2": metrics["r2"],
+        }
+
+    def evaluate_one_step(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        centered = states - self._spatial_mean
+        coeffs_raw = self._states_to_coefficients(centered)
+        coeffs_model = self._to_model_coeffs(coeffs_raw)
+        spatial_shape = states.shape[2:]
+
+        windows, target_model = build_lagged_windows(coeffs_model, self.lstm_seq_length)
+        baseline_model = np.stack(
+            [self._predict_next_model_coeff(window) for window in windows],
+            axis=0,
+        )
+        target_raw = self._from_model_coeffs(target_model)
+        baseline_raw = self._from_model_coeffs(baseline_model)
+        if self._correction_model is None:
+            pred_raw = baseline_raw
+        else:
+            pred_raw = np.stack(
+                [self._predict_corrected_next_raw(window)[2] for window in windows],
+                axis=0,
+            )
+        spatial_target = states[:, self.lstm_seq_length :, :, :].reshape(-1, *spatial_shape)
+        spatial_pred = self._reconstruct_coeff_batch(pred_raw)
+        baseline_spatial_pred = self._reconstruct_coeff_batch(baseline_raw)
+
+        coeff_metrics = _compute_regression_metrics(target_raw, pred_raw)
+        spatial_metrics = _compute_regression_metrics(spatial_target, spatial_pred)
+        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_spatial_pred)
+        return {
+            "coeff_mse": coeff_metrics["mse"],
+            "coeff_rmse": coeff_metrics["rmse"],
+            "coeff_rel_frob_err": coeff_metrics["rel_frob_err"],
+            "coeff_r2": coeff_metrics["r2"],
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "baseline_spatial_r2": baseline_spatial_metrics["r2"],
+            "n_eval_samples": int(target_raw.shape[0]),
+            "target_spatial": spatial_target,
+            "pred_spatial": spatial_pred,
+            "target_coeff": target_raw,
+            "pred_coeff": pred_raw,
+            "baseline_pred_spatial": baseline_spatial_pred,
+            "baseline_pred_coeff": baseline_raw,
+        }
+
+    def evaluate_rollout(self, test_states: np.ndarray) -> Dict[str, object]:
+        if not self._fitted:
+            raise RuntimeError("Call fit() before evaluation")
+
+        states = np.asarray(test_states, dtype=np.float64)
+        centered = states - self._spatial_mean
+        coeffs_raw = self._states_to_coefficients(centered)
+        spatial_shape = states.shape[2:]
+        warmup = self.lstm_seq_length
+
+        pred_coeff_all = []
+        baseline_coeff_all = []
+        target_spatial_all = []
+        for traj_idx in range(coeffs_raw.shape[0]):
+            raw_history = [state.copy() for state in coeffs_raw[traj_idx, :warmup, :]]
+            baseline_raw_history = [
+                state.copy() for state in coeffs_raw[traj_idx, :warmup, :]
+            ]
+            model_history = [
+                state.copy()
+                for state in self._to_model_coeffs(coeffs_raw[traj_idx : traj_idx + 1, :warmup, :])[0]
+            ]
+            baseline_model_history = [state.copy() for state in model_history]
+            target_traj = coeffs_raw[traj_idx, warmup:, :]
+            pred_traj = []
+            baseline_traj = []
+            for _ in range(target_traj.shape[0]):
+                baseline_input = np.asarray(baseline_model_history[-warmup:], dtype=np.float64)
+                baseline_model = self._predict_next_model_coeff(baseline_input)
+                baseline_raw = self._from_model_coeffs(baseline_model.reshape(1, -1))[0]
+                baseline_traj.append(baseline_raw)
+                baseline_raw_history.append(baseline_raw)
+                baseline_model_history.append(self._make_latest_model_state(baseline_raw_history))
+
+                if self._correction_model is None:
+                    pred_raw = baseline_raw
+                else:
+                    current_input = np.asarray(model_history[-warmup:], dtype=np.float64)
+                    _, _, pred_raw = self._predict_corrected_next_raw(current_input)
+                pred_traj.append(pred_raw)
+                raw_history.append(pred_raw)
+                model_history.append(self._make_latest_model_state(raw_history))
+
+            pred_coeff_all.append(np.asarray(pred_traj, dtype=np.float64))
+            baseline_coeff_all.append(np.asarray(baseline_traj, dtype=np.float64))
+            target_spatial_all.append(states[traj_idx, warmup:, :, :])
+
+        pred_raw = np.concatenate(pred_coeff_all, axis=0)
+        baseline_raw = np.concatenate(baseline_coeff_all, axis=0)
+        target_raw = coeffs_raw[:, warmup:, :].reshape(-1, coeffs_raw.shape[-1])
+        spatial_target = np.concatenate(target_spatial_all, axis=0)
+        spatial_pred = self._reconstruct_coeff_batch(pred_raw)
+        baseline_spatial_pred = self._reconstruct_coeff_batch(baseline_raw)
+
+        coeff_metrics = _compute_regression_metrics(target_raw, pred_raw)
+        spatial_metrics = _compute_regression_metrics(spatial_target, spatial_pred)
+        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_spatial_pred)
+        return {
+            "coeff_mse": coeff_metrics["mse"],
+            "coeff_rmse": coeff_metrics["rmse"],
+            "coeff_rel_frob_err": coeff_metrics["rel_frob_err"],
+            "coeff_r2": coeff_metrics["r2"],
+            "spatial_mse": spatial_metrics["mse"],
+            "spatial_rmse": spatial_metrics["rmse"],
+            "spatial_rel_frob_err": spatial_metrics["rel_frob_err"],
+            "spatial_r2": spatial_metrics["r2"],
+            "baseline_spatial_r2": baseline_spatial_metrics["r2"],
+            "n_eval_samples": int(target_raw.shape[0]),
+            "n_rollout_steps": int(states.shape[1] - warmup),
+            "target_spatial": spatial_target,
+            "pred_spatial": spatial_pred,
+            "target_coeff": target_raw,
+            "pred_coeff": pred_raw,
+            "baseline_pred_spatial": baseline_spatial_pred,
+            "baseline_pred_coeff": baseline_raw,
+        }
+
+    def get_sensor_summary(self) -> dict[str, object]:
+        if self._sensor_mask is None:
+            raise RuntimeError("Call fit() before sensor summary")
+        return {
+            "rank": self.rank,
+            "requested_sensors": self.requested_n_sensors,
+            "actual_sensors": int(np.sum(self._sensor_mask)),
+            "sensor_selection_method": self._sensor_selection_method,
+            "sensor_indices": self._sensor_indices.astype(int).tolist(),
+            "coefficient_source": self.coefficient_source,
+            "feature_mode": self.feature_mode,
+            "cs_initialization": self.cs_initialization,
+            "correction_enabled": self._correction_model is not None,
+            "correction_num_epochs": self.correction_num_epochs,
+            "correction_feature_mode": self.correction_feature_mode,
+            "correction_scale": self.correction_scale,
+            "correction_training_history": self._correction_training_history,
+            "fit_cs_mean_iterations": (
+                float(np.mean([m["iterations"] for m in self._fit_cs_metrics]))
+                if self._fit_cs_metrics
+                else None
+            ),
+            "fit_cs_convergence_rate": (
+                float(np.mean([m["converged"] for m in self._fit_cs_metrics]))
+                if self._fit_cs_metrics
+                else None
+            ),
+            "fit_reconstruction": self._fit_reconstruction_metrics,
+        }
 
 
 def _build_t_plus_one_correction_features(
@@ -759,7 +1890,7 @@ def _fit_explicit_lstm(
     patience_counter = 0
 
     for epoch in range(num_epochs):
-        train_loss = forecaster.train_epoch(train_loader)
+        train_loss = forecaster.train_epoch(train_loader, epoch=epoch)
         forecaster.training_history["train_loss"].append(train_loss)
 
         if val_loader is not None:
@@ -795,8 +1926,6 @@ class TrajectoryAwareLatentForecaster:
         self.config = config or LatentModalForecasterConfig(verbose=False)
         if feature_mode not in {"latent", "latent_plus_delta"}:
             raise ValueError(f"Unsupported feature_mode: {feature_mode}")
-        if feature_mode != "latent" and self.config.delta_forecast:
-            raise ValueError("feature_mode='latent_plus_delta' requires delta_forecast=False")
         self._adapter = LatentModalForecaster(config=self.config)
         self._feature_mode = feature_mode
         self._sub_forecaster = None
@@ -934,42 +2063,72 @@ class TrajectoryAwareLatentForecaster:
             return
 
         if self.config.forecaster_type == "lstm":
-            model = LSTMForecaster(
+            config = LSTMForecasterConfig(
                 in_dim=model_dim,
                 out_dim=model_dim,
-                config=LSTMForecasterConfig(
-                    in_dim=model_dim,
-                    out_dim=model_dim,
-                    seq_length=self.config.lstm_seq_length,
-                    hidden_size=self.config.lstm_hidden_size,
-                    num_layers=self.config.lstm_num_layers,
-                    learning_rate=self.config.lstm_learning_rate,
-                    num_epochs=self.config.lstm_num_epochs,
-                    batch_size=self.config.lstm_batch_size,
-                    val_split=self.config.lstm_val_split,
-                    early_stopping_patience=self.config.lstm_early_stopping_patience,
-                    delta_forecast=self.config.delta_forecast,
-                    device=self._adapter._device,
-                    verbose=self.config.verbose,
-                ),
+                seq_length=self.config.lstm_seq_length,
+                hidden_size=self.config.lstm_hidden_size,
+                num_layers=self.config.lstm_num_layers,
+                learning_rate=self.config.lstm_learning_rate,
+                num_epochs=self.config.lstm_num_epochs,
+                batch_size=self.config.lstm_batch_size,
+                val_split=self.config.lstm_val_split,
+                early_stopping_patience=self.config.lstm_early_stopping_patience,
+                delta_forecast=self.config.delta_forecast,
+                use_scheduled_sampling=self.config.lstm_use_scheduled_sampling,
+                ss_unroll_steps=self.config.lstm_ss_unroll_steps,
+                ss_decay_rate=self.config.lstm_ss_decay_rate,
+                ss_min_prob=self.config.lstm_ss_min_prob,
+                device=self._adapter._device,
+                verbose=self.config.verbose,
             )
+            
             train_series, val_series = _split_trajectory_series_for_validation(
                 train_latent_model,
                 self.config.lstm_val_split,
             )
-            train_windows, train_targets = build_lagged_windows(
-                train_series,
-                self.config.lstm_seq_length,
-                predict_deltas=self.config.delta_forecast,
-            )
-            if val_series is not None:
-                val_windows, val_targets = build_lagged_windows(
-                    val_series,
+
+            if self.config.lstm_use_scheduled_sampling:
+                model = ScheduledSamplingLSTMForecaster(
+                    in_dim=model_dim,
+                    out_dim=model_dim,
+                    config=config,
+                )
+                train_windows, train_targets = build_unrolled_lagged_windows(
+                    train_series,
+                    self.config.lstm_seq_length,
+                    self.config.lstm_ss_unroll_steps,
+                    predict_deltas=self.config.delta_forecast,
+                )
+                if val_series is not None:
+                    val_windows, val_targets = build_unrolled_lagged_windows(
+                        val_series,
+                        self.config.lstm_seq_length,
+                        self.config.lstm_ss_unroll_steps,
+                        predict_deltas=self.config.delta_forecast,
+                    )
+                else:
+                    val_windows, val_targets = None, None
+            else:
+                model = LSTMForecaster(
+                    in_dim=model_dim,
+                    out_dim=model_dim,
+                    config=config,
+                )
+                train_windows, train_targets = build_lagged_windows(
+                    train_series,
                     self.config.lstm_seq_length,
                     predict_deltas=self.config.delta_forecast,
                 )
-            else:
-                val_windows, val_targets = None, None
+                if val_series is not None:
+                    val_windows, val_targets = build_lagged_windows(
+                        val_series,
+                        self.config.lstm_seq_length,
+                        predict_deltas=self.config.delta_forecast,
+                    )
+                else:
+                    val_windows, val_targets = None, None
+
             _fit_explicit_lstm(model, train_windows, train_targets, val_windows, val_targets)
             self._sub_forecaster = model
             return
@@ -1589,9 +2748,8 @@ class TrajectoryAwareMultiResolutionForecaster:
         recon = level._reconstruct_latent_batch(flat, spatial_shape)
         return recon.reshape(latent_states.shape[0], latent_states.shape[1], *spatial_shape)
 
-    def fit(self, train_states: np.ndarray, test_states: Optional[np.ndarray] = None) -> "TrajectoryAwareMultiResolutionForecaster":
+    def fit(self, train_states: np.ndarray) -> "TrajectoryAwareMultiResolutionForecaster":
         residual_train = np.asarray(train_states, dtype=np.float64).copy()
-        residual_test = None if test_states is None else np.asarray(test_states, dtype=np.float64).copy()
         spatial_shape = residual_train.shape[2:]
 
         self._levels = []
@@ -1606,12 +2764,6 @@ class TrajectoryAwareMultiResolutionForecaster:
 
             train_recon = self._reconstruct_states(level, level._train_latent, spatial_shape)
             residual_train = residual_train - train_recon
-
-            if residual_test is not None:
-                self._test_residuals.append(residual_test.copy())
-                test_latent = level._project_states_to_latent(residual_test)
-                test_recon = self._reconstruct_states(level, test_latent, spatial_shape)
-                residual_test = residual_test - test_recon
 
         self._fitted = True
         return self
@@ -1674,9 +2826,14 @@ class TrajectoryAwareMultiResolutionForecaster:
 
 __all__ = [
     "NavierStokesTrajectoryDataset",
+    "TrajectoryAwareDMDForecaster",
+    "TrajectoryAwareCSForecaster",
+    "TrajectoryAwareEigenvalueProjectedDMDForecaster",
     "TrajectoryAwareLatentForecaster",
     "TrajectoryAwareResidualCorrectedForecaster",
     "TrajectoryAwareMultiResolutionForecaster",
+    "TrajectoryAwarePersistenceForecaster",
+    "TrajectoryAwareStableDMDForecaster",
     "_build_t_plus_one_correction_features",
     "build_lagged_windows",
     "build_one_step_pairs",

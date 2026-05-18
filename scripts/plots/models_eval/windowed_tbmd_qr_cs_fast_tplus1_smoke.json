@@ -1,0 +1,213 @@
+{
+  "protocol": "Fast causal t+1 only. The windowed TBMD/HOSVD dictionary and QR fixed spatial sensors are fit on train windows. Online prediction uses only history-frame sparse sensor measurements and a precomputed gappy/linear recovery map; no ADMM iterations are required for the fast path.",
+  "config": {
+    "n_train_trajectories": 40,
+    "n_test_trajectories": 12,
+    "history_length": 7,
+    "segment_stride": 1,
+    "max_train_segments": 128,
+    "max_dev_segments": null,
+    "max_test_segments": null,
+    "r_tau": 8,
+    "r_x": 32,
+    "r_y": 32,
+    "r_segment": 20,
+    "n_spatial_sensors": 30,
+    "sensor_rcond": 1e-06,
+    "coefficient_ridge_alphas": [
+      1e-08
+    ],
+    "measurement_ridge_alphas": [],
+    "correction_scale": 1.0,
+    "random_state": 0,
+    "save_model": "scripts/plots/models_eval/fast_tplus1_smoke_predictor.npz",
+    "output": "scripts/plots/models_eval/windowed_tbmd_qr_cs_fast_tplus1_smoke.json"
+  },
+  "train_shape": [
+    40,
+    20,
+    64,
+    64
+  ],
+  "tuning_train_shape": [
+    32,
+    20,
+    64,
+    64
+  ],
+  "tuning_dev_shape": [
+    8,
+    20,
+    64,
+    64
+  ],
+  "official_test_shape": [
+    12,
+    20,
+    64,
+    64
+  ],
+  "train_segment_shape": [
+    8,
+    64,
+    64,
+    128
+  ],
+  "dictionary_shape": [
+    8,
+    64,
+    64,
+    20
+  ],
+  "tbmd_summary": {
+    "core_shape": [
+      8,
+      32,
+      32,
+      20
+    ],
+    "factor_shapes": [
+      [
+        8,
+        8
+      ],
+      [
+        64,
+        32
+      ],
+      [
+        64,
+        32
+      ],
+      [
+        128,
+        20
+      ]
+    ],
+    "segment_reconstruction_rel_frob": 0.3297060430049896
+  },
+  "sensor_summary": {
+    "mode": "fixed_spatial_repeated_over_history",
+    "requested_spatial_sensors": 30,
+    "actual_spatial_sensors": 30,
+    "total_history_measurements_per_prediction": 210,
+    "sensor_indices": [
+      86,
+      154,
+      323,
+      372,
+      440,
+      493,
+      522,
+      911,
+      953,
+      1190,
+      1195,
+      1221,
+      1311,
+      1342,
+      1541,
+      1575,
+      1774,
+      1947,
+      2004,
+      2143,
+      2174,
+      2481,
+      2630,
+      2740,
+      2768,
+      2826,
+      3297,
+      3306,
+      3589,
+      3772
+    ]
+  },
+  "fast_predictor_summary": {
+    "measurement_dim": 210,
+    "latent_dim": 20,
+    "selected_family": "coefficient_ridge",
+    "selected_label": "alpha_1e-08",
+    "selected_head_parameters": 86016,
+    "saved_model_path": "scripts/plots/models_eval/fast_tplus1_smoke_predictor.npz"
+  },
+  "fit_dictionary_time": 0.6947584169975016,
+  "correction_fit_time": 0.005803708001621999,
+  "coefficient_train_metrics": {
+    "alpha_1e-08": {
+      "r2": 0.8109766938262941,
+      "rmse": 0.33692393896250333,
+      "rel_frob_err": 0.4165225744178993,
+      "mse": 0.11351774064600866
+    }
+  },
+  "measurement_train_metrics": {},
+  "dev_result": {
+    "base_fixed_sensor_lstsq": {
+      "r2": 0.5073743446160519,
+      "rmse": 0.6243204615710708,
+      "rel_frob_err": 0.681975849229892,
+      "mse": 0.38977603873631494,
+      "prediction_time": 0.0006084170017857105,
+      "samples_per_second": 170935.3941371771
+    },
+    "measurement_extraction_time": 4.8834001063369215e-05,
+    "coefficient_ridge": {
+      "alpha_1e-08": {
+        "r2": 0.5225346817965797,
+        "rmse": 0.614638798911376,
+        "rel_frob_err": 0.6714000944361319,
+        "mse": 0.3777808531272189,
+        "prediction_time": 0.0010662919958122075,
+        "samples_per_second": 97534.25929150106
+      }
+    },
+    "measurement_ridge": {},
+    "n_eval_samples": 104
+  },
+  "selected_by_dev": {
+    "family": "coefficient_ridge",
+    "label": "alpha_1e-08",
+    "r2": 0.5225346817965797,
+    "rmse": 0.614638798911376,
+    "rel_frob_err": 0.6714000944361319,
+    "mse": 0.3777808531272189,
+    "prediction_time": 0.0010662919958122075,
+    "samples_per_second": 97534.25929150106
+  },
+  "final_test_result": {
+    "base_fixed_sensor_lstsq": {
+      "r2": 0.6418306522545882,
+      "rmse": 0.4929265752097712,
+      "rel_frob_err": 0.5784183109589205,
+      "mse": 0.24297660854803418,
+      "prediction_time": 0.0010161669924855232,
+      "samples_per_second": 153518.07444407072
+    },
+    "measurement_extraction_time": 5.299999611452222e-05,
+    "coefficient_ridge": {
+      "alpha_1e-08": {
+        "r2": 0.6520869485779432,
+        "rmse": 0.48581775796782056,
+        "rel_frob_err": 0.5700765613580698,
+        "mse": 0.2360188939568799,
+        "prediction_time": 0.00256641699525062,
+        "samples_per_second": 60785.133627423646
+      }
+    },
+    "measurement_ridge": {},
+    "n_eval_samples": 156
+  },
+  "selected_test_result": {
+    "family": "coefficient_ridge",
+    "label": "alpha_1e-08",
+    "r2": 0.6520869485779432,
+    "rmse": 0.48581775796782056,
+    "rel_frob_err": 0.5700765613580698,
+    "mse": 0.2360188939568799,
+    "prediction_time": 0.00256641699525062,
+    "samples_per_second": 60785.133627423646
+  },
+  "total_time": 0.8373055420088349
+}

@@ -68,10 +68,17 @@ twin.train(historical_data, normalize=False)
 forecast = twin.predict(current_state, n_steps=10)
 ```
 
-## 🏆 State-of-the-Art Benchmark: Navier-Stokes
-Для прогнозирования динамики турбулентных течений (Навье-Стокса) мы обнаружили, что **линейный предсказатель в латентном пространстве ($R_3=5$)** является SOTA-алгоритмом. Усекая временные моды до 5, мы отсекаем стохастичный шум и за счет этого добиваемся R² = 0.6870, многократно обходя ML аналоги (LSTM/MLP), склонные к переобучению на шуме.
+## 🏆 Benchmark: Navier-Stokes
+Актуальный corrected benchmark для Navier-Stokes считается через trajectory-aware split, без склейки разных траекторий в одну временную ось. Последний зафиксированный отчёт находится в [`../all_models_report.md`](../all_models_report.md): на этом протоколе лучшим стабильным backend является `LSTM + T+1 Residual Corrector`, а линейные latent-модели больше не считаются SOTA по recursive rollout quality.
 
-Попробовать SOTA конфигурацию:
+Перед заявлением о новом SOTA необходимо заново запустить полный benchmark:
+
+```bash
+python scripts/evaluate_all_models.py
+python scripts/generate_model_examples.py
+```
+
+Legacy-конфигурация линейного latent forecaster сохранена как baseline/example:
 ```bash
 python examples/02_navier_stokes_optimal_forecasting.py
 ```

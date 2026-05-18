@@ -302,11 +302,12 @@ class LSTMForecaster:
 
             return train_loader, None
 
-    def train_epoch(self, train_loader: DataLoader) -> float:
+    def train_epoch(self, train_loader: DataLoader, epoch: int = 0) -> float:
         """Trains the model for one epoch.
 
         Args:
             train_loader (DataLoader): The training data loader.
+            epoch (int): The current epoch number.
 
         Returns:
             float: The average training loss for the epoch.
@@ -412,7 +413,7 @@ class LSTMForecaster:
         # Training loop
         for epoch in range(num_epochs):
             # Train
-            train_loss = self.train_epoch(train_loader)
+            train_loss = self.train_epoch(train_loader, epoch=epoch)
             self.training_history['train_loss'].append(train_loss)
 
             # Validate if validation data is available
@@ -507,17 +508,27 @@ class LSTMForecaster:
         # Pre-allocate sequence tensor on device
         sequence_tensor = torch.zeros((n_steps, self.out_dim), device=self.device)
 
+        # Check if delta mode is active
+        is_delta = getattr(self.config, 'delta_forecast', False)
+
         # Generate predictions iteratively
         with torch.no_grad():
             for i in range(n_steps):
                 # Predict next step
                 # input_window_tensor shape: (1, seq_length, W)
-                next_step_tensor = self.model(input_window_tensor) # (1, out_dim)
+                raw_output = self.model(input_window_tensor) # (1, out_dim)
 
-                # Store prediction
+                # If delta mode, model outputs Δc; compute absolute: c_{t+1} = c_t + Δc
+                if is_delta:
+                    last_state = input_window_tensor[:, -1, :]  # (1, W)
+                    next_step_tensor = last_state + raw_output
+                else:
+                    next_step_tensor = raw_output
+
+                # Store the absolute prediction
                 sequence_tensor[i] = next_step_tensor.squeeze(0)
 
-                # Update window by removing oldest step and adding prediction
+                # Update window by removing oldest step and adding the absolute state
                 # input_window_tensor[:, 1:, :] is (1, seq_length-1, W)
                 # next_step_tensor.unsqueeze(1) is (1, 1, out_dim)
                 input_window_tensor = torch.cat([
