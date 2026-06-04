@@ -1,102 +1,105 @@
-# Tensor-Based Modal Decomposition (TBMD) - Core Documentation
+# TBMD Core Guide
 
-## 📖 Оглавление
+## Purpose
 
-1. [Обзор метода](#обзор-метода)
-2. [Математическая основа](#математическая-основа)
-3. [Основные компоненты](#основные-компоненты)
-4. [Алгоритм работы](#алгоритм-работы)
-5. [API Reference](#api-reference)
+Tensor-Based Modal Decomposition (TBMD) reduces high-dimensional spatiotemporal data into a compact modal representation. The repository focuses on tensor decomposition, sensor placement, and reconstruction workflows that can be combined with forecasting models.
 
----
+Typical input data is a tensor such as:
 
-## Обзор метода
+```text
+(x, y, time)
+(x, y, z, time)
+(active_cells, time)
+```
 
-**TBMD** — это метод снижения размерности для пространственно-временных данных (например, гидродинамических симуляций), основанный на тензорных разложениях (Tucker Decomposition / HOSVD).
+## Core Workflow
 
-### Ключевые особенности
-- 📉 **Сжатие данных**: уменьшение объема данных в 100-1000 раз.
-- ⏱️ **Разделение переменных**: разделение пространственных и временных мод.
-- 🧩 **Интерпретируемость**: моды имеют физический смысл.
-- 🚀 **Скорость**: быстрые прогнозы в сжатом пространстве.
+1. Prepare tensor data.
+2. Decompose the tensor with Tucker/HOSVD.
+3. Build modal tensors and a modal basis.
+4. Select sensor locations using tensor QR.
+5. Reconstruct full fields from sparse measurements.
+6. Optionally train a forecaster in the modal space.
 
----
+## Tucker / HOSVD
 
-## Математическая основа
+The Tucker approximation represents a tensor as a core tensor multiplied by factor matrices:
 
-### Тензорное представление
-Данные представляются как тензор $\mathcal{X} \in \mathbb{R}^{N_x \times N_y \times N_z \times N_t}$.
+```text
+X ~= G x_1 U_1 x_2 U_2 ... x_n U_n
+```
 
-### Разложение Такера (Tucker Decomposition)
-Тензор аппроксимируется как произведение ядра и факторных матриц:
+In this repository, `TuckerDecomposer` stores:
 
-$$ \mathcal{X} \approx \mathcal{G} \times_1 \mathbf{U}_1 \times_2 \mathbf{U}_2 \times_3 \mathbf{U}_3 \times_4 \mathbf{U}_4 $$
+- `cores`: the reduced core tensor or tensors.
+- `factors`: factor matrices for each tensor mode.
+- `reconstructed_tensors`: reconstruction after `reconstruct()` is called.
 
-Где:
-- $\mathcal{G}$ — тензор ядра (Core Tensor), содержащий взаимодействия между модами.
-- $\mathbf{U}_i$ — ортогональные факторные матрицы для каждого измерения.
-
-### HOSVD (Higher-Order SVD)
-Алгоритм вычисления разложения:
-1. Развертка тензора (Unfolding) по каждой моде $n$.
-2. SVD разложение развертки: $\mathbf{X}_{(n)} = \mathbf{U}_n \mathbf{\Sigma}_n \mathbf{V}_n^T$.
-3. $\mathbf{U}_n$ — левые сингулярные векторы (моды).
-4. Ядро вычисляется как проекция исходного тензора на базисы.
-
----
-
-## Основные компоненты
-
-### 1. `TuckerDecomposer`
-Выполняет базовое разложение Такера.
+Example:
 
 ```python
-from TBMD.core.decomposition import TuckerDecomposer
 from TBMD.config import DecompositionConfig
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
 
 config = DecompositionConfig(ranks=[20, 20, 10])
 decomposer = TuckerDecomposer(tensors=tensor_data, config=config)
 decomposer.decompose()
-
-core = decomposer.cores
-factors = decomposer.factors
+decomposer.reconstruct()
 ```
 
----
+## Modal Tensor Processing
 
-## Алгоритм работы
+Modal tensor processing converts decomposition outputs into a modal basis used by sensor placement and reconstruction code.
 
-1. **Подготовка данных**: Сбор данных симуляции в 4D тензор.
-2. **Декомпозиция**: Применение HOSVD для получения пространственных ($\mathbf{U}_x, \mathbf{U}_y, \mathbf{U}_z$) и временных ($\mathbf{U}_t$) базисов.
-3. **Снижение порядка (ROM)**: Отбрасывание мод с малыми сингулярными числами.
-4. **Прогноз**: Обучение модели (LSTM/MLP) предсказывать эволюцию коэффициентов ядра или временных мод.
-5. **Реконструкция**: Восстановление полного поля путем умножения предсказанных коэффициентов на пространственные базисы.
+```python
+from TBMD.config import ModalProcessorConfig, ProcessingStrategy
+from TBMD.core.modal_processor.modes import BatchModalProcessor, ModalTensorStacker
 
----
+modal_config = ModalProcessorConfig(
+    processing_strategy=ProcessingStrategy.BATCH,
+    return_numpy=False,
+)
 
-## API Reference
+processor = BatchModalProcessor(modal_config)
+stacker = ModalTensorStacker(modal_config)
+modal_tensors = processor.process_multiple_subjects(decomposer.cores, decomposer.factors)
+A_tensor = stacker.stack_modal_tensors(modal_tensors)
+```
 
-### `TuckerDecomposer`
+## Sensor Placement
 
-#### `__init__(tensors, config=None, ranks=None)`
-- `tensors`: Входной тензор или список тензоров.
-- `config`: Экземпляр `DecompositionConfig`.
-- `ranks`: Список желаемых рангов (альтернатива config).
+`TensorTubeQRDecomposition` selects informative sensor locations from the modal basis.
 
-#### `decompose()`
-Выполняет HOSVD разложение. Результаты сохраняются в `cores` и `factors`.
+```python
+from TBMD.config import SensorPlacementConfig
+from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
 
-#### `reconstruct()` -> `Tensor`
-Восстанавливает тензор из текущих факторов и ядра.
+placer = TensorTubeQRDecomposition(
+    tensor=A_tensor,
+    config=SensorPlacementConfig(n_sensors=30),
+)
+P, Q, R = placer.factorize()
+```
 
-#### `cores` -> `Tensor`
-Возвращает тензор ядра (Core Tensor).
+## Reconstruction
 
-#### `factors` -> `List[Tensor]`
-Возвращает список факторных матриц для каждой моды.
+`TensorCompressiveSensing` reconstructs modal coefficients from sparse measurements and returns solver metrics.
 
----
+```python
+from TBMD.config import CompressiveSensingConfig
+from TBMD.core.reconstruction.tensor_compressive_sensing import TensorCompressiveSensing
 
-**Версия**: 2.0
-**Дата**: Январь 2026
-**Автор**: TBMD Team
+reconstructor = TensorCompressiveSensing(
+    A=A_tensor,
+    P=P,
+    Y=measurements,
+    core_cfg=CompressiveSensingConfig(max_iter=100),
+)
+x_hat, metrics = reconstructor.solve()
+```
+
+## Notes for Maintainers
+
+- Keep decomposition, placement, and reconstruction contracts stable because examples and tests compose them directly.
+- Treat benchmark or accuracy claims as experiment outputs that must be tied to reproducible scripts and datasets.
+- Prefer adding small tests around shape contracts before changing public configuration defaults.

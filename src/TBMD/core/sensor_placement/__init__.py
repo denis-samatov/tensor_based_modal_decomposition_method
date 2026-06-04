@@ -1,8 +1,4 @@
-"""
-Sensor Placement Module
-
-Модули для оптимального размещения сенсоров
-"""
+"""Sensor placement modules."""
 
 
 
@@ -20,5 +16,4 @@ __all__ = [
     'TensorQRConfig',
     'GeometricQRConfig'
 ]
-
 

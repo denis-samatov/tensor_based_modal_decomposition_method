@@ -1,68 +1,38 @@
-# TBMD Examples & Scripts
+# Examples Documentation
 
-This directory contains examples and runnable scripts demonstrating the capabilities of the TBMD library.
+The repository examples live in the top-level `examples/` directory. This page explains the stable entry points and their expected scope.
 
-## 📂 Structure
+## Example Groups
 
-The examples are organized by complexity and topic:
+| Directory | Purpose |
+| --- | --- |
+| [`examples/basic/`](../../examples/basic/) | Decomposition, sensor placement, reconstruction, and complete synthetic workflows. |
+| [`examples/digital_twin/`](../../examples/digital_twin/) | Digital twin training, forecasting, and compatibility demonstrations. |
+| [`examples/geometry_aware/`](../../examples/geometry_aware/) | Graph and mesh-aware decomposition, sensor placement, and reconstruction examples. |
+| [`examples/advanced/`](../../examples/advanced/) | Advanced and legacy workflows for maintainers and experienced users. |
+| [`examples/applications/`](../../examples/applications/) | Dataset-specific application scripts. These may require local data. |
 
-### `examples/`
+## Run Basic Examples
 
-| Category | Description |
-|----------|-------------|
-| **[basic/](../examples/basic/)** | Fundamental concepts: Decomposition, Sensor Placement, Reconstruction. Start here! |
-| **[advanced/](../examples/advanced/)** | Advanced usage, custom configurations, and performance tuning. |
-| **[digital_twin/](../examples/digital_twin/)** | Examples specific to the Digital Twin module (forecasting, monitoring). |
-| **[geometry_aware/](../examples/geometry_aware/)** | Examples for working with unstructured meshes and complex geometries. |
-
-### `examples/`
-
-Ready-to-run scripts for specific tasks and demos:
-
-| Script | Description |
-|--------|-------------|
-| `examples/digital_twin/01_digital_twin_basic.py` | **Main Demo**: Runs a full Digital Twin cycle on synthetic data. |
-| `examples/applications/brugge_field/run_brugge_enhanced.py` | Application of TBMD to the **Brugge** field dataset. |
-| `examples/geometry_aware/06_geometry_aware_run.py` | Demo of the Geometry-Aware TBMD on a complex mesh. |
-
----
-
-## 📊 Reports & Analysis
-
-- **[Brugge Digital Twin Analysis](brugge_digital_twin_analysis.md)**: A detailed report on the performance of the Digital Twin on the Brugge dataset, including error analysis and recommendations.
-
----
-
-## 🚀 How to Run
-
-Make sure you are in the root directory of the project and have the virtual environment activated.
-
-### Running Basic Examples
+Run commands from the repository root:
 
 ```bash
-# Run the basic decomposition example
 python examples/basic/01_tucker_decomposition.py
-
-# Run the complete pipeline
+python examples/basic/02_sensor_placement.py
+python examples/basic/03_field_reconstruction.py
 python examples/basic/04_complete_pipeline.py
 ```
 
-### Running the Digital Twin Demo
+## Run Digital Twin Examples
 
 ```bash
 python examples/digital_twin/01_digital_twin_basic.py
+python examples/digital_twin/02_digital_twin_advanced.py
+python examples/digital_twin/04_digital_twin_type_demo.py
 ```
 
-### Running the Brugge Case Study
+## Dataset-Specific Examples
 
-```bash
-python examples/applications/brugge_field/run_brugge_enhanced.py
-```
+`examples/applications/brugge_field/run_brugge_enhanced.py` expects local Brugge-style data files. The repository does not guarantee that those datasets are present in a fresh clone.
 
----
-
-## 📓 Notebooks
-
-For interactive exploration, check the `notebooks/experiments/` directory, which contains Jupyter notebooks for:
-- `exp_tbmd_4_digital_twin.ipynb`: Interactive Digital Twin experiments.
-- `exp_tbmd_2.4_visualization.ipynb`: Visualization of reconstruction results.
+See [Model and data handling](../guides/data_and_models.md) before adding datasets or generated outputs.

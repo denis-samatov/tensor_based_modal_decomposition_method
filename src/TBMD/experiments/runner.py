@@ -369,10 +369,10 @@ class ExperimentRunner:
         test_data = to_torch_tensor(test_tensors[subject_name], device=self.config.device, dtype=torch.float32)
         X_slice = test_data[..., slice_idx]
 
-        # Получить wells только для subject_name
+        # Get wells only for subject_name
         wells_list = self.config.wells.get(subject_name, [])
 
-        # Удаляем дубликаты и невалидные координаты
+        # Remove duplicates and invalid coordinates
         valid_wells = []
         seen = set()
         for i, j in wells_list:
@@ -477,7 +477,7 @@ class ExperimentRunner:
             for subject, tensor in test_tensors.items()
         }
 
-        # Подготовить валидные wells для каждого subject
+        # Prepare valid wells for each subject
         wells_dict_valid = {}
         for subject, wells_list in self.config.wells.items():
             valid_wells = []
@@ -492,7 +492,7 @@ class ExperimentRunner:
         num_total_samples = 1 + self.config.num_noise_samples
 
         for N in tqdm(sensor_values, desc="Full dataset wells experiments"):
-            # Для каждого subject взять только N первых wells
+            # Keep only the first N wells for each subject
             wells_dict_N = {subject: wells[:min(N, len(wells))] for subject, wells in wells_dict_valid.items()}
             P = build_wells_matrix(wells_dict_N, A_tensor.shape, device=self.config.device)
 

@@ -1,6 +1,4 @@
-"""
-Тесты для модулей размещения сенсоров
-"""
+"""Tests for sensor placement modules."""
 import pytest
 import torch
 import numpy as np
@@ -10,16 +8,16 @@ from TBMD.config import SensorPlacementConfig
 
 
 class TestTensorTubeQRDecomposition:
-    """Тесты для TensorTubeQRDecomposition"""
+    """Tests for TensorTubeQRDecomposition."""
     
     def test_initialization(self, sample_tensor_small, sensor_config):
-        """Тест инициализации"""
+        """Test initialization."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         assert qr.config.n_sensors == sensor_config.n_sensors
         assert qr.P is None
     
     def test_basic_sensor_placement(self, sample_tensor_small, sensor_config):
-        """Тест базового размещения сенсоров"""
+        """Test basic sensor placement."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         P, Q, R = qr.factorize()
         
@@ -35,7 +33,7 @@ class TestTensorTubeQRDecomposition:
         assert P.shape == sample_tensor_small.shape[:-1]
 
     def test_factorize_method(self, sample_tensor_small, sensor_config):
-        """Тест метода factorize"""
+        """Test the factorize method."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         P, Q, R = qr.factorize()
         
@@ -44,7 +42,7 @@ class TestTensorTubeQRDecomposition:
         assert isinstance(R, torch.Tensor)
     
     def test_sensor_indices_uniqueness(self, sample_tensor_small, sensor_config):
-        """Тест уникальности индексов сенсоров"""
+        """Test uniqueness of sensor indices."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         P, _, _ = qr.factorize()
         
@@ -54,7 +52,7 @@ class TestTensorTubeQRDecomposition:
         assert torch.all(torch.isin(unique_vals, torch.tensor([0, 1], device=P.device, dtype=torch.int32)))
 
     def test_too_many_sensors(self, sensor_config):
-        """Тест когда сенсоров больше чем точек"""
+        """Test requesting more sensors than available points."""
         small_tensor = torch.randn(3, 3, 5) # 9 spatial points
         
         # Config asks for 20 sensors, but only 9 locations
@@ -66,14 +64,14 @@ class TestTensorTubeQRDecomposition:
         assert n_placed <= 9
     
     def test_invalid_input_dimension(self, sensor_config):
-        """Тест с невалидной размерностью входных данных"""
+        """Test invalid input dimensionality."""
         tensor_2d = torch.randn(10, 5) # 2D < 3D
         
         with pytest.raises(ValueError, match="at least 3 dimensions"): 
              TensorTubeQRDecomposition(tensor_2d, config=sensor_config)
     
     def test_check_factorization(self, sample_tensor_small, sensor_config):
-        """Тест метода check_factorization"""
+        """Test the check_factorization method."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         qr.factorize()
         
@@ -84,7 +82,7 @@ class TestTensorTubeQRDecomposition:
         assert 'sensor_count' in metrics
 
     def test_get_algorithm_info(self, sample_tensor_small, sensor_config):
-        """Тест метода get_algorithm_info"""
+        """Test the get_algorithm_info method."""
         qr = TensorTubeQRDecomposition(sample_tensor_small, config=sensor_config)
         qr.factorize()
         
@@ -92,4 +90,3 @@ class TestTensorTubeQRDecomposition:
         assert isinstance(info, dict)
         assert 'tensor_shape' in info
         assert 'actual_sensors' in info
-

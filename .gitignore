@@ -1,26 +1,49 @@
-# Byte-compiled / cache files
+# Python bytecode and caches
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
 
 # Virtual environments
 venv/
-.env
 .venv/
+env/
+ENV/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
 
 # Python packaging
 *.egg-info/
 dist/
 build/
+wheelhouse/
 
-# Data and outputs
+# Local datasets and generated outputs
 data/
 !src/TBMD/core/data/
+results/
 report/
+reports/
+output/
+outputs/
 output_plots/
+scripts/plots/
 *.npy
 *.npz
 *.csv
 *.h5
+*.hdf5
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.pickle
+*.joblib
 
 # Theory and drafts
 theory/
@@ -30,13 +53,9 @@ theory/*.log
 theory/*.out
 theory/*.toc
 
-# Python cache
-__pycache__/
-*.pyc
-.pytest_cache/
-
 # Notebooks and checkpoints
-*.ipynb_checkpoints/
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
 
 # System files
 .DS_Store
@@ -50,13 +69,8 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Results and artifacts (generated, not tracked)
-results/
-
 # Article
 article/
-
-.cache/
 
 findings.md
 progress.md

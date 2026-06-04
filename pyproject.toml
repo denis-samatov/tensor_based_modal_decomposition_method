@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tbmd"
 version = "2.0.0"
-description = "Tensor-Based Modal Decomposition Method — ROM, sensor placement, and field reconstruction"
+description = "Tensor-Based Modal Decomposition Method for reduced-order modeling, sensor placement, and field reconstruction"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -51,8 +51,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-repo/tensor-based-modal-decomposition-method"
-Documentation = "https://github.com/your-repo/tensor-based-modal-decomposition-method/tree/main/docs"
+Homepage = "https://github.com/denis-samatov/tensor_based_modal_decomposition_method"
+Documentation = "https://github.com/denis-samatov/tensor_based_modal_decomposition_method/tree/main/docs"
 
 [tool.setuptools.packages.find]
 where = ["src"]

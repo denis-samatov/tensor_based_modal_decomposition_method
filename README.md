@@ -1,126 +1,148 @@
-# Tensor-Based Modal Decomposition (TBMD)
+# Tensor-Based Modal Decomposition Method
 
-**Tensor-Based Modal Decomposition** — это библиотека для моделирования пониженного порядка (ROM), оптимального размещения сенсоров и реконструкции полей пространственно-временных данных (например, результатов гидродинамического моделирования). Она позволяет создавать **Цифровые Двойники (Digital Twins)**, работающие в реальном времени.
+## Overview
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.3+-ee4c2c.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+Tensor-Based Modal Decomposition Method (TBMD) is a Python research library for reduced-order modeling of spatiotemporal tensor data. The repository includes implementations for Tucker/HOSVD decomposition, modal tensor processing, sensor placement, field reconstruction from sparse measurements, geometry-aware variants, and experimental digital twin workflows.
 
----
+The code is aimed at scientific computing and reservoir-modeling experiments. It should be treated as a research and engineering codebase rather than a validated production simulator.
 
-## 📚 Документация
+## Features
 
-Полная документация доступна в директории **[`docs/`](docs/README.md)**.
+- Tucker/HOSVD decomposition for tensor data.
+- Modal tensor processing utilities for building reduced bases.
+- Tensor QR-based sensor placement.
+- Compressive sensing reconstruction with ADMM-based solvers.
+- Geometry-aware decomposition, reconstruction, and sensor placement helpers.
+- Digital twin orchestration that combines decomposition, sensor placement, reconstruction, and forecasting components.
+- Navier-Stokes forecasting experiments and model comparison scripts.
+- Pytest-based unit and audit tests.
 
-- **🚀 [Руководство по Цифровым Двойникам](docs/guides/digital_twin.md)**: Создание моделей резервуаров в реальном времени.
-- **📐 [Geometry-Aware TBMD](docs/guides/GEOMETRY_AWARE_TBMD.md)**: Работа со сложными неструктурированными сетками.
-- **🧠 [Основные концепции](docs/guides/tbmd_core.md)**: Изучите разложение Такера и HOSVD.
-- **🎓 [Уроки](docs/tutorials/digital_twin_tutorial.md)**: Пошаговые руководства.
+## Project Structure
 
----
-
-## 🚀 Быстрый старт
-
-### Установка
-
-```bash
-git clone https://github.com/your-repo/tensor-based-modal-decomposition-method.git
-cd tensor-based-modal-decomposition-method
-pip install -e .          # Установка в editable-режиме
-pip install -e ".[dev]"   # + dev зависимости (pytest, jupyter)
+```text
+tensor-based-modal-decomposition-method/
+├── src/TBMD/              # Python package source code
+│   ├── config/            # Dataclass configuration objects
+│   ├── core/              # Decomposition, forecasting, reconstruction, geometry, and data utilities
+│   ├── digital_twin/      # Digital twin orchestration layer
+│   ├── experiments/       # Experiment-specific model registries and runners
+│   ├── modules/           # Compatibility layer for legacy module paths
+│   └── visualization/     # Plotting helpers
+├── examples/              # Runnable examples grouped by topic
+├── scripts/               # Evaluation, tuning, and diagnostic scripts
+├── tests/                 # Unit and audit tests
+├── docs/                  # User and developer documentation
+├── data/                  # Local datasets; ignored by git
+└── results/               # Generated outputs; ignored by git
 ```
 
-### Базовое использование
+## Installation
+
+Use Python 3.10 or newer.
+
+```bash
+git clone https://github.com/denis-samatov/tensor_based_modal_decomposition_method.git
+cd tensor_based_modal_decomposition_method
+
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+If editable installation is not needed, the pinned dependency file can be used instead:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## Configuration
+
+The core package does not require secrets or external service credentials. Runtime options are primarily passed through dataclass configuration objects in `TBMD.config`.
+
+An optional `.env.example` file is provided to document local paths and logging preferences. Keep local `.env` files out of git.
+
+## Usage
+
+Minimal Tucker decomposition example:
 
 ```python
-from TBMD.core.decomposition.hosvd import TuckerDecomposer
+import torch
+
 from TBMD.config import DecompositionConfig
+from TBMD.core.decomposition.hosvd import TuckerDecomposer
 
-# 1. Конфигурация
-config = DecompositionConfig(ranks=[20, 20, 10])
+data = torch.randn(64, 64, 20)
+config = DecompositionConfig(ranks=[16, 16, 8], verbose=True)
 
-# 2. Декомпозиция
-decomposer = TuckerDecomposer(tensors=data_tensor, config=config)
+decomposer = TuckerDecomposer(tensors=data, config=config)
 decomposer.decompose()
+decomposer.reconstruct()
 
-# 3. Доступ к результатам
 core = decomposer.cores
 factors = decomposer.factors
-
-# 4. Реконструкция
-decomposer.reconstruct()
 reconstructed = decomposer.reconstructed_tensors
 ```
 
-### Демонстрация Цифрового Двойника
+Digital twin example:
 
 ```python
-from TBMD.digital_twin import DigitalTwin
 from TBMD.config import DigitalTwinConfig
+from TBMD.digital_twin.digital_twin import DigitalTwin
 
-# Инициализация
-twin = DigitalTwin(DigitalTwinConfig(n_sensors=30))
+config = DigitalTwinConfig(
+    n_spatial_modes=20,
+    n_temporal_modes=10,
+    n_sensors=15,
+    forecaster_type="linear",
+)
 
-# Обучение
-twin.train(historical_data, normalize=False)
-
-# Прогноз
-forecast = twin.predict(current_state, n_steps=10)
+twin = DigitalTwin(config)
+summary = twin.train(historical_data, normalize=False)
+forecast = twin.predict(current_state, n_steps=5)
 ```
 
-## 🏆 Benchmark: Navier-Stokes
-Актуальный corrected benchmark для Navier-Stokes считается через trajectory-aware split, без склейки разных траекторий в одну временную ось. Последний зафиксированный отчёт находится в [`../all_models_report.md`](../all_models_report.md): на этом протоколе лучшим стабильным backend является `LSTM + T+1 Residual Corrector`, а линейные latent-модели больше не считаются SOTA по recursive rollout quality.
+More examples are available under `examples/` and `docs/guides/quick_start.md`.
 
-Перед заявлением о новом SOTA необходимо заново запустить полный benchmark:
+## Testing
+
+Run the default test suite:
 
 ```bash
-python scripts/evaluate_all_models.py
-python scripts/generate_model_examples.py
+pytest
 ```
 
-Legacy-конфигурация линейного latent forecaster сохранена как baseline/example:
+Useful targeted checks:
+
 ```bash
-python examples/02_navier_stokes_optimal_forecasting.py
+pytest tests/unit -q
+pytest tests/audit -q
+python -m compileall src tests examples scripts
 ```
 
----
+Some experiment scripts require local datasets under `data/` and are not suitable as lightweight CI checks.
 
-## 📂 Структура проекта
+## Documentation
 
-```
-tensor-based-modal-decomposition-method/
-├── pyproject.toml               # Зависимости и packaging
-├── src/TBMD/                    # Основная библиотека
-│   ├── core/                    # Декомпозиция, Сенсоры, Реконструкция
-│   ├── config/                  # Классы конфигурации
-│   └── utils/                   # Утилиты
-├── tests/                       # 🧪 Тесты (pytest)
-├── docs/                        # 📚 Документация
-├── examples/                    # 💡 Примеры скриптов (Базовые, Продвинутые)
-├── notebooks/                   # 📓 Jupyter Ноутбуки
-├── data/                        # 📦 Данные (не в git)
-└── results/                     # 📊 Результаты, артефакты, экспорты
-```
+- [Documentation index](docs/README.md)
+- [Quick start guide](docs/guides/quick_start.md)
+- [API reference](docs/api/api_reference.md)
+- [Configuration guide](docs/guides/configuration.md)
+- [Testing guide](docs/guides/testing.md)
+- [Model and data guide](docs/guides/data_and_models.md)
 
-## 🧪 Эксперименты и Примеры
+## Security and Privacy
 
-- **Запуск демо Цифрового Двойника**:
-  ```bash
-  python examples/digital_twin/01_digital_twin_basic.py
-  ```
+Do not commit secrets, credentials, private datasets, generated model artifacts, or local environment files. The repository ignores `.env`, virtual environments, caches, local datasets, and generated results by default.
 
-- **Запуск тестов**:
-  ```bash
-  pytest tests/ -v
-  ```
+Report security concerns using the process in `SECURITY.md`.
 
-- **Изучение ноутбуков**:
-  Проверьте `notebooks/experiments/` для Jupyter ноутбуков, охватывающих различные эксперименты и визуализации.
+## Roadmap / TODO
 
-## 🤝 Вклад в разработку
+- Add continuous integration for tests and packaging.
+- Add a lightweight documentation link checker.
+- Define a reproducible benchmark protocol for any public accuracy or performance claims.
 
-Мы приветствуем ваш вклад! Пожалуйста, прочитайте документацию и проверьте существующие issues перед отправкой PR.
+## License
 
-## 📄 Лицензия
-
-Этот проект лицензирован под MIT License.
+MIT License. See `LICENSE`.

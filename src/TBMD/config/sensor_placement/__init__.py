@@ -1,9 +1,8 @@
-"""
-Конфигурация для размещения сенсоров
+"""Configuration for sensor placement.
 
-Модуль содержит:
-- SensorPlacementConfig: конфигурация для размещения сенсоров (включает все параметры QR)
-- GeometricSensorConfig: расширенная конфигурация с геометрией
+This module contains:
+- SensorPlacementConfig: QR sensor placement configuration
+- GeometricSensorConfig: geometry-aware sensor placement configuration
 
 References:
 - Golub, G. H., & Van Loan, C. F. (2013). Matrix computations (4th ed.)
@@ -17,52 +16,46 @@ from ..base import BaseConfig
 @dataclass
 class SensorPlacementConfig(BaseConfig):
     """
-    Конфигурация для размещения сенсоров методом QR-разложения с пивотированием.
+    Configuration for QR-based sensor placement.
     
-    Включает все параметры для Tensor QR decomposition с научно обоснованными 
-    константами численной стабильности.
+    Includes Tensor QR parameters and numerical stability constants.
     
-    Наследуется от BaseConfig, который предоставляет:
-    - seed: Optional[int] = 0 — для воспроизводимости
-    - device: Optional[str] = None — 'cuda', 'cpu', или auto
+    Inherits from BaseConfig, which provides:
+    - seed: Optional[int] = 0 for reproducibility
+    - device: Optional[str] = None for 'cuda', 'cpu', or auto
     - dtype: Literal['float32', 'float64'] = 'float32'
     - verbose: bool = True
     
     Attributes
     ----------
     n_sensors : int, default=200
-        Количество сенсоров для размещения (параметр N в алгоритме).
+        Number of sensors to place.
     uniform_distribution : bool, default=False
-        Включить ограничения на равномерное пространственное распределение.
+        Enable spatial distribution constraints.
     check_orthogonality : bool, default=False
-        Проверять ортогональность Q на каждом шаге (медленнее, но полезно для отладки).
+        Check Q orthogonality at each step.
     random_state : int, optional
-        Альтернативный параметр seed для воспроизводимости (совместимость с sklearn API).
-        Если указан, переопределяет seed из BaseConfig.
+        Alternative seed parameter for sklearn-style API compatibility.
     
     Numerical Stability Constants
     -----------------------------
     machine_epsilon_factor : float, default=1e-6
-        Реалистичный допуск для float32. Используется для определения 
-        численной незначимости величин.
+        Practical tolerance for float32.
     householder_threshold : float, default=1e-6
-        Порог для вычисления вектора Хаусхолдера. Если норма меньше,
-        преобразование пропускается.
+        Threshold for Householder vector computation.
     orthogonality_tolerance : float, default=1e-4
-        Допуск для проверки ортогональности матрицы Q.
-        Учитывает накопление ошибок в float32.
+        Tolerance for Q orthogonality checks.
     condition_number_threshold : float, default=1e12
-        Максимально допустимое число обусловленности тензора.
-        При превышении выдается предупреждение о возможной нестабильности.
+        Maximum accepted tensor condition number before warning.
     
     Distribution Penalty Weights
     ----------------------------
     slice_penalty_weight : float, default=0.8
-        Вес штрафа за дисбаланс между срезами (для 3D+ тензоров).
+        Weight for inter-slice imbalance penalty.
     distribution_penalty_weight : float, default=0.5
-        Вес штрафа за неравномерное пространственное распределение.
+        Weight for spatial distribution penalty.
     similarity_grouping_decimals : int, default=3
-        Точность округления для группировки похожих регионов.
+        Rounding precision for grouping similar regions.
     
     Examples
     --------
@@ -77,19 +70,19 @@ class SensorPlacementConfig(BaseConfig):
     - Algorithm 2: Tensor-based tube fiber-pivot QR factorization
     """
     
-    # === Основные параметры ===
-    n_sensors: int = 200  # Количество сенсоров (N в алгоритме)
-    uniform_distribution: bool = False  # Равномерное распределение по слоям
-    check_orthogonality: bool = False  # Проверка ортогональности Q
-    random_state: Optional[int] = None  # Альтернативный seed для воспроизводимости
+    # Core parameters
+    n_sensors: int = 200
+    uniform_distribution: bool = False
+    check_orthogonality: bool = False
+    random_state: Optional[int] = None
     
-    # === Численные константы стабильности ===
+    # Numerical stability constants
     machine_epsilon_factor: float = 1e-6  # Realistic tolerance for float32
     householder_threshold: float = 1e-6   # Threshold for Householder vector computation
     orthogonality_tolerance: float = 1e-4  # Realistic tolerance for float32 with accumulation
     condition_number_threshold: float = 1e12  # Maximum acceptable condition number
     
-    # === Веса штрафов распределения ===
+    # Distribution penalty weights
     slice_penalty_weight: float = 0.8      # Weight for inter-slice balance penalty
     distribution_penalty_weight: float = 0.5  # Weight for spatial distribution penalty
     similarity_grouping_decimals: int = 3   # Precision for similarity grouping
@@ -99,9 +92,9 @@ class SensorPlacementConfig(BaseConfig):
         self._validate()
     
     def _validate(self):
-        """Валидация параметров"""
+        """Validate parameter ranges."""
         if self.n_sensors <= 0:
-            raise ValueError("n_sensors должен быть положительным")
+            raise ValueError("n_sensors must be positive")
         
         if not (0 < self.slice_penalty_weight <= 1):
             raise ValueError("slice_penalty_weight must be in (0, 1]")
@@ -116,34 +109,31 @@ class SensorPlacementConfig(BaseConfig):
 @dataclass
 class GeometricSensorConfig(SensorPlacementConfig):
     """
-    Конфигурация для geometry-aware размещения сенсоров.
+    Configuration for geometry-aware sensor placement.
     
-    Расширяет SensorPlacementConfig геометрическими параметрами для
-    улучшенного размещения на неструктурированных сетках.
+    Extends SensorPlacementConfig with geometry parameters for placement on
+    irregular or unstructured grids.
     
     Attributes
     ----------
     gradient_weight : float, default=0.5
-        Вес для геометрических градиентов (β в формуле).
-        Приоритет ячейкам с высокими пространственными градиентами.
+        Weight for geometric gradients.
     proximity_weight : float, default=1.0
-        Вес штрафа за близость к существующим сенсорам (γ).
-        Больше = больше расстояние между сенсорами.
+        Penalty for proximity to already selected sensors.
     amplitude_weight : float, default=1.0
-        Вес для амплитуды поля (приоритет высокоамплитудным регионам).
+        Weight for field amplitude.
     energy_weight : float, default=0.5
-        Вес для локальной энергии в пространственной окрестности.
+        Weight for local spatial energy.
     min_distance_factor : float, default=2.0
-        Минимальное расстояние между сенсорами как множитель 
-        характерной длины сетки: min_distance = min_distance_factor * h_char.
+        Minimum sensor distance as a multiplier of characteristic mesh length.
     gradient_method : {'fd', 'graph'}, default='graph'
-        Метод вычисления пространственных градиентов.
+        Spatial gradient method.
     adaptive_weights : bool, default=True
-        Автоматически нормализовать и масштабировать веса.
+        Automatically normalize and scale weights.
     use_graph_distance : bool, default=False
-        Использовать геодезическое расстояние по графу вместо евклидова.
+        Use graph geodesic distance instead of Euclidean distance.
     k_neighbors : int, default=6
-        Количество соседей для построения графа сетки.
+        Number of neighbors used for graph construction.
     
     Examples
     --------
@@ -156,41 +146,41 @@ class GeometricSensorConfig(SensorPlacementConfig):
     ... )
     """
     
-    # === Геометрические веса ===
-    gradient_weight: float = 0.5  # β - вес градиентов
-    proximity_weight: float = 1.0  # γ - штраф за близость
-    amplitude_weight: float = 1.0  # Приоритет высокоамплитудным регионам
-    energy_weight: float = 0.5  # Локальная энергия в окрестности
+    # Geometry weights
+    gradient_weight: float = 0.5
+    proximity_weight: float = 1.0
+    amplitude_weight: float = 1.0
+    energy_weight: float = 0.5
     
-    # === Параметры расстояния ===
+    # Distance parameters
     min_distance_factor: float = 2.0  # min_distance = factor * h_char
     
-    # === Методы вычисления ===
+    # Computation methods
     gradient_method: Literal['fd', 'graph'] = 'graph'
     adaptive_weights: bool = True
     use_graph_distance: bool = False
     
-    # === Параметры графа ===
+    # Graph parameters
     k_neighbors: int = 6
     
     def _validate(self):
-        """Дополнительная валидация для геометрических параметров."""
+        """Validate geometry-aware parameters."""
         super()._validate()
         
         if self.gradient_weight < 0:
-            raise ValueError("gradient_weight должен быть >= 0")
+            raise ValueError("gradient_weight must be >= 0")
         
         if self.proximity_weight < 0:
-            raise ValueError("proximity_weight должен быть >= 0")
+            raise ValueError("proximity_weight must be >= 0")
         
         if self.amplitude_weight < 0:
-            raise ValueError("amplitude_weight должен быть >= 0")
+            raise ValueError("amplitude_weight must be >= 0")
         
         if self.energy_weight < 0:
-            raise ValueError("energy_weight должен быть >= 0")
+            raise ValueError("energy_weight must be >= 0")
         
         if self.min_distance_factor <= 0:
-            raise ValueError("min_distance_factor должен быть > 0")
+            raise ValueError("min_distance_factor must be > 0")
         
         if self.k_neighbors < 1:
-            raise ValueError("k_neighbors должен быть >= 1")
+            raise ValueError("k_neighbors must be >= 1")

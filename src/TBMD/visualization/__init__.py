@@ -1,8 +1,4 @@
-"""
-Visualization Module
-
-Модули для визуализации полей, сенсоров, метрик
-"""
+"""Visualization modules for fields, sensors, and metrics."""
 
 from .tensor import visualize_tensor
 from .generic import plot_two_matrices, plot_original_reconstructed_diff

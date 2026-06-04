@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class DataSplitter:
     """
-    Разделение данных на train/validation/test
+    Split data into train, validation, and test subsets.
     
     Examples:
         >>> splitter = DataSplitter(train_ratio=0.7, val_ratio=0.15)
@@ -31,11 +31,11 @@ class DataSplitter:
     ):
         """
         Args:
-            train_ratio: Доля train данных
-            val_ratio: Доля validation данных
-            test_ratio: Доля test данных (если None, вычисляется автоматически)
-            shuffle: Перемешать данные перед разделением
-            seed: Random seed для воспроизводимости
+            train_ratio: Fraction of data used for training.
+            val_ratio: Fraction of data used for validation.
+            test_ratio: Fraction of data used for testing; computed automatically if None.
+            shuffle: Whether to shuffle data before splitting.
+            seed: Random seed for reproducibility.
         """
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
@@ -45,13 +45,13 @@ class DataSplitter:
         else:
             self.test_ratio = test_ratio
         
-        # Валидация
+        # Validation
         total = self.train_ratio + self.val_ratio + self.test_ratio
         if not np.isclose(total, 1.0):
-            raise ValueError(f"Сумма ratio должна быть 1.0, получено: {total}")
+            raise ValueError(f"split ratios must sum to 1.0, got: {total}")
         
         if any(r < 0 for r in [self.train_ratio, self.val_ratio, self.test_ratio]):
-            raise ValueError("Все ratio должны быть неотрицательными")
+            raise ValueError("all split ratios must be non-negative")
         
         self.shuffle = shuffle
         self.seed = seed
@@ -62,25 +62,25 @@ class DataSplitter:
         split_dim: int = -1
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Разделить данные
+        Split data.
         
         Args:
-            data: Входные данные
-            split_dim: Размерность вдоль которой разделять (обычно временная)
+            data: Input data.
+            split_dim: Dimension along which to split, usually time.
             
         Returns:
             (train_data, val_data, test_data)
         """
         n_samples = data.shape[split_dim]
         
-        # Вычислить размеры
+        # Compute split sizes
         n_train = int(n_samples * self.train_ratio)
         n_val = int(n_samples * self.val_ratio)
         n_test = n_samples - n_train - n_val
         
-        logger.info(f"Разделение: train={n_train}, val={n_val}, test={n_test}")
+        logger.info(f"Split sizes: train={n_train}, val={n_val}, test={n_test}")
         
-        # Индексы
+        # Indices
         indices = torch.arange(n_samples)
         
         if self.shuffle:
@@ -89,12 +89,12 @@ class DataSplitter:
             perm = torch.randperm(n_samples)
             indices = indices[perm]
         
-        # Разделить индексы
+        # Split indices
         train_indices = indices[:n_train]
         val_indices = indices[n_train:n_train + n_val]
         test_indices = indices[n_train + n_val:]
         
-        # Извлечь данные
+        # Extract data
         train_data = torch.index_select(data, split_dim, train_indices)
         val_data = torch.index_select(data, split_dim, val_indices)
         test_data = torch.index_select(data, split_dim, test_indices)
@@ -106,12 +106,12 @@ class DataSplitter:
         data: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Разделить временные данные (без shuffle)
+        Split temporal data without shuffling.
         
-        Полезно для временных рядов где порядок важен
+        Useful for time series where order matters.
         
         Args:
-            data: Временные данные
+            data: Temporal data.
             
         Returns:
             (train_data, val_data, test_data)

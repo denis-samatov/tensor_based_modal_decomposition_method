@@ -117,8 +117,8 @@ def plot_original_reconstructed_diff(
     """
     Visualise *original*, *reconstructed* matrices and their difference.
     
-    Универсальная функция для отображения оригинальной, реконструированной
-    матриц и их разницы. Поддерживает как объединённый, так и раздельный вывод.
+    Generic function for displaying original and reconstructed matrices and
+    their difference. Supports both combined and separate output.
 
     Parameters
     ----------

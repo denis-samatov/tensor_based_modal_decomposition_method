@@ -2,7 +2,7 @@
 """
 Field Reconstruction Example
 
-Реконструкция полных полей из sparse sensor measurements
+Full-field reconstruction from sparse sensor measurements.
 """
 import torch
 import numpy as np
@@ -23,16 +23,16 @@ print("=" * 60)
 print("TBMD - Field Reconstruction Example")
 print("=" * 60)
 
-# 1. Создать данные
-print("\n1. Создание динамических полей...")
-I = 150  # Пространственные точки
-J = 3    # Переменные
-T = 30   # Временные шаги
+# 1. Create data.
+print("\n1. Creating dynamic fields...")
+I = 150  # Spatial points
+J = 3    # Variables
+T = 30   # Time steps
 
 np.random.seed(42)
 torch.manual_seed(42)
 
-# Создать волновую динамику
+# Create wave dynamics.
 x = torch.linspace(0, 2 * np.pi, I)
 t = torch.linspace(0, 4 * np.pi, T)
 
@@ -43,10 +43,10 @@ for j in range(J):
 
 data += 0.05 * torch.randn_like(data)
 
-print(f"   Данные созданы: {data.shape}")
+print(f"   Data created: {data.shape}")
 
-# 2. Декомпозиция
-print("\n2. Tucker декомпозиция...")
+# 2. Decomposition.
+print("\n2. Tucker decomposition...")
 decomp_config = DecompositionConfig(
     ranks=[15, 10],
     verbose=False
@@ -54,11 +54,11 @@ decomp_config = DecompositionConfig(
 decomposer = TuckerDecomposer(decomp_config)
 result = decomposer.decompose(data)
 
-print(f"   Моды: {result.spatial_modes.shape}")
+print(f"   Modes: {result.spatial_modes.shape}")
 print(f"   Energy: {result.energy_retained:.2%}")
 
-# 3. Размещение сенсоров
-print("\n3. Размещение сенсоров...")
+# 3. Sensor placement.
+print("\n3. Sensor placement...")
 sensor_config = SensorPlacementConfig(
     n_sensors=30,
     verbose=False
@@ -66,17 +66,17 @@ sensor_config = SensorPlacementConfig(
 sensor_placer = TensorTubeQRDecomposition(sensor_config)
 sensor_result = sensor_placer.place_sensors(result.spatial_modes)
 
-print(f"   Размещено: {len(sensor_result.sensor_indices)} сенсоров")
+print(f"   Placed: {len(sensor_result.sensor_indices)} sensors")
 
-# 4. Реконструкция - разные методы
-print("\n4. Реконструкция разными методами...")
+# 4. Reconstruction with different methods.
+print("\n4. Reconstruction with different methods...")
 
-# Выберем тестовое поле
+# Select a test field.
 test_idx = 15
 test_field = data[:, :, test_idx]
 test_measurements = sensor_result.measurement_matrix @ test_field.reshape(-1)
 
-# Метод 1: Least Squares
+# Method 1: Least Squares
 print("   4.1. Least Squares...")
 recon_config_ls = ReconstructionConfig(
     solver='least_squares',
@@ -92,7 +92,7 @@ reconstructed_ls = recon_ls.reconstructed_field.reshape(I, J)
 error_ls = torch.norm(test_field - reconstructed_ls) / torch.norm(test_field)
 print(f"       Error: {error_ls:.4f}, Iterations: {recon_ls.n_iterations}")
 
-# Метод 2: ADMM
+# Method 2: ADMM
 print("   4.2. ADMM...")
 recon_config_admm = ReconstructionConfig(
     solver='admm',
@@ -110,7 +110,7 @@ reconstructed_admm = recon_admm.reconstructed_field.reshape(I, J)
 error_admm = torch.norm(test_field - reconstructed_admm) / torch.norm(test_field)
 print(f"       Error: {error_admm:.4f}, Iterations: {recon_admm.n_iterations}")
 
-# Метод 3: ISTA
+# Method 3: ISTA
 print("   4.3. ISTA...")
 recon_config_ista = ReconstructionConfig(
     solver='ista',
@@ -128,10 +128,10 @@ reconstructed_ista = recon_ista.reconstructed_field.reshape(I, J)
 error_ista = torch.norm(test_field - reconstructed_ista) / torch.norm(test_field)
 print(f"       Error: {error_ista:.4f}, Iterations: {recon_ista.n_iterations}")
 
-# 5. Временная реконструкция
-print("\n5. Реконструкция временной последовательности...")
+# 5. Temporal reconstruction.
+print("\n5. Temporal sequence reconstruction...")
 
-# Реконструировать все временные шаги
+# Reconstruct every time step.
 reconstructed_sequence = torch.zeros_like(data)
 errors_over_time = []
 
@@ -154,12 +154,12 @@ for ti in range(T):
 mean_error = np.mean(errors_over_time)
 std_error = np.std(errors_over_time)
 
-print(f"   Средняя ошибка: {mean_error:.4f} ± {std_error:.4f}")
+print(f"   Mean error: {mean_error:.4f} +/- {std_error:.4f}")
 print(f"   Min error: {min(errors_over_time):.4f}")
 print(f"   Max error: {max(errors_over_time):.4f}")
 
-# 6. Анализ чувствительности к количеству сенсоров
-print("\n6. Анализ чувствительности...")
+# 6. Sensitivity to the number of sensors.
+print("\n6. Sensitivity analysis...")
 
 sensor_counts = [10, 20, 30, 50, 75]
 errors_vs_sensors = []
@@ -183,13 +183,13 @@ for n_sensors in sensor_counts:
     
     print(f"   N={n_sensors}: error={error:.4f} ({n_sensors / (I * J) * 100:.1f}% coverage)")
 
-# 7. Визуализация
-print("\n7. Создание визуализации...")
+# 7. Visualization.
+print("\n7. Creating visualization...")
 try:
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(4, 3, hspace=0.3, wspace=0.3)
     
-    # Row 1: Сравнение методов для переменной 0
+    # Row 1: method comparison for variable 0.
     var_idx = 0
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.plot(test_field[:, var_idx].numpy(), label='Original', linewidth=2)
@@ -204,7 +204,7 @@ try:
     ax1.legend()
     ax1.grid(True, alpha=0.3)
     
-    # Ошибки методов
+    # Method errors.
     ax2 = fig.add_subplot(gs[0, 1])
     methods = ['LS', 'ADMM', 'ISTA']
     errors = [error_ls.item(), error_admm.item(), error_ista.item()]
@@ -214,7 +214,7 @@ try:
     ax2.set_title('Reconstruction Error by Method')
     ax2.grid(True, alpha=0.3, axis='y')
     
-    # Итерации
+    # Iterations.
     ax3 = fig.add_subplot(gs[0, 2])
     iterations = [recon_ls.n_iterations, recon_admm.n_iterations, recon_ista.n_iterations]
     ax3.bar(methods, iterations, color=colors, alpha=0.7)
@@ -222,7 +222,7 @@ try:
     ax3.set_title('Convergence Speed')
     ax3.grid(True, alpha=0.3, axis='y')
     
-    # Row 2: Полные поля
+    # Row 2: full fields.
     for idx, (field, title) in enumerate([
         (test_field, 'Original'),
         (reconstructed_admm, f'Reconstructed (ADMM)'),
@@ -235,19 +235,19 @@ try:
         ax.set_ylabel('Spatial Points')
         plt.colorbar(im, ax=ax)
     
-    # Row 3: Временная эволюция
+    # Row 3: temporal evolution.
     ax7 = fig.add_subplot(gs[2, :2])
     ax7.plot(errors_over_time, linewidth=2)
     ax7.axhline(y=mean_error, color='red', linestyle='--', label=f'Mean: {mean_error:.4f}')
     ax7.fill_between(range(T), mean_error - std_error, mean_error + std_error, 
-                     alpha=0.3, color='red', label=f'±1σ')
+                     alpha=0.3, color='red', label='+/- 1 std')
     ax7.set_xlabel('Time Step')
     ax7.set_ylabel('Relative Error')
     ax7.set_title('Reconstruction Error Over Time')
     ax7.legend()
     ax7.grid(True, alpha=0.3)
     
-    # Чувствительность к количеству сенсоров
+    # Sensitivity to the number of sensors.
     ax8 = fig.add_subplot(gs[2, 2])
     ax8.plot(sensor_counts, errors_vs_sensors, 'o-', linewidth=2, markersize=8)
     ax8.set_xlabel('Number of Sensors')
@@ -257,7 +257,7 @@ try:
     ax8.axhline(y=0.05, color='red', linestyle='--', alpha=0.5, label='5% threshold')
     ax8.legend()
     
-    # Row 4: Временная динамика (original vs reconstructed)
+    # Row 4: temporal dynamics (original vs reconstructed).
     point_idx = 75
     for var in range(J):
         ax = fig.add_subplot(gs[3, var])
@@ -271,17 +271,16 @@ try:
     
     plt.suptitle('Field Reconstruction from Sparse Sensors', fontsize=16, y=0.995)
     plt.savefig('field_reconstruction_results.png', dpi=150, bbox_inches='tight')
-    print("   ✅ Визуализация сохранена: field_reconstruction_results.png")
+    print("   Visualization saved: field_reconstruction_results.png")
     
 except Exception as e:
-    print(f"   ⚠️  Визуализация пропущена: {e}")
+    print(f"   Visualization skipped: {e}")
 
 print("\n" + "=" * 60)
-print("✅ Field Reconstruction Example завершен успешно!")
+print("Field Reconstruction Example completed successfully.")
 print("=" * 60)
-print("\nКлючевые выводы:")
-print(f"  • ADMM показывает лучший баланс точности и скорости")
-print(f"  • Средняя ошибка реконструкции: {mean_error:.2%}")
-print(f"  • 30 сенсоров ({30 / (I * J) * 100:.1f}%) достаточно для точной реконструкции")
-print(f"  • Методы регуляризации (ADMM, ISTA) более робастны к шуму")
-
+print("\nKey takeaways:")
+print("  - ADMM provides the best accuracy/runtime balance in this synthetic example.")
+print(f"  - Mean reconstruction error: {mean_error:.2%}")
+print(f"  - 30 sensors ({30 / (I * J) * 100:.1f}%) are used for the reconstruction test.")
+print("  - Regularized methods such as ADMM and ISTA are more robust to noise.")

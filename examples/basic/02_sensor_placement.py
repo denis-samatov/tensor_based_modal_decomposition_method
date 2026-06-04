@@ -2,7 +2,7 @@
 """
 Sensor Placement Example
 
-Оптимальное размещение сенсоров с помощью Tensor Tube QR
+Sensor placement with Tensor Tube QR.
 """
 import torch
 import numpy as np
@@ -16,45 +16,45 @@ print("=" * 60)
 print("TBMD - Sensor Placement Example")
 print("=" * 60)
 
-# 1. Создать синтетические данные
-print("\n1. Создание синтетических данных...")
-I = 200  # Пространственные точки
-J = 2    # Переменные (например, давление, насыщенность)
-T = 40   # Временные шаги
+# 1. Create synthetic data.
+print("\n1. Creating synthetic data...")
+I = 200  # Spatial points
+J = 2    # Variables, for example pressure and saturation
+T = 40   # Time steps
 
 np.random.seed(42)
 torch.manual_seed(42)
 
-# Создать пространственную сетку
+# Create a spatial grid.
 x = torch.linspace(0, 10, I)
 
-# Создать несколько пространственных мод (волны)
+# Create several spatial modes as waves.
 modes = []
 for k in [1, 2, 3]:
     mode = torch.sin(k * x) * torch.exp(-0.1 * k * x)
     modes.append(mode)
 
-# Объединить в пространственные моды
+# Combine spatial modes.
 n_modes = len(modes)
 spatial_modes = torch.stack(modes, dim=1)  # (I, n_modes)
 
-# Расширить на J переменных
+# Expand to J variables.
 spatial_modes_full = spatial_modes.unsqueeze(1).repeat(1, J, 1)  # (I, J, n_modes)
 spatial_modes_flat = spatial_modes_full.reshape(I * J, n_modes)
 
-# Создать временную динамику
+# Create temporal dynamics.
 temporal_dynamics = torch.randn(n_modes, T)
 
-# Полные данные
+# Full data.
 data_flat = spatial_modes_flat @ temporal_dynamics
 data = data_flat.reshape(I, J, T)
 data += 0.1 * torch.randn_like(data)
 
-print(f"   Данные созданы: {data.shape}")
-print(f"   Диапазон: [{data.min():.2f}, {data.max():.2f}]")
+print(f"   Data created: {data.shape}")
+print(f"   Range: [{data.min():.2f}, {data.max():.2f}]")
 
-# 2. Tucker декомпозиция (для получения мод)
-print("\n2. Tucker декомпозиция...")
+# 2. Tucker decomposition to obtain modes.
+print("\n2. Tucker decomposition...")
 decomp_config = DecompositionConfig(
     ranks=[10, 8],
     verbose=False
@@ -66,8 +66,8 @@ result = decomposer.decompose(data)
 print(f"   Spatial modes: {result.spatial_modes.shape}")
 print(f"   Energy retained: {result.energy_retained:.2%}")
 
-# 3. Размещение сенсоров - разное количество
-print("\n3. Размещение сенсоров...")
+# 3. Sensor placement for several sensor counts.
+print("\n3. Sensor placement...")
 
 sensor_counts = [10, 20, 50, 100]
 placements = {}
@@ -83,29 +83,29 @@ for n_sensors in sensor_counts:
     
     placements[n_sensors] = placement
     
-    print(f"   N={n_sensors}: размещено {len(placement.sensor_indices)} сенсоров, "
+    print(f"   N={n_sensors}: placed {len(placement.sensor_indices)} sensors, "
           f"coverage={placement.coverage_score:.4f}")
 
-# 4. Анализ покрытия
-print("\n4. Анализ покрытия пространства...")
+# 4. Coverage analysis.
+print("\n4. Spatial coverage analysis...")
 
-# Выберем случай с 50 сенсорами для детального анализа
+# Use the 50-sensor case for detailed analysis.
 n_selected = 50
 selected_placement = placements[n_selected]
 sensor_indices = selected_placement.sensor_indices
 
-# Преобразовать flat индексы в (i, j)
+# Convert flat indices to (i, j).
 sensor_i = sensor_indices // J
 sensor_j = sensor_indices % J
 
-print(f"   Выбрано {n_selected} сенсоров")
-print(f"   Покрытие по переменным: {dict(zip(*np.unique(sensor_j, return_counts=True)))}")
-print(f"   Spatial coverage: {len(np.unique(sensor_i))} из {I} точек")
+print(f"   Selected {n_selected} sensors")
+print(f"   Variable coverage: {dict(zip(*np.unique(sensor_j, return_counts=True)))}")
+print(f"   Spatial coverage: {len(np.unique(sensor_i))} of {I} points")
 
-# 5. Оценка качества размещения
-print("\n5. Оценка качества размещения...")
+# 5. Placement quality assessment.
+print("\n5. Placement quality assessment...")
 
-# Для каждого количества сенсоров оценим condition number
+# Estimate condition number for each sensor count.
 for n_sensors in sensor_counts:
     placement = placements[n_sensors]
     
@@ -120,17 +120,17 @@ for n_sensors in sensor_counts:
           f"coverage={placement.coverage_score:.4f}, "
           f"condition={cond:.2e}")
 
-# 6. Тест реконструкции
-print("\n6. Тест реконструкции с сенсорами...")
+# 6. Reconstruction test.
+print("\n6. Reconstruction test with sensors...")
 
-# Возьмем одно поле
+# Take one field.
 test_field = data[:, :, 25]  # (I, J)
 test_field_flat = test_field.reshape(-1)
 
-# Измерения с сенсоров
+# Sensor measurements.
 measurements = selected_placement.measurement_matrix @ test_field_flat
 
-# Простая реконструкция (least squares через моды)
+# Simple reconstruction through least squares over modes.
 # measurements = M @ field = M @ (Phi @ coeffs)
 # => coeffs = (M @ Phi)^+ @ measurements
 # => field = Phi @ coeffs
@@ -138,26 +138,26 @@ measurements = selected_placement.measurement_matrix @ test_field_flat
 Phi = result.spatial_modes
 M = selected_placement.measurement_matrix
 
-# Решить
+# Solve.
 A = M @ Phi
 coeffs, _, _, _ = torch.linalg.lstsq(A, measurements.unsqueeze(1))
 reconstructed_flat = Phi @ coeffs
 reconstructed = reconstructed_flat.reshape(I, J)
 
-# Ошибка
+# Error.
 error = torch.norm(test_field - reconstructed) / torch.norm(test_field)
-print(f"   Ошибка реконструкции: {error:.4f}")
-print(f"   Использовано измерений: {len(sensor_indices)} из {I * J} = {len(sensor_indices) / (I * J):.1%}")
+print(f"   Reconstruction error: {error:.4f}")
+print(f"   Measurements used: {len(sensor_indices)} of {I * J} = {len(sensor_indices) / (I * J):.1%}")
 
-# 7. Визуализация
-print("\n7. Создание визуализации...")
+# 7. Visualization.
+print("\n7. Creating visualization...")
 try:
     fig = plt.figure(figsize=(16, 10))
     
     # Layout: 3x3
     gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
     
-    # Row 1: Пространственные моды
+    # Row 1: spatial modes.
     for i in range(3):
         ax = fig.add_subplot(gs[0, i])
         mode = result.spatial_modes[:, i].reshape(I, J).mean(dim=1)
@@ -166,7 +166,7 @@ try:
         ax.set_xlabel('X')
         ax.grid(True, alpha=0.3)
     
-    # Row 2: Размещение сенсоров
+    # Row 2: sensor placement.
     ax1 = fig.add_subplot(gs[1, 0])
     ax1.scatter(x[sensor_i].numpy(), sensor_j.numpy(), c='red', s=50, alpha=0.7)
     ax1.set_xlabel('X')
@@ -193,7 +193,7 @@ try:
     ax3.set_title('Spatial Distribution of Sensors')
     ax3.grid(True, alpha=0.3)
     
-    # Row 3: Реконструкция
+    # Row 3: reconstruction.
     ax4 = fig.add_subplot(gs[2, 0])
     im1 = ax4.imshow(test_field.numpy(), aspect='auto', cmap='viridis')
     ax4.set_title('Original Field')
@@ -218,17 +218,16 @@ try:
     
     plt.suptitle('Tensor-Based Sensor Placement Results', fontsize=16, y=0.995)
     plt.savefig('sensor_placement_results.png', dpi=150, bbox_inches='tight')
-    print("   ✅ Визуализация сохранена: sensor_placement_results.png")
+    print("   Visualization saved: sensor_placement_results.png")
     
 except Exception as e:
-    print(f"   ⚠️  Визуализация пропущена: {e}")
+    print(f"   Visualization skipped: {e}")
 
 print("\n" + "=" * 60)
-print("✅ Sensor Placement Example завершен успешно!")
+print("Sensor Placement Example completed successfully.")
 print("=" * 60)
-print("\nКлючевые выводы:")
-print(f"  • QR factorization обеспечивает оптимальное размещение")
-print(f"  • {n_selected} сенсоров ({n_selected / (I * J) * 100:.1f}%) достаточно для точной реконструкции")
-print(f"  • Ошибка реконструкции: {error:.2%}")
-print(f"  • Сенсоры размещены в областях максимальной информативности")
-
+print("\nKey takeaways:")
+print("  - QR factorization provides an information-driven placement strategy.")
+print(f"  - {n_selected} sensors ({n_selected / (I * J) * 100:.1f}%) are used in this reconstruction test.")
+print(f"  - Reconstruction error: {error:.2%}")
+print("  - Sensors are placed in high-information regions for this synthetic example.")

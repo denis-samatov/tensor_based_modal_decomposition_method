@@ -1,13 +1,13 @@
 """
 Digital Twin Module
 
-Цифровой двойник месторождения с TBMD
+Reservoir digital twin implementation built on TBMD.
 
-Основной модуль: digital_twin.py - содержит DigitalTwin класс с:
-- Forecasting моделями (Linear, MLP, LSTM)
-- Proxy моделями для сценарного анализа (LinearDynamics, Neural, PhysicsInformed)
+Main module: digital_twin.py provides the DigitalTwin class with:
+- forecasting models (Linear, MLP, LSTM)
+- proxy models for scenario analysis (LinearDynamics, Neural, PhysicsInformed)
 
-Дополнительный модуль: system.py - содержит расширенную версию с компонентами мониторинга
+The optional compatibility layer exposes monitoring-oriented components.
 """
 
 # Main Digital Twin implementation
@@ -56,5 +56,4 @@ __all__ = [
     'NeuralProxyModel',
     'PhysicsInformedProxyModel',
 ]
-
 

@@ -1,6 +1,4 @@
-"""
-Тесты для Digital Twin
-"""
+"""Tests for Digital Twin."""
 import pytest
 import torch
 import numpy as np
@@ -11,10 +9,10 @@ from TBMD.config import DigitalTwinConfig
 
 
 class TestDigitalTwin:
-    """Тесты для DigitalTwin"""
+    """Tests for DigitalTwin."""
     
     def test_initialization(self):
-        """Тест инициализации"""
+        """Test initialization."""
         config = DigitalTwinConfig(n_spatial_modes=20, n_sensors=10)
         twin = DigitalTwin(config)
         
@@ -23,7 +21,7 @@ class TestDigitalTwin:
         assert twin.spatial_modes is None
     
     def test_train(self):
-        """Тест обучения digital twin"""
+        """Test digital twin training."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_temporal_modes=5,
@@ -32,7 +30,7 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Создать исторические данные
+        # Create historical data.
         historical_data = torch.randn(50, 3, 20)  # (I=50, J=3, T=20)
         
         twin.train(historical_data, normalize=True)
@@ -53,7 +51,7 @@ class TestDigitalTwin:
              assert len(twin.sensor_indices) <= 15
     
     def test_predict(self):
-        """Тест прогнозирования"""
+        """Test forecasting."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_temporal_modes=5,
@@ -62,18 +60,18 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Обучение
+        # Training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data, normalize=True)
         
-        # Прогноз
+        # Forecast
         current_state = torch.randn(50, 3)
         forecast = twin.predict(current_state, n_steps=5)
         
         assert forecast.shape == (50, 3, 5)
     
     def test_update_from_sensors(self):
-        """Тест обновления из сенсоров"""
+        """Test updates from sensor readings."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_sensors=15,
@@ -81,11 +79,11 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Обучение
+        # Training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data, normalize=True)
         
-        # Измерения с сенсоров (one snapshot)
+        # Sensor readings for one snapshot.
         sensor_readings_1d = torch.randn(15) 
         
         reconstructed = twin.update_from_sensors(sensor_readings_1d)
@@ -102,7 +100,7 @@ class TestDigitalTwin:
         assert len(twin.state.history['observations']) == 1
     
     def test_evaluate_scenarios(self):
-        """Тест сценарного анализа"""
+        """Test scenario analysis."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_sensors=15,
@@ -110,11 +108,11 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Обучение
+        # Training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data, normalize=True)
         
-        # Сценарии
+        # Scenarios
         scenarios = [
             {'name': 'baseline'},
             {'name': 'optimistic'},
@@ -128,7 +126,7 @@ class TestDigitalTwin:
         assert isinstance(results, dict)
     
     def test_detect_anomalies(self):
-        """Тест детекции аномалий"""
+        """Test anomaly detection."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_sensors=15,
@@ -136,11 +134,11 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Обучение
+        # Training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data, normalize=True)
         
-        # Данные с сенсоров
+        # Sensor data
         sensor_data = torch.randn(15, 10)
         
         anomalies = twin.detect_anomalies(sensor_data, threshold=3.0)
@@ -148,7 +146,7 @@ class TestDigitalTwin:
         assert isinstance(anomalies, list)
     
     def test_get_sensor_locations(self):
-        """Тест получения расположения сенсоров"""
+        """Test retrieval of sensor locations."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_sensors=15,
@@ -156,7 +154,7 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # Обучение
+        # Training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data, normalize=True)
         
@@ -166,7 +164,7 @@ class TestDigitalTwin:
         assert isinstance(locations, np.ndarray)
     
     def test_get_statistics(self):
-        """Тест получения статистики"""
+        """Test statistics retrieval."""
         config = DigitalTwinConfig(
             n_spatial_modes=5,
             n_sensors=15,
@@ -174,11 +172,11 @@ class TestDigitalTwin:
         )
         twin = DigitalTwin(config)
         
-        # До обучения
+        # Before training
         stats_before = twin.get_statistics()
         assert stats_before['is_calibrated'] is False
         
-        # После обучения
+        # After training
         historical_data = torch.randn(50, 3, 20)
         twin.train(historical_data)
         
@@ -191,21 +189,21 @@ class TestDigitalTwin:
         assert stats_after['n_sensors'] >= 15
     
     def test_not_calibrated_error(self):
-        """Тест ошибки при использовании до обучения"""
+        """Test errors raised before training."""
         config = DigitalTwinConfig(n_spatial_modes=10, n_sensors=15)
         twin = DigitalTwin(config)
         
         current_state = torch.randn(50, 3)
         
-        with pytest.raises(ValueError, match="не обучен"):
+        with pytest.raises(ValueError, match="not trained"):
             twin.predict(current_state)
 
 
 class TestDigitalTwinState:
-    """Тесты для DigitalTwinState"""
+    """Tests for DigitalTwinState."""
     
     def test_initialization(self):
-        """Тест инициализации состояния"""
+        """Test state initialization."""
         state = DigitalTwinState()
         
         assert state.current_time == 0.0
@@ -214,4 +212,3 @@ class TestDigitalTwinState:
         assert state.alert_status == 'normal'
         assert 'times' in state.history
         assert 'errors' in state.history
-

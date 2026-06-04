@@ -1,58 +1,46 @@
-# TBMD Algorithm Documentation
+# TBMD Documentation
 
-Добро пожаловать в документацию проекта **Tensor-Based Modal Decomposition (TBMD)**.
+This directory contains user and developer documentation for the Tensor-Based Modal Decomposition Method repository.
 
-## 📚 Основные разделы
+## Start Here
 
-### 🚀 [Digital Twin (Цифровой двойник)](guides/digital_twin.md)
-Полное руководство по созданию и использованию цифрового двойника резервуара.
-- Архитектура системы
-- Обучение и прогноз
-- Оптимальное размещение сенсоров
-- Сценарный анализ
+- [Quick start](guides/quick_start.md): installation, minimal examples, and common commands.
+- [TBMD core guide](guides/tbmd_core.md): conceptual overview of the decomposition and reconstruction workflow.
+- [Digital twin guide](guides/digital_twin.md): how the digital twin orchestration layer is structured.
+- [Geometry-aware TBMD](guides/geometry_aware_tbmd.md): graph and mesh-aware extensions.
+- [API reference](api/api_reference.md): public classes and functions most users import directly.
 
-### 📐 [Geometry-Aware TBMD](guides/geometry_aware_tbmd.md)
-Расширение метода для работы со сложной геометрией и неструктурированными сетками.
-- Графовое представление резервуара
-- Спектральный анализ на графах
-- Работа с активными ячейками (ACTNUM)
+## Guides
 
-### 🧠 [TBMD Core](guides/tbmd_core.md)
-Математические основы и базовые алгоритмы.
-- Тензорные разложения (Tucker, HOSVD)
-- Модальный анализ
-- Снижение размерности (ROM)
+- [Configuration](guides/configuration.md)
+- [Testing](guides/testing.md)
+- [Model and data handling](guides/data_and_models.md)
 
----
+## Examples and Tutorials
 
-## 📂 Структура документации
+- [Examples index](examples/README.md)
+- [Digital twin tutorial](tutorials/digital_twin_tutorial.md)
 
-```
+## Documentation Structure
+
+```text
 docs/
-├── README.md               # Этот файл
-├── api/                    # Автоматически сгенерированная API документация
-├── examples/               # Примеры использования и ноутбуки
-├── guides/                 # Подробные руководства и концепции
+├── README.md
+├── api/
+│   └── api_reference.md
+├── examples/
+│   ├── README.md
+│   └── brugge_digital_twin_analysis.md
+├── guides/
+│   ├── configuration.md
+│   ├── data_and_models.md
 │   ├── digital_twin.md
 │   ├── geometry_aware_tbmd.md
-│   └── tbmd_core.md
-└── tutorials/              # Пошаговые уроки (в разработке)
+│   ├── quick_start.md
+│   ├── tbmd_core.md
+│   └── testing.md
+└── tutorials/
+    └── digital_twin_tutorial.md
 ```
 
-## 🏁 С чего начать?
-
-1. Если вы хотите понять **общий принцип**, начните с [TBMD Core](guides/tbmd_core.md).
-2. Если ваша цель — **построить модель месторождения**, переходите к [Digital Twin](guides/digital_twin.md).
-3. Если у вас **сложная сетка** (Corner Point), изучите [Geometry-Aware TBMD](guides/geometry_aware_tbmd.md).
-
----
-
-## 🛠 Установка
-
-```bash
-pip install -r requirements.txt
-```
-
-## 🤝 Контакты
-
-Команда разработки TBMD.
+The maintained entry points are the guides, API reference, and executable examples listed above.

@@ -1,6 +1,4 @@
-"""
-Базовая конфигурация для всех модулей TBMD
-"""
+"""Base configuration shared by TBMD modules."""
 from dataclasses import dataclass
 from typing import Literal, Optional
 import torch
@@ -11,33 +9,33 @@ import numpy as np
 
 @dataclass
 class BaseConfig:
-    """Базовая конфигурация для всех TBMD модулей"""
+    """Base configuration for TBMD modules."""
     
-    # Вычислительные параметры
+    # Compute options
     backend: Literal['pytorch', 'numpy'] = 'pytorch'
     dtype: Literal['float32', 'float64'] = 'float32'
-    device: Optional[str] = None  # 'cuda', 'cpu', или None (auto)
+    device: Optional[str] = None  # 'cuda', 'cpu', or None for auto selection
     
-    # Воспроизводимость
+    # Reproducibility
     seed: Optional[int] = 0
     deterministic: bool = True
     
-    # Логирование
+    # Logging
     verbose: bool = True
     log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR'] = 'INFO'
     
     def __post_init__(self):
-        """Валидация и автоматическая настройка"""
-        # Автоматический выбор устройства
+        """Validate and apply automatic defaults."""
+        # Automatic device selection
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-        # Установка seed
+        # Seed setup
         if self.seed is not None:
             self._set_seed()
     
     def _set_seed(self):
-        """Установка seed для воспроизводимости.
+        """Set random seeds for reproducibility.
 
         Delegates to the central `set_seed` helper in TBMD.utils.tbmd_utils
         for consistent seeding across NumPy, random, torch and Tensorly.
@@ -70,7 +68,7 @@ class BaseConfig:
                 torch.backends.cudnn.benchmark = False
     
     def to_dict(self):
-        """Преобразовать конфигурацию в словарь"""
+        """Convert the configuration to a dictionary."""
         return {
             'backend': self.backend,
             'dtype': self.dtype,

@@ -1,171 +1,125 @@
-# Руководство: Создание цифрового двойника с нуля
+# Tutorial: Build a Digital Twin From Synthetic Data
 
-В этом руководстве мы шаг за шагом создадим цифровой двойник для синтетического месторождения, обучим его и выполним прогноз.
+This tutorial trains the TBMD digital twin workflow on a synthetic pressure-like field and runs a short forecast.
 
-## 📋 Предварительные требования
+## Prerequisites
 
-- Установленный Python 3.8+
-- Установленные зависимости (`pip install -r requirements.txt`)
-- Базовое понимание тензоров (NumPy/PyTorch)
+- Python 3.10 or newer.
+- Dependencies installed with `python -m pip install -e ".[dev]"`.
+- Basic familiarity with PyTorch tensors.
 
----
-
-## Шаг 1: Подготовка данных
-
-Для начала нам нужны данные. В реальном проекте это будут результаты гидродинамического симулятора (Eclipse, tNavigator). Для урока мы сгенерируем синтетические данные.
+## 1. Generate Synthetic Data
 
 ```python
-import torch
 import numpy as np
+import torch
+
 
 def generate_synthetic_field(nx=50, ny=50, nt=100):
-    """Генерация поля давления с затухающей волной"""
+    """Generate a simple damped wave field."""
     x = np.linspace(0, 1, nx)
     y = np.linspace(0, 1, ny)
     t = np.linspace(0, 10, nt)
-    
-    X, Y, T = np.meshgrid(x, y, t, indexing='ij')
-    
-    # Физика: затухающая волна от центра
-    r = np.sqrt((X-0.5)**2 + (Y-0.5)**2)
-    field = np.exp(-0.1*T) * np.sin(10*r - T)
-    
+
+    X, Y, T = np.meshgrid(x, y, t, indexing="ij")
+    radius = np.sqrt((X - 0.5) ** 2 + (Y - 0.5) ** 2)
+    field = np.exp(-0.1 * T) * np.sin(10 * radius - T)
+
     return torch.from_numpy(field).float()
 
-# Создаем данные
+
 data = generate_synthetic_field()
-print(f"Размер данных: {data.shape}")  # (50, 50, 100)
+print(data.shape)
 ```
 
-## Шаг 2: Конфигурация Digital Twin
-
-Настроим параметры двойника.
+## 2. Configure the Digital Twin
 
 ```python
 from TBMD.config import DigitalTwinConfig
 from TBMD.digital_twin.digital_twin import DigitalTwin
 
 config = DigitalTwinConfig(
-    n_spatial_modes=20,    # Количество пространственных мод
-    n_temporal_modes=10,   # Количество временных мод
-    n_sensors=15,          # Количество сенсоров для размещения
-    forecaster_type='linear', # Тип модели прогноза
-    device='cpu',
-    verbose=True
+    n_spatial_modes=20,
+    n_temporal_modes=10,
+    n_sensors=15,
+    forecaster_type="linear",
+    device="cpu",
+    verbose=True,
 )
 
 twin = DigitalTwin(config)
 ```
 
-## Шаг 3: Обучение (Training)
-
-Обучим модель на первых 80 шагах времени.
+## 3. Train
 
 ```python
-# Разделение на train/test
 train_data = data[..., :80]
 test_data = data[..., 80:]
 
-# Запуск обучения
-print("Начинаем обучение...")
 summary = twin.train(
     historical_data=train_data,
-    normalize=False
+    normalize=False,
 )
 
-# summary содержит метрики обучения
-print(f"Выбрано сенсоров: {summary['n_sensors']}")
-if 'qr_error' in summary:
-    print(f"Ошибка QR факторизации: {summary['qr_error']:.4f}")
+print(summary["n_sensors"])
 ```
 
-## Шаг 4: Прогноз (Forecasting)
-
-Теперь попробуем предсказать следующие 20 шагов.
+## 4. Forecast
 
 ```python
-# Текущее состояние (последний шаг обучения)
 current_state = train_data[..., -1]
+forecast = twin.predict(current_state=current_state, n_steps=20)
 
-# Прогноз
-# predict_next_state используется для одного шага с controls
-# Для многошагового прогноза используем predict
-forecast = twin.predict(
-    current_state=current_state,
-    n_steps=20
-)
-
-print(f"Сгенерирован прогноз формы: {forecast.shape}")
+print(forecast.shape)
 ```
 
-## Шаг 5: Валидация и Мониторинг
-
-Сравним прогноз с реальными данными (test set).
+## 5. Inspect Forecast Error
 
 ```python
 import matplotlib.pyplot as plt
 
-# Берем последний прогноз
-# forecast имеет форму (spatial..., n_steps)
-if forecast.ndim > 2:
-    predicted_field = forecast[..., -1]
-else:
-    predicted_field = forecast
-
+predicted_field = forecast[..., -1]
 true_field = test_data[..., -1]
+absolute_error = torch.abs(predicted_field - true_field)
 
-# Визуализация
 plt.figure(figsize=(10, 4))
 
 plt.subplot(131)
-plt.title("Прогноз")
+plt.title("Forecast")
 plt.imshow(predicted_field)
 plt.colorbar()
 
 plt.subplot(132)
-plt.title("Истина")
+plt.title("Reference")
 plt.imshow(true_field)
 plt.colorbar()
 
 plt.subplot(133)
-plt.title("Ошибка")
-plt.imshow(torch.abs(predicted_field - true_field))
+plt.title("Absolute Error")
+plt.imshow(absolute_error)
 plt.colorbar()
 
+plt.tight_layout()
 plt.show()
 ```
 
-## Шаг 6: Работа с сенсорами
-
-Симулируем получение данных с датчиков и обновление состояния.
+## 6. Update From Sensor Measurements
 
 ```python
-# Получаем маску сенсоров (spatial mask)
 sensor_mask = twin.sensor_mask
+real_field = test_data[..., 10]
+sensor_readings = real_field[sensor_mask]
 
-# Симулируем "реальные" измерения в момент t=90
-t_idx = 10 # 80 + 10 = 90
-real_field_t90 = test_data[..., t_idx]
-
-# Извлекаем значения только в точках сенсоров
-# В реальности это придет с физических датчиков
-sensor_readings = real_field_t90[sensor_mask]
-
-# Обновляем состояние двойника
 update_result = twin.update_from_sensors(
     sensor_readings=sensor_readings,
-    timestamp=90.0
+    timestamp=90.0,
 )
 
-print(f"Статус системы: {update_result['alert_status']}")
-if update_result['sensor_errors']:
-    print(f"Ошибка восстановления по сенсорам: {update_result['sensor_errors'][-1]:.4f}")
+print(update_result["alert_status"])
 ```
 
----
+## Next Steps
 
-## Что дальше?
-
-- Попробуйте изменить `n_spatial_modes` и посмотрите на ошибку.
-- Используйте `forecaster_type='lstm'` для более сложных данных.
-- Изучите [Geometry-Aware TBMD](../guides/geometry_aware_tbmd.md) для работы с реальными картами.
+- Change `n_spatial_modes` and `n_sensors` and compare reconstruction metrics.
+- Try `forecaster_type="lstm"` on a small dataset before scaling up.
+- Read [Geometry-Aware TBMD](../guides/geometry_aware_tbmd.md) if the spatial domain has irregular connectivity.

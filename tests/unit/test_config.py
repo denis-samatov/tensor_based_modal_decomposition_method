@@ -1,6 +1,4 @@
-"""
-Тесты для конфигурационных модулей
-"""
+"""Tests for configuration modules."""
 import pytest
 import torch
 from TBMD.config import (
@@ -16,10 +14,10 @@ from TBMD.config import (
 
 
 class TestBaseConfig:
-    """Тесты для BaseConfig"""
+    """Tests for BaseConfig."""
     
     def test_default_values(self):
-        """Тест значений по умолчанию"""
+        """Test default values."""
         config = BaseConfig()
         assert config.backend == 'pytorch'
         assert config.dtype == 'float32'
@@ -27,13 +25,13 @@ class TestBaseConfig:
         assert config.deterministic is True
     
     def test_auto_device_selection(self):
-        """Тест автоматического выбора устройства"""
+        """Test automatic device selection."""
         config = BaseConfig(device=None)
         expected = 'cuda' if torch.cuda.is_available() else 'cpu'
         assert config.device == expected
     
     def test_to_dict(self):
-        """Тест преобразования в словарь"""
+        """Test dictionary conversion."""
         config = BaseConfig()
         config_dict = config.to_dict()
         assert isinstance(config_dict, dict)
@@ -42,39 +40,39 @@ class TestBaseConfig:
 
 
 class TestDecompositionConfig:
-    """Тесты для DecompositionConfig"""
+    """Tests for DecompositionConfig."""
     
     def test_valid_ranks(self):
-        """Тест валидных рангов"""
+        """Test valid ranks."""
         config = DecompositionConfig(ranks=[50, 20])
         assert config.ranks == [50, 20]
     
     def test_invalid_ranks_negative(self):
-        """Тест отрицательных рангов"""
-        with pytest.raises(ValueError, match="должны быть положительными"):
+        """Test negative ranks."""
+        with pytest.raises(ValueError, match="all ranks must be positive"):
             DecompositionConfig(ranks=[-1, 20])
     
     def test_invalid_energy_threshold(self):
-        """Тест невалидного порога энергии"""
+        """Test invalid energy threshold."""
         with pytest.raises(ValueError, match="energy_threshold"):
             DecompositionConfig(energy_threshold=1.5)
 
 
 class TestGeometryAwareDecompositionConfig:
-    """Тесты для GeometryAwareDecompositionConfig"""
+    """Tests for GeometryAwareDecompositionConfig."""
     
     def test_valid_alpha(self):
-        """Тест валидного alpha"""
+        """Test valid alpha."""
         config = GeometryAwareDecompositionConfig(alpha=0.1)
         assert config.alpha == 0.1
     
     def test_invalid_alpha(self):
-        """Тест невалидного alpha"""
-        with pytest.raises(ValueError, match="alpha должен быть"):
+        """Test invalid alpha."""
+        with pytest.raises(ValueError, match="alpha must be"):
             GeometryAwareDecompositionConfig(alpha=1.5)
     
     def test_adaptive_alpha(self):
-        """Тест адаптивного alpha"""
+        """Test adaptive alpha."""
         config = GeometryAwareDecompositionConfig(
             alpha_adaptive=True,
             alpha_min=0.01,
@@ -84,34 +82,34 @@ class TestGeometryAwareDecompositionConfig:
 
 
 class TestSensorPlacementConfig:
-    """Тесты для SensorPlacementConfig"""
+    """Tests for SensorPlacementConfig."""
     
     def test_valid_n_sensors(self):
-        """Тест валидного количества сенсоров"""
+        """Test valid sensor count."""
         config = SensorPlacementConfig(n_sensors=100)
         assert config.n_sensors == 100
     
     def test_invalid_n_sensors(self):
-        """Тест невалидного количества сенсоров"""
-        with pytest.raises(ValueError, match="должен быть положительным"):
+        """Test invalid sensor count."""
+        with pytest.raises(ValueError, match="must be positive"):
             SensorPlacementConfig(n_sensors=-10)
 
 
 class TestReconstructionConfig:
-    """Тесты для ReconstructionConfig"""
+    """Tests for ReconstructionConfig."""
     
     def test_valid_solver(self):
-        """Тест валидного решателя"""
+        """Test valid solver."""
         config = ReconstructionConfig(solver='admm')
         assert config.solver == 'admm'
     
     def test_invalid_damping_factor(self):
-        """Тест невалидного damping factor"""
+        """Test invalid damping factor."""
         with pytest.raises(ValueError, match="damping_factor"):
             ReconstructionConfig(damping_factor=1.5)
     
     def test_convergence_parameters(self):
-        """Тест параметров сходимости"""
+        """Test convergence parameters."""
         config = ReconstructionConfig(
             max_iterations=100,
             convergence_eps=1e-3
@@ -121,10 +119,10 @@ class TestReconstructionConfig:
 
 
 class TestDigitalTwinConfig:
-    """Тесты для DigitalTwinConfig"""
+    """Tests for DigitalTwinConfig."""
     
     def test_valid_configuration(self):
-        """Тест валидной конфигурации"""
+        """Test valid configuration."""
         config = DigitalTwinConfig(
             n_spatial_modes=40,
             n_sensors=30,
@@ -135,13 +133,12 @@ class TestDigitalTwinConfig:
         assert config.forecaster_type == 'lstm'
     
     def test_train_test_split_validation(self):
-        """Тест валидации train/test split"""
+        """Test train/test split validation."""
         with pytest.raises(ValueError, match="train_test_split"):
             DigitalTwinConfig(train_test_split=1.5)
     
     def test_forecaster_config_defaults(self):
-        """Тест значений по умолчанию для forecaster"""
+        """Test default forecaster values."""
         config = DigitalTwinConfig()
         assert 'hidden_size' in config.forecaster_config
         assert 'learning_rate' in config.forecaster_config
-

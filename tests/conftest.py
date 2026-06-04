@@ -40,26 +40,26 @@ def synthetic_mesh_laplacian():
 
 @pytest.fixture
 def sample_tensor_small():
-    """Маленький тензор для быстрых тестов"""
+    """Small tensor for fast tests."""
     return torch.randn(10, 10, 5)
 
 
 @pytest.fixture
 def sample_tensor_medium():
-    """Средний тензор для реальных тестов"""
+    """Medium tensor for realistic tests."""
     return torch.randn(100, 50, 20)
 
 
 @pytest.fixture
 def sample_tensor_large():
-    """Большой тензор для нагрузочных тестов"""
+    """Large tensor for load-oriented tests."""
     return torch.randn(500, 200, 50)
 
 
 @pytest.fixture
 def sample_mesh_2d():
-    """Простая 2D mesh геометрия"""
-    # Создать простую прямоугольную сетку
+    """Simple 2D mesh geometry."""
+    # Create a simple rectangular grid
     nx, ny = 10, 10
     x = np.linspace(0, 1, nx)
     y = np.linspace(0, 1, ny)
@@ -67,7 +67,7 @@ def sample_mesh_2d():
     
     coords = np.column_stack([xx.ravel(), yy.ravel()])
     
-    # Простая квадратная связность
+    # Simple quadrilateral connectivity
     connectivity = []
     for i in range(ny - 1):
         for j in range(nx - 1):
@@ -82,25 +82,25 @@ def sample_mesh_2d():
 
 @pytest.fixture
 def sample_spatial_modes():
-    """Пример пространственных мод"""
-    return torch.randn(100, 20)  # 100 пространственных точек, 20 мод
+    """Sample spatial modes."""
+    return torch.randn(100, 20)  # 100 spatial points, 20 modes
 
 
 @pytest.fixture
 def sample_temporal_modes():
-    """Пример временных мод"""
-    return torch.randn(50, 10)  # 50 временных точек, 10 мод
+    """Sample temporal modes."""
+    return torch.randn(50, 10)  # 50 temporal points, 10 modes
 
 
 @pytest.fixture
 def sample_measurements():
-    """Пример измерений с сенсоров"""
-    return torch.randn(30, 50)  # 30 сенсоров, 50 временных точек
+    """Sample sensor measurements."""
+    return torch.randn(30, 50)  # 30 sensors, 50 time points
 
 
 @pytest.fixture
 def temp_data_path(tmp_path):
-    """Временная папка для тестовых данных"""
+    """Temporary directory for test data."""
     data_dir = tmp_path / "test_data"
     data_dir.mkdir()
     return data_dir
@@ -108,7 +108,7 @@ def temp_data_path(tmp_path):
 
 @pytest.fixture
 def decomposition_config():
-    """Базовая конфигурация декомпозиции"""
+    """Base decomposition configuration."""
     from TBMD.config import DecompositionConfig
     return DecompositionConfig(
         ranks=[20, 10, 5],
@@ -119,7 +119,7 @@ def decomposition_config():
 
 @pytest.fixture
 def sensor_config():
-    """Базовая конфигурация размещения сенсоров"""
+    """Base sensor placement configuration."""
     from TBMD.config import SensorPlacementConfig
     return SensorPlacementConfig(
         n_sensors=30,
@@ -129,7 +129,7 @@ def sensor_config():
 
 @pytest.fixture
 def reconstruction_config():
-    """Базовая конфигурация реконструкции"""
+    """Base reconstruction configuration."""
     from TBMD.config import ReconstructionConfig
     return ReconstructionConfig(
         solver='admm',

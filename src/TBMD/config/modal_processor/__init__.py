@@ -1,6 +1,4 @@
-"""
-Конфигурация для модального процессора
-"""
+"""Configuration for modal tensor processing."""
 from dataclasses import dataclass
 from typing import Optional
 from enum import Enum

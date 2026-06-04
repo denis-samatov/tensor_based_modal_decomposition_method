@@ -1,8 +1,6 @@
-"""
-Демонстрация унифицированного метода run_experiments.
+"""Demonstration of the unified run_experiments method.
 
-Показывает автоматическое определение режима анализа
-и различные способы использования.
+Shows automatic analysis-mode selection and several usage patterns.
 """
 
 import numpy as np
@@ -12,7 +10,7 @@ from TBMD.analytics.analytics import ExperimentRunner, ExperimentConfig, plot_an
 
 
 def create_sample_data():
-    """Создает образцовые данные для демонстрации."""
+    """Create sample data for the demonstration."""
     np.random.seed(42)
     torch.manual_seed(42)
     
@@ -27,71 +25,71 @@ def create_sample_data():
 
 
 def demo_auto_detection():
-    """Демонстрация автоматического определения режима анализа."""
-    print("🤖 АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ РЕЖИМА")
+    """Demonstrate automatic analysis-mode detection."""
+    print("AUTOMATIC MODE DETECTION")
     print("=" * 60)
     
     A_tensor, test_tensors, sensor_values = create_sample_data()
     
-    # Конфигурация 1: Без шума → простой режим
-    print("\n📊 Конфигурация 1: Без шума")
+    # Configuration 1: no noise -> simple mode.
+    print("\nConfiguration 1: no noise")
     config1 = ExperimentConfig(device='cpu', noise_level=0.0, num_noise_samples=0)
     runner1 = ExperimentRunner(config1)
     
     df1 = runner1.run_experiments(A_tensor, test_tensors, sensor_values)
-    print(f"✅ Автоматически выбран простой режим")
-    print(f"📋 Колонки: {list(df1.columns)}")
-    print(f"📈 Данные:\n{df1.head()}")
+    print("Automatically selected simple mode")
+    print(f"Columns: {list(df1.columns)}")
+    print(f"Data:\n{df1.head()}")
     
-    # Конфигурация 2: С шумом → статистический режим
-    print("\n📊 Конфигурация 2: С умным зашумлением")
+    # Configuration 2: noise -> statistical mode.
+    print("\nConfiguration 2: noise-aware sampling")
     config2 = ExperimentConfig(device='cpu', noise_level=0.1, num_noise_samples=3, 
                              noise_threshold=1e-10)
     runner2 = ExperimentRunner(config2)
     
     df2 = runner2.run_experiments(A_tensor, test_tensors, sensor_values)
-    print(f"✅ Автоматически выбран статистический режим")
-    print(f"📋 Колонки: {list(df2.columns)}")
-    print(f"📈 Образец данных:\n{df2[['sensors', 'error_mean', 'error_std']].head()}")
+    print("Automatically selected statistical mode")
+    print(f"Columns: {list(df2.columns)}")
+    print(f"Data sample:\n{df2[['sensors', 'error_mean', 'error_std']].head()}")
     
     return df1, df2
 
 
 def demo_explicit_control():
-    """Демонстрация явного управления режимом анализа."""
-    print("\n🎯 ЯВНОЕ УПРАВЛЕНИЕ РЕЖИМОМ")
+    """Demonstrate explicit analysis-mode control."""
+    print("\nEXPLICIT MODE CONTROL")
     print("=" * 60)
     
     A_tensor, test_tensors, sensor_values = create_sample_data()
     
-    # Один и тот же runner, разные режимы
+    # Same runner, different modes.
     config = ExperimentConfig(device='cpu', noise_level=0.1, num_noise_samples=5)
     runner = ExperimentRunner(config)
     
-    # Принудительно простой режим
-    print("\n📊 Принудительно простой режим (statistical_analysis=False):")
+    # Force simple mode.
+    print("\nForce simple mode (statistical_analysis=False):")
     df_simple = runner.run_experiments(A_tensor, test_tensors, sensor_values, 
                                      statistical_analysis=False)
-    print(f"📋 Колонки: {list(df_simple.columns)}")
+    print(f"Columns: {list(df_simple.columns)}")
     
-    # Принудительно статистический режим
-    print("\n📊 Принудительно статистический режим (statistical_analysis=True):")
+    # Force statistical mode.
+    print("\nForce statistical mode (statistical_analysis=True):")
     df_stat = runner.run_experiments(A_tensor, test_tensors, sensor_values, 
                                    statistical_analysis=True)
-    print(f"📋 Колонки: {list(df_stat.columns)}")
+    print(f"Columns: {list(df_stat.columns)}")
     
-    # Автоматический режим (использует config)
-    print("\n📊 Автоматический режим (statistical_analysis=None):")
+    # Automatic mode uses config.
+    print("\nAutomatic mode (statistical_analysis=None):")
     df_auto = runner.run_experiments(A_tensor, test_tensors, sensor_values)
-    print(f"📋 Колонки: {list(df_auto.columns)}")
-    print("✅ Автоматически выбрал статистический режим из-за noise_level > 0")
+    print(f"Columns: {list(df_auto.columns)}")
+    print("Automatically selected statistical mode because noise_level > 0")
     
     return df_simple, df_stat, df_auto
 
 
 def demo_backward_compatibility():
-    """Демонстрация обратной совместимости."""
-    print("\n🔄 ОБРАТНАЯ СОВМЕСТИМОСТЬ")
+    """Demonstrate backward compatibility."""
+    print("\nBACKWARD COMPATIBILITY")
     print("=" * 60)
     
     A_tensor, test_tensors, sensor_values = create_sample_data()
@@ -99,25 +97,25 @@ def demo_backward_compatibility():
     config = ExperimentConfig(device='cpu')
     runner = ExperimentRunner(config)
     
-    print("\n📊 Старый метод run_standard_experiments:")
+    print("\nLegacy run_standard_experiments method:")
     df_old = runner.run_standard_experiments(A_tensor, test_tensors, sensor_values)
-    print(f"📋 Колонки: {list(df_old.columns)}")
+    print(f"Columns: {list(df_old.columns)}")
     
-    print("\n📊 Новый метод run_experiments (simple):")
+    print("\nNew run_experiments method (simple):")
     df_new = runner.run_experiments(A_tensor, test_tensors, sensor_values, 
                                   statistical_analysis=False)
-    print(f"📋 Колонки: {list(df_new.columns)}")
+    print(f"Columns: {list(df_new.columns)}")
     
-    # Проверяем, что результаты идентичны
+    # Check that results are identical.
     are_equal = df_old.equals(df_new)
-    print(f"\n✅ Результаты идентичны: {are_equal}")
+    print(f"\nResults are identical: {are_equal}")
     
     return df_old, df_new
 
 
 def demo_performance_comparison():
-    """Сравнение производительности разных режимов."""
-    print("\n⚡ СРАВНЕНИЕ ПРОИЗВОДИТЕЛЬНОСТИ")
+    """Compare performance across modes."""
+    print("\nPERFORMANCE COMPARISON")
     print("=" * 60)
     
     import time
@@ -126,31 +124,31 @@ def demo_performance_comparison():
     config = ExperimentConfig(device='cpu', noise_level=0.1, num_noise_samples=10)
     runner = ExperimentRunner(config)
     
-    # Измеряем время простого режима
+    # Measure simple mode.
     start_time = time.time()
     df_simple = runner.run_experiments(A_tensor, test_tensors, sensor_values[:2], 
                                      statistical_analysis=False)
     simple_time = time.time() - start_time
     
-    # Измеряем время статистического режима
+    # Measure statistical mode.
     start_time = time.time()
     df_stat = runner.run_experiments(A_tensor, test_tensors, sensor_values[:2], 
                                    statistical_analysis=True)
     stat_time = time.time() - start_time
     
-    print(f"⏱️  Простой режим: {simple_time:.2f} секунд")
-    print(f"⏱️  Статистический режим: {stat_time:.2f} секунд")
-    print(f"📊 Замедление: {stat_time/simple_time:.1f}x")
+    print(f"Simple mode: {simple_time:.2f} seconds")
+    print(f"Statistical mode: {stat_time:.2f} seconds")
+    print(f"Slowdown: {stat_time/simple_time:.1f}x")
     
-    print(f"\n📋 Простой режим - колонки: {list(df_simple.columns)}")
-    print(f"📋 Статистический режим - колонки: {list(df_stat.columns)}")
+    print(f"\nSimple mode columns: {list(df_simple.columns)}")
+    print(f"Statistical mode columns: {list(df_stat.columns)}")
     
     return df_simple, df_stat
 
 
 def demo_plotting_compatibility():
-    """Демонстрация совместимости с plot_analytics."""
-    print("\n🎨 СОВМЕСТИМОСТЬ С PLOT_ANALYTICS")
+    """Demonstrate compatibility with plot_analytics."""
+    print("\nPLOT_ANALYTICS COMPATIBILITY")
     print("=" * 60)
     
     A_tensor, test_tensors, sensor_values = create_sample_data()
@@ -161,54 +159,52 @@ def demo_plotting_compatibility():
     runner1 = ExperimentRunner(config1)
     runner2 = ExperimentRunner(config2)
     
-    # Получаем данные в разных форматах
+    # Produce data in different formats.
     df_simple = runner1.run_experiments(A_tensor, test_tensors, sensor_values)
     df_stat = runner2.run_experiments(A_tensor, test_tensors, sensor_values)
     
-    print("\n📊 Простые данные совместимы с plot_analytics:")
+    print("\nSimple data is compatible with plot_analytics:")
     plot_analytics(df_simple, plot_type='combined', title_prefix="Simple Mode", show_plots=False)
-    print("✅ График создан успешно")
+    print("Plot created successfully")
     
-    print("\n📊 Статистические данные совместимы с plot_analytics:")
+    print("\nStatistical data is compatible with plot_analytics:")
     plot_analytics(df_stat, plot_type='normalized', title_prefix="Statistical Mode", show_plots=False)
-    print("✅ График с доверительными интервалами создан успешно")
+    print("Plot with confidence intervals created successfully")
     
     return df_simple, df_stat
 
 
 def main():
-    """Главная функция демонстрации."""
-    print("🚀 ДЕМОНСТРАЦИЯ УНИФИЦИРОВАННОГО run_experiments")
+    """Run the demonstration."""
+    print("UNIFIED run_experiments DEMONSTRATION")
     print("=" * 80)
     
     try:
-        # Демонстрируем все возможности
+        # Demonstrate all capabilities.
         df1, df2 = demo_auto_detection()
         df3, df4, df5 = demo_explicit_control()
         df6, df7 = demo_backward_compatibility()
         df8, df9 = demo_performance_comparison()
         df10, df11 = demo_plotting_compatibility()
         
-        print("\n" + "🎉" * 30)
-        print("ВСЕ ДЕМОНСТРАЦИИ ЗАВЕРШЕНЫ УСПЕШНО!")
-        print("🎉" * 30)
+        print("\nAll demonstrations completed successfully.")
         
-        print("\n📋 ИТОГОВЫЕ ВЫВОДЫ:")
-        print("✅ Один метод run_experiments заменяет два старых")
-        print("✅ Автоматическое определение режима по конфигурации")
-        print("✅ Явное управление через parameter statistical_analysis")
-        print("✅ Полная обратная совместимость")
-        print("✅ Совместимость с plot_analytics")
-        print("✅ Прозрачность: простой режим быстрее, статистический информативнее")
-        print("✅ Умное зашумление: сохраняет физический смысл нулевых значений")
+        print("\nSummary:")
+        print("- One run_experiments method replaces two legacy entry points.")
+        print("- Mode selection can be automatic based on configuration.")
+        print("- statistical_analysis provides explicit mode control.")
+        print("- Backward compatibility is preserved.")
+        print("- plot_analytics accepts both simple and statistical outputs.")
+        print("- Simple mode is faster; statistical mode provides uncertainty statistics.")
+        print("- Noise-aware sampling preserves the meaning of zero-valued regions.")
         
-        print("\n🎯 РЕКОМЕНДАЦИИ ПО ИСПОЛЬЗОВАНИЮ:")
-        print("🔹 Используйте run_experiments() для всех экспериментов")
-        print("🔹 Настройте noise_level/num_noise_samples в config для автоматического режима")
-        print("🔹 Используйте statistical_analysis=False для быстрого анализа")
-        print("🔹 Используйте statistical_analysis=True для точного анализа")
-        print("🔹 run_standard_experiments() остается для обратной совместимости")
-        print("🔹 Для резервуарных данных используйте noise_threshold для умного зашумления")
+        print("\nUsage recommendations:")
+        print("- Use run_experiments() for new experiments.")
+        print("- Configure noise_level and num_noise_samples for automatic mode selection.")
+        print("- Use statistical_analysis=False for quick analysis.")
+        print("- Use statistical_analysis=True for uncertainty-aware analysis.")
+        print("- run_standard_experiments() remains available for backward compatibility.")
+        print("- For reservoir data, use noise_threshold for noise-aware sampling.")
         
         return {
             'auto_simple': df1, 'auto_stat': df2,
@@ -219,7 +215,7 @@ def main():
         }
         
     except Exception as e:
-        print(f"\n❌ Ошибка в демонстрации: {e}")
+        print(f"\nDemonstration error: {e}")
         raise
 
 

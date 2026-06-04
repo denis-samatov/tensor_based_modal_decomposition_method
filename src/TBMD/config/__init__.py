@@ -1,8 +1,4 @@
-"""
-TBMD Configuration Module
-
-Модульные конфигурации для всех компонентов TBMD v2.0
-"""
+"""TBMD configuration module."""
 
 from .base import BaseConfig
 from .decomposition import DecompositionConfig, GeometryAwareDecompositionConfig
@@ -55,17 +51,17 @@ __all__ = [
 
 
 ##########################################################################
-# Deprecated Constants - Для обратной совместимости со старым API
+# Deprecated constants for backward compatibility with the legacy API
 ##########################################################################
 
-# Создать дефолтные экземпляры для константот
+# Default instances used to expose legacy constants
 _base_config = BaseConfig()
 _decomposition_config = DecompositionConfig()
 _sensor_config = SensorPlacementConfig()
 _reconstruction_config = ReconstructionConfig()
 _digital_twin_config = DigitalTwinConfig()
 
-# Базовые параметры
+# Base parameters
 SEED = _base_config.seed
 SET_BACKEND = _base_config.backend
 DTYPE = _base_config.dtype
@@ -80,7 +76,7 @@ DAMPING_FACTOR = _reconstruction_config.damping_factor
 INITIAL_STEP_SIZE = _reconstruction_config.initial_step_size
 MAX_STEP_SIZE = _reconstruction_config.max_step_size
 
-# Добавить в экспорт
+# Export legacy constants
 __all__.extend([
     'SEED',
     'SET_BACKEND',

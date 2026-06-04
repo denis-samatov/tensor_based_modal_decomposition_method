@@ -858,6 +858,82 @@ def test_fast_tplus1_low_rank_residual_corrector_learns_compressed_residual():
     np.testing.assert_allclose(corrected, target_frames, atol=1e-8)
 
 
+def test_fast_tplus1_weighted_residual_basis_stores_error_sensitive_weights():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_ridge_residual_corrector,
+        fit_ridge_residual_corrector,
+    )
+
+    coeffs = np.array([[1.0], [2.0], [3.0], [4.0]], dtype=np.float64)
+    base_predictions = np.zeros((4, 1, 3), dtype=np.float64)
+    target_frames = np.array(
+        [
+            [[1.0, 0.1, 0.2]],
+            [[2.0, 0.0, 0.1]],
+            [[3.0, -0.1, 0.0]],
+            [[4.0, 0.1, -0.1]],
+        ],
+        dtype=np.float64,
+    )
+
+    corrector = fit_ridge_residual_corrector(
+        target_frames,
+        base_predictions,
+        coeffs,
+        alpha=1e-10,
+        residual_rank=1,
+        residual_weighting="residual_energy",
+        residual_weight_floor=0.1,
+    )
+    corrected = apply_ridge_residual_corrector(
+        base_predictions,
+        coeffs,
+        corrector,
+        scale=1.0,
+    )
+
+    weights = corrector["residual_weights"]
+    assert corrector["residual_weighting"] == "residual_energy"
+    assert weights.shape == (3,)
+    assert weights[0] > weights[1]
+    assert corrected.shape == target_frames.shape
+
+
+def test_fast_tplus1_mlp_residual_corrector_learns_nonlinear_compressed_residual():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_ridge_residual_corrector,
+        fit_mlp_residual_corrector,
+    )
+
+    coeff_values = np.linspace(-1.0, 1.0, 32, dtype=np.float64)
+    coeffs = coeff_values.reshape(-1, 1)
+    base_predictions = np.zeros((coeffs.shape[0], 1, 1), dtype=np.float64)
+    target_frames = (coeff_values**2).reshape(-1, 1, 1)
+
+    corrector = fit_mlp_residual_corrector(
+        target_frames,
+        base_predictions,
+        coeffs,
+        residual_rank=1,
+        hidden_size=8,
+        num_epochs=300,
+        batch_size=32,
+        learning_rate=0.03,
+        weight_decay=0.0,
+        random_state=0,
+    )
+    corrected = apply_ridge_residual_corrector(
+        base_predictions,
+        coeffs,
+        corrector,
+        scale=1.0,
+    )
+
+    assert corrector["mode"] == "residual_svd_mlp"
+    assert corrected.shape == target_frames.shape
+    assert np.sqrt(np.mean((corrected - target_frames) ** 2)) < 0.08
+
+
 def test_fast_tplus1_predicts_next_from_sparse_history_measurements():
     import importlib.util
 
@@ -889,6 +965,53 @@ def test_fast_tplus1_predicts_next_from_sparse_history_measurements():
     np.testing.assert_allclose(pred[:, 0, 0], [4.0], atol=1e-10)
 
 
+def test_fast_tplus1_sensor_decoders_predict_from_precomputed_maps():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        fit_sensor_coefficient_decoder,
+        predict_from_history_sensor_decoder,
+    )
+
+    dictionary = np.zeros((2, 1, 2, 2), dtype=np.float64)
+    dictionary[0, 0, 0] = [1.0, 0.0]
+    dictionary[0, 0, 1] = [0.0, 1.0]
+    dictionary[1, 0, 0] = [2.0, 0.0]
+    dictionary[1, 0, 1] = [0.0, 3.0]
+    history = np.array([[[[3.0, 4.0]]]], dtype=np.float64)
+    sensor_indices = np.array([0, 1])
+
+    ridge_decoder = fit_sensor_coefficient_decoder(
+        dictionary,
+        sensor_indices,
+        decoder="ridge",
+        ridge_lambda=1e-10,
+    )
+    ridge_pred, ridge_coeffs = predict_from_history_sensor_decoder(
+        history,
+        dictionary,
+        sensor_indices,
+        ridge_decoder,
+    )
+    np.testing.assert_allclose(ridge_coeffs, [[3.0, 4.0]], atol=1e-8)
+    np.testing.assert_allclose(ridge_pred[0, 0], [6.0, 12.0], atol=1e-8)
+
+    fista_decoder = fit_sensor_coefficient_decoder(
+        dictionary,
+        sensor_indices,
+        decoder="fista",
+        l1_lambda=1e-8,
+        max_iter=40,
+        tol=0.0,
+    )
+    fista_pred, fista_coeffs = predict_from_history_sensor_decoder(
+        history,
+        dictionary,
+        sensor_indices,
+        fista_decoder,
+    )
+    assert fista_coeffs.shape == (1, 2)
+    np.testing.assert_allclose(fista_pred[0, 0], [6.0, 12.0], atol=1e-5)
+
+
 def test_fast_windowed_tbmd_qr_cs_forecaster_save_load_roundtrip(tmp_path):
     from TBMD.experiments.navier_stokes_fast_tplus1 import (
         FastWindowedTBMDQRCSConfig,
@@ -912,8 +1035,17 @@ def test_fast_windowed_tbmd_qr_cs_forecaster_save_load_roundtrip(tmp_path):
             ranks=[3, 2, 2, 1],
             n_spatial_sensors=2,
             max_train_segments=None,
+            coefficient_calibration_type="ridge",
+            coefficient_calibration_alpha=1e-8,
+            coefficient_calibration_blend=0.5,
             correction_alpha=1e-8,
             correction_residual_rank=1,
+            correction_gate_type="coefficient_rms",
+            correction_gate_threshold=1.0,
+            correction_gate_strength=0.5,
+            correction_gate_min=0.75,
+            correction_innovation_rank=1,
+            correction_innovation_include_norms=True,
             sensor_rcond=1e-10,
             random_state=0,
         )
@@ -930,7 +1062,107 @@ def test_fast_windowed_tbmd_qr_cs_forecaster_save_load_roundtrip(tmp_path):
     np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
     assert loaded.get_config()["n_spatial_sensors"] == 2
     assert loaded.get_config()["correction_residual_rank"] == 1
+    assert loaded.get_config()["coefficient_calibration_type"] == "ridge"
+    assert loaded.get_config()["coefficient_calibration_blend"] == pytest.approx(0.5)
+    assert loaded.get_config()["correction_gate_type"] == "coefficient_rms"
+    assert loaded.get_config()["correction_gate_min"] == pytest.approx(0.75)
+    assert loaded.get_config()["correction_innovation_rank"] == 1
+    assert loaded.get_config()["correction_innovation_include_norms"]
     assert loaded.get_metrics()["fit"]["n_train_segments"] == 6
+
+
+def test_fast_windowed_tbmd_qr_cs_mlp_corrector_save_load_roundtrip(tmp_path):
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        FastWindowedTBMDQRCSConfig,
+        FastWindowedTBMDQRCSForecaster,
+    )
+
+    pattern = np.array([[1.0, -0.5], [0.25, 0.75]], dtype=np.float64)
+    scales = np.array(
+        [
+            [1.0, 1.2, 1.44, 1.728],
+            [0.8, 0.96, 1.152, 1.3824],
+            [1.4, 1.68, 2.016, 2.4192],
+        ],
+        dtype=np.float64,
+    )
+    states = np.asarray([[scale * pattern for scale in traj] for traj in scales])
+    model = FastWindowedTBMDQRCSForecaster(
+        FastWindowedTBMDQRCSConfig(
+            history_length=2,
+            ranks=[3, 2, 2, 1],
+            n_spatial_sensors=2,
+            max_train_segments=None,
+            correction_head_type="mlp_residual_svd",
+            correction_residual_rank=1,
+            correction_hidden_size=4,
+            correction_num_epochs=3,
+            correction_batch_size=3,
+            correction_learning_rate=0.01,
+            sensor_rcond=1e-10,
+            random_state=0,
+        )
+    )
+    model.fit(states)
+    history = states[:1, :2]
+    pred_before = model.predict_next(history)
+
+    path = tmp_path / "fast_mlp_predictor.npz"
+    model.save(path)
+    loaded = FastWindowedTBMDQRCSForecaster.load(path)
+    pred_after = loaded.predict_next(history)
+
+    np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
+    assert loaded.get_config()["correction_head_type"] == "mlp_residual_svd"
+
+
+def test_fast_windowed_tbmd_qr_cs_patch_residual_save_load_roundtrip(tmp_path):
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        FastWindowedTBMDQRCSConfig,
+        FastWindowedTBMDQRCSForecaster,
+    )
+
+    x = np.linspace(-1.0, 1.0, 4)
+    xx, yy = np.meshgrid(x, x, indexing="ij")
+    pattern = xx + 0.5 * yy
+    scales = np.array(
+        [
+            [1.0, 1.1, 1.21, 1.331],
+            [0.8, 0.88, 0.968, 1.0648],
+            [1.3, 1.43, 1.573, 1.7303],
+            [0.6, 0.66, 0.726, 0.7986],
+        ],
+        dtype=np.float64,
+    )
+    states = np.asarray([[scale * pattern for scale in traj] for traj in scales])
+
+    model = FastWindowedTBMDQRCSForecaster(
+        FastWindowedTBMDQRCSConfig(
+            history_length=2,
+            ranks=[3, 2, 2, 2],
+            n_spatial_sensors=4,
+            max_train_segments=None,
+            correction_head_type="patch_residual_svd",
+            correction_patch_size=2,
+            correction_patch_residual_rank=1,
+            correction_alpha=1e-8,
+            sensor_rcond=1e-10,
+            random_state=0,
+        )
+    )
+    model.fit(states)
+    history = states[:1, :2]
+    pred_before = model.predict_next(history)
+
+    path = tmp_path / "fast_patch_predictor.npz"
+    model.save(path)
+    loaded = FastWindowedTBMDQRCSForecaster.load(path)
+    pred_after = loaded.predict_next(history)
+
+    np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
+    assert loaded.get_config()["correction_head_type"] == "patch_residual_svd"
+    assert loaded.get_config()["correction_patch_size"] == 2
+    assert loaded.get_config()["correction_patch_residual_rank"] == 1
 
 
 def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
@@ -943,15 +1175,55 @@ def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
         "fast_tplus1_r300_s300",
         "fast_tplus1_r300_s600",
         "fast_tplus1_r300_s600_residual_svd256",
+        "fast_tplus1_r300_s600_residual_svd256_scale11",
+        "fast_tplus1_r300_s600_residual_svd256_scale165",
+        "fast_tplus1_r300_s1000_residual_svd256_scale11",
+        "fast_tplus1_r300_s1000_residual_svd256_scale13",
+        "fast_tplus1_r300_s1000_patch16_svd32_scale13",
+        "fast_tplus1_r300_s1000_residual_svd256_scale15",
     }
     assert specs["fast_tplus1_r300_s300"].notes["label"] == "practical"
     assert specs["fast_tplus1_r300_s600"].notes["label"] == "quality-max"
     assert specs["fast_tplus1_r300_s600_residual_svd256"].notes["label"] == "residual-svd-dev-candidate"
+    assert specs["fast_tplus1_r300_s600_residual_svd256_scale11"].notes["label"] == "residual-svd-scale-dev-candidate"
+    assert specs["fast_tplus1_r300_s600_residual_svd256_scale165"].notes["label"] == "residual-svd-scale-peak-dev-candidate"
+    assert specs["fast_tplus1_r300_s1000_residual_svd256_scale11"].notes["label"] == "sensor-overbudget-dev-candidate"
+    assert specs["fast_tplus1_r300_s1000_residual_svd256_scale13"].notes["label"] == "sensor-overbudget-cached-multidev-candidate"
+    assert specs["fast_tplus1_r300_s1000_patch16_svd32_scale13"].notes["label"] == "sensor-overbudget-patch-residual-multidev-candidate"
+    assert specs["fast_tplus1_r300_s1000_residual_svd256_scale15"].notes["label"] == "sensor-overbudget-scale-dev-candidate"
     assert specs["fast_tplus1_r300_s300"].factory().config.ranks[-1] == 300
     assert specs["fast_tplus1_r300_s600"].factory().config.n_spatial_sensors == 600
     assert (
         specs["fast_tplus1_r300_s600_residual_svd256"].factory().config.correction_residual_rank
         == 256
+    )
+    assert (
+        specs["fast_tplus1_r300_s600_residual_svd256_scale11"].factory().config.correction_scale
+        == pytest.approx(1.1)
+    )
+    assert (
+        specs["fast_tplus1_r300_s600_residual_svd256_scale165"].factory().config.correction_scale
+        == pytest.approx(1.65)
+    )
+    assert (
+        specs["fast_tplus1_r300_s1000_residual_svd256_scale11"].factory().config.n_spatial_sensors
+        == 1000
+    )
+    assert (
+        specs["fast_tplus1_r300_s1000_residual_svd256_scale11"].factory().config.sensor_decoder
+        == "ridge"
+    )
+    assert (
+        specs["fast_tplus1_r300_s1000_residual_svd256_scale13"].factory().config.correction_scale
+        == pytest.approx(1.3)
+    )
+    patch_config = specs["fast_tplus1_r300_s1000_patch16_svd32_scale13"].factory().config
+    assert patch_config.correction_head_type == "patch_residual_svd"
+    assert patch_config.correction_patch_size == 16
+    assert patch_config.correction_patch_residual_rank == 32
+    assert (
+        specs["fast_tplus1_r300_s1000_residual_svd256_scale15"].factory().config.correction_scale
+        == pytest.approx(1.5)
     )
     assert isinstance(specs["fast_tplus1_r300_s300"].factory(), FastWindowedTBMDQRCSForecaster)
 
@@ -996,6 +1268,71 @@ def test_fast_tplus1_accuracy_sweep_builds_candidates_and_selects_by_dev():
     ]
     assert "residual_svd192_r300_s600" in residual_fine_names
     assert "residual_svd256_r300_s600" in residual_fine_names
+    mlp_head_candidates = sweep_module.build_candidates(groups=("mlp_head",))
+    mlp_head_names = [candidate.name for candidate in mlp_head_candidates]
+    assert "mlp_residual_svd128_h64_e80_r300_s600" in mlp_head_names
+    assert any(candidate.correction_head_type == "mlp_residual_svd" for candidate in mlp_head_candidates)
+    scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("correction_scale",))
+    ]
+    assert "quality_s600_scale0.9" in scale_names
+    assert "residual_svd256_scale0.9_r300_s600" in scale_names
+    weighted_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("weighted_residual",))
+    ]
+    assert "residual_energy_svd256_scale1.1_r300_s600" in weighted_names
+    assert any(candidate.correction_residual_weighting == "residual_energy" for candidate in sweep_module.build_candidates(groups=("weighted_residual",)))
+    fine_scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("correction_scale_fine",))
+    ]
+    assert "residual_svd256_scale1.15_r300_s600" in fine_scale_names
+    assert "residual_svd256_scale1.25_r300_s600" in fine_scale_names
+    upper_scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("correction_scale_upper",))
+    ]
+    assert "residual_svd256_scale1.4_r300_s600" in upper_scale_names
+    assert "residual_svd256_scale1.6_r300_s600" in upper_scale_names
+    high_scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("correction_scale_high",))
+    ]
+    assert "residual_svd256_scale2.0_r300_s600" in high_scale_names
+    assert "residual_svd256_scale2.5_r300_s600" in high_scale_names
+    peak_scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("correction_scale_peak",))
+    ]
+    assert "residual_svd256_scale1.65_r300_s600" in peak_scale_names
+    assert "residual_svd256_scale1.75_r300_s600" in peak_scale_names
+    decoder_recovery_candidates = sweep_module.build_candidates(groups=("decoder_recovery",))
+    decoder_names = [candidate.name for candidate in decoder_recovery_candidates]
+    assert "residual_svd256_scale1.1_fista_i25_r300_s600" in decoder_names
+    assert "residual_svd256_scale1.1_fista_i25_r300_s300" in decoder_names
+    assert any(candidate.sensor_decoder == "fista" for candidate in decoder_recovery_candidates)
+    assert any(candidate.sensor_decoder == "ridge" for candidate in decoder_recovery_candidates)
+    decoder_regularization_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("decoder_regularization",))
+    ]
+    assert "decoder_reg_ridge_lam1_r300_s600" in decoder_regularization_names
+    assert "decoder_reg_fista_l1_1e-4_i50_r300_s600" in decoder_regularization_names
+    sensor_overbudget_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("sensor_overbudget",))
+    ]
+    assert "sensor_overbudget_r300_s800_residual_svd256_scale1.1" in sensor_overbudget_names
+    assert "sensor_overbudget_r300_s1000_residual_svd256_scale1.1" in sensor_overbudget_names
+    sensor_overbudget_upper_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("sensor_overbudget_upper",))
+    ]
+    assert "sensor_overbudget_r300_s1200_residual_svd256_scale1.1" in sensor_overbudget_upper_names
+    assert "sensor_overbudget_r300_s1500_residual_svd256_scale1.1" in sensor_overbudget_upper_names
+    sensor_overbudget_scale_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("sensor_overbudget_scale",))
+    ]
+    assert "s1000_residual_svd256_scale1.05" in sensor_overbudget_scale_names
+    assert "s1000_residual_svd256_scale1.25" in sensor_overbudget_scale_names
+    sensor_overbudget_scale_upper_names = [
+        candidate.name for candidate in sweep_module.build_candidates(groups=("sensor_overbudget_scale_upper",))
+    ]
+    assert "s1000_residual_svd256_scale1.3" in sensor_overbudget_scale_upper_names
+    assert "s1000_residual_svd256_scale1.5" in sensor_overbudget_scale_upper_names
 
     selected = sweep_module.select_best_result(
         [
@@ -1006,6 +1343,209 @@ def test_fast_tplus1_accuracy_sweep_builds_candidates_and_selects_by_dev():
     )
 
     assert selected["candidate"] == "history10_rt10_r300_s300"
+
+
+def test_tbmd_qr_cs_next_step_script_exposes_fast_decoders_and_hybrid_plan():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_tbmd_qr_cs_next_step_forecasting.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_tbmd_qr_cs_next_step_forecasting",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    plan = sweep_module.build_experiment_plan("smoke")
+    decoder_names = {candidate["decoder"] for candidate in plan["decoder_candidates"]}
+    hybrid_families = {candidate["family"] for candidate in plan["hybrid_candidates"]}
+
+    assert {"current_admm", "ridge_sensor_decoder", "fista_decoder"} <= decoder_names
+    assert "hybrid_sensor_conditioned" in hybrid_families
+    assert not plan["limits"]["evaluate_official_test"]
+
+
+def test_tbmd_qr_cs_next_step_ridge_and_fista_decoders_are_batched():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_tbmd_qr_cs_next_step_forecasting.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_tbmd_qr_cs_next_step_forecasting",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    sensing_matrix = np.eye(3, dtype=np.float64)
+    measurements = np.array(
+        [
+            [1.0, -2.0, 0.5],
+            [0.25, 0.0, -0.75],
+        ],
+        dtype=np.float64,
+    )
+
+    ridge = sweep_module.RidgeSensorDecoder(ridge_lambda=1e-10).fit(sensing_matrix)
+    ridge_coeffs = ridge.decode(measurements)
+    np.testing.assert_allclose(ridge_coeffs, measurements, atol=1e-8)
+
+    fista = sweep_module.FistaSensorDecoder(l1_lambda=1e-8, max_iter=25, tol=0.0).fit(
+        sensing_matrix
+    )
+    fista_coeffs = fista.decode(measurements)
+    assert fista_coeffs.shape == measurements.shape
+    np.testing.assert_allclose(fista_coeffs, measurements, atol=1e-5)
+
+
+def test_tbmd_qr_cs_next_step_selection_uses_dev_and_tie_breakers():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_tbmd_qr_cs_next_step_forecasting.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_tbmd_qr_cs_next_step_forecasting",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    selected = sweep_module.select_best_result(
+        [
+            {
+                "candidate": "higher_rmse",
+                "dev_one_step_r2": 0.8,
+                "dev_rmse": 0.5,
+                "inference_ms_per_step": 1.0,
+                "n_sensors": 30,
+            },
+            {
+                "candidate": "lower_rmse",
+                "dev_one_step_r2": 0.8,
+                "dev_rmse": 0.4,
+                "inference_ms_per_step": 1.0,
+                "n_sensors": 30,
+            },
+            {
+                "candidate": "lower_r2",
+                "dev_one_step_r2": 0.79,
+                "dev_rmse": 0.1,
+                "inference_ms_per_step": 0.1,
+                "n_sensors": 10,
+            },
+        ]
+    )
+
+    assert selected["candidate"] == "lower_rmse"
+
+
+def test_fast_tplus1_cached_residual_dev_blocks_hold_out_train_only():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    blocks = sweep_module.build_dev_blocks(10, dev_count=2, n_splits=3)
+
+    assert len(blocks) == 3
+    for train_idx, dev_idx in blocks:
+        assert train_idx.shape == (8,)
+        assert dev_idx.shape == (2,)
+        assert set(train_idx).isdisjoint(set(dev_idx))
+
+
+def test_fast_tplus1_cached_residual_candidates_include_robust_variants():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    candidates = {candidate.name: candidate for candidate in sweep_module.build_residual_candidates("fast")}
+
+    assert "uniform_svd256_scale1.1" in candidates
+    assert "energy_svd256_scale1.1" in candidates
+    assert "patch16_rank16_scale1.1" in candidates
+    assert "gated_svd256_scale1.3_thr1_str1" in candidates
+    assert "innovation_svd256_ir16_scale1.1" in candidates
+    assert "coeffcal_svd256_blend0.5_scale1.1" in candidates
+    assert candidates["uniform_svd256_scale1.1"].residual_rank == 256
+    assert candidates["energy_svd256_scale1.1"].residual_weighting == "residual_energy"
+    assert candidates["patch16_rank16_scale1.1"].head_type == "patch_residual_svd"
+    assert candidates["patch16_rank16_scale1.1"].patch_size == 16
+    assert candidates["gated_svd256_scale1.3_thr1_str1"].gate_type == "coefficient_rms"
+    assert candidates["innovation_svd256_ir16_scale1.1"].innovation_rank == 16
+    assert candidates["innovation_svd256_ir16_scale1.1"].innovation_include_norms
+    assert candidates["coeffcal_svd256_blend0.5_scale1.1"].coefficient_calibration_type == "ridge"
+    assert candidates["coeffcal_svd256_blend0.5_scale1.1"].coefficient_calibration_blend == pytest.approx(0.5)
+
+
+def test_fast_tplus1_cached_residual_selection_uses_multi_dev_robust_score():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    selected = sweep_module.select_best_robust_result(
+        [
+            {
+                "candidate": "same_mean_lower_worst",
+                "mean_dev_r2": 0.8,
+                "worst_dev_r2": 0.72,
+                "mean_dev_rmse": 0.4,
+            },
+            {
+                "candidate": "same_mean_higher_worst",
+                "mean_dev_r2": 0.8,
+                "worst_dev_r2": 0.74,
+                "mean_dev_rmse": 0.5,
+            },
+            {
+                "candidate": "lower_mean",
+                "mean_dev_r2": 0.79,
+                "worst_dev_r2": 0.78,
+                "mean_dev_rmse": 0.1,
+            },
+        ]
+    )
+
+    assert selected["candidate"] == "same_mean_higher_worst"
 
 
 def test_latent_standardization_roundtrip_restores_original_values():

@@ -189,7 +189,7 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
         v[...,1] = -2*math.pi*k_x*temp
         
         v_complex = torch.complex(v[..., 0], v[..., 1])
-        v = torch.fft.ifft2(v_complex).real  # Возвращаем только реальную часть
+        v = torch.fft.ifft2(v_complex).real  # Return only the real part
 
         # Partial x of vorticity
         w_x = w_h.clone()
@@ -198,7 +198,7 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
         w_x[...,1] = 2*math.pi*k_x*temp
         
         w_x_complex = torch.complex(w_x[..., 0], w_x[..., 1])
-        w_x = torch.fft.ifft2(w_x_complex).real  # Возвращаем только реальную часть
+        w_x = torch.fft.ifft2(w_x_complex).real  # Return only the real part
 
         # Partial y of vorticity
         w_y = w_h.clone()
@@ -207,7 +207,7 @@ def navier_stokes_2d(w0, f, visc, T, delta_t=1e-4, record_steps=1):
         w_y[...,1] = 2*math.pi*k_y*temp
         
         w_y_complex = torch.complex(w_y[..., 0], w_y[..., 1])
-        w_y = torch.fft.ifft2(w_y_complex).real  # Возвращаем только реальную часть
+        w_y = torch.fft.ifft2(w_y_complex).real  # Return only the real part
 
         # Non-linear term (u.grad(w)): compute in physical space then back to Fourier space
         F_h_complex = torch.fft.fft2(q*w_x + v*w_y)

@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
+from sklearn.utils.extmath import randomized_svd
 
 from TBMD.config import DecompositionConfig, SensorPlacementConfig
 from TBMD.core.decomposition.hosvd import TuckerDecomposerInterface
@@ -27,9 +28,35 @@ class FastWindowedTBMDQRCSConfig:
     segment_stride: int = 1
     max_train_segments: Optional[int] = 6144
     sensor_rcond: float = 1e-6
+    sensor_decoder: str = "lstsq"
+    decoder_ridge_lambda: float = 1e-4
+    decoder_l1_lambda: float = 1e-3
+    decoder_max_iter: int = 25
+    decoder_tol: float = 1e-6
+    coefficient_calibration_type: str = "none"
+    coefficient_calibration_target: str = "target"
+    coefficient_calibration_alpha: float = 1e-6
+    coefficient_calibration_blend: float = 1.0
+    coefficient_calibration_rcond: float = 1e-6
     correction_alpha: float = 1e-8
     correction_scale: float = 1.0
     correction_residual_rank: Optional[int] = None
+    correction_residual_weighting: str = "uniform"
+    correction_residual_weight_floor: float = 0.1
+    correction_patch_size: int = 16
+    correction_patch_residual_rank: Optional[int] = None
+    correction_gate_type: str = "none"
+    correction_gate_threshold: float = 1.25
+    correction_gate_strength: float = 1.0
+    correction_gate_min: float = 0.5
+    correction_innovation_rank: int = 0
+    correction_innovation_include_norms: bool = False
+    correction_head_type: str = "ridge"
+    correction_hidden_size: int = 128
+    correction_num_epochs: int = 120
+    correction_batch_size: int = 256
+    correction_learning_rate: float = 1e-3
+    correction_weight_decay: float = 1e-6
     random_state: int = 0
     spatial_mean_centering: bool = True
     dtype: str = "float32"
@@ -179,6 +206,304 @@ def place_fixed_spatial_sensors(
     return spatial_mask, np.flatnonzero(spatial_mask.reshape(-1))
 
 
+def _soft_threshold(values: np.ndarray, threshold: float) -> np.ndarray:
+    return np.sign(values) * np.maximum(np.abs(values) - threshold, 0.0)
+
+
+def history_sensor_matrix(
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+) -> np.ndarray:
+    """Build the fixed QR sensing matrix for all history slices."""
+    history_dictionary, _ = history_and_target(dictionary)
+    height_width = int(np.prod(history_dictionary.shape[1:3]))
+    flat_history_dictionary = history_dictionary.reshape(
+        history_dictionary.shape[0],
+        height_width,
+        history_dictionary.shape[-1],
+    )
+    return flat_history_dictionary[:, spatial_sensor_indices, :].reshape(
+        -1,
+        history_dictionary.shape[-1],
+    )
+
+
+def history_sensor_measurements(
+    history: np.ndarray,
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+) -> np.ndarray:
+    """Extract fixed QR measurements from centered history `(N,L,H,W)`."""
+    history_dictionary, _ = history_and_target(dictionary)
+    if history.shape[1:] != history_dictionary.shape[:-1]:
+        raise ValueError("history shape must match dictionary history slices")
+    height_width = int(np.prod(history_dictionary.shape[1:3]))
+    flat_history = history.transpose(1, 2, 3, 0).reshape(
+        history_dictionary.shape[0],
+        height_width,
+        history.shape[0],
+    )
+    return flat_history[:, spatial_sensor_indices, :].reshape(-1, history.shape[0]).T
+
+
+def fit_sensor_coefficient_decoder(
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+    *,
+    decoder: str,
+    rcond: float = 1e-6,
+    ridge_lambda: float = 1e-4,
+    l1_lambda: float = 1e-3,
+    max_iter: int = 25,
+    tol: float = 1e-6,
+) -> dict[str, Any]:
+    """Precompute a batched QR-sensor coefficient decoder."""
+    sensing_matrix = history_sensor_matrix(dictionary, spatial_sensor_indices)
+    decoder = decoder.lower()
+    if decoder == "lstsq":
+        decoder_matrix = np.linalg.pinv(sensing_matrix, rcond=rcond).T
+        return {
+            "type": "lstsq",
+            "decoder_matrix": decoder_matrix,
+            "sensing_matrix": sensing_matrix,
+            "rcond": float(rcond),
+        }
+    if decoder == "ridge":
+        if ridge_lambda < 0:
+            raise ValueError("ridge_lambda must be non-negative")
+        gram = sensing_matrix.T @ sensing_matrix
+        penalty = ridge_lambda * np.eye(gram.shape[0], dtype=np.float64)
+        rhs = sensing_matrix.T
+        try:
+            decoder_matrix = np.linalg.solve(gram + penalty, rhs).T
+        except np.linalg.LinAlgError:
+            decoder_matrix = (np.linalg.pinv(gram + penalty) @ rhs).T
+        return {
+            "type": "ridge",
+            "decoder_matrix": decoder_matrix,
+            "sensing_matrix": sensing_matrix,
+            "ridge_lambda": float(ridge_lambda),
+        }
+    if decoder == "fista":
+        if l1_lambda < 0:
+            raise ValueError("l1_lambda must be non-negative")
+        if max_iter <= 0:
+            raise ValueError("max_iter must be positive")
+        spectral_norm = float(np.linalg.norm(sensing_matrix, ord=2))
+        lipschitz = max(spectral_norm * spectral_norm, 1e-12)
+        return {
+            "type": "fista",
+            "sensing_matrix": sensing_matrix,
+            "lipschitz": lipschitz,
+            "l1_lambda": float(l1_lambda),
+            "max_iter": int(max_iter),
+            "tol": float(tol),
+        }
+    raise ValueError(f"Unknown sensor decoder: {decoder}")
+
+
+def decode_sensor_coefficients(
+    measurements: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> np.ndarray:
+    """Decode a measurement batch to TBMD window coefficients."""
+    decoder_type = decoder_payload["type"]
+    batch = np.asarray(measurements, dtype=np.float64)
+    if decoder_type in {"lstsq", "ridge"}:
+        return batch @ np.asarray(decoder_payload["decoder_matrix"], dtype=np.float64)
+    if decoder_type == "fista":
+        sensing_matrix = np.asarray(decoder_payload["sensing_matrix"], dtype=np.float64)
+        coeffs = np.zeros((batch.shape[0], sensing_matrix.shape[1]), dtype=np.float64)
+        momentum_state = coeffs.copy()
+        momentum = 1.0
+        lipschitz = float(decoder_payload["lipschitz"])
+        threshold = float(decoder_payload["l1_lambda"]) / lipschitz
+        tol = float(decoder_payload.get("tol", 1e-6))
+        for _ in range(int(decoder_payload["max_iter"])):
+            residual = momentum_state @ sensing_matrix.T - batch
+            gradient = residual @ sensing_matrix
+            next_coeffs = _soft_threshold(momentum_state - gradient / lipschitz, threshold)
+            next_momentum = 0.5 * (1.0 + np.sqrt(1.0 + 4.0 * momentum * momentum))
+            momentum_state = next_coeffs + ((momentum - 1.0) / next_momentum) * (
+                next_coeffs - coeffs
+            )
+            rel_change = np.linalg.norm(next_coeffs - coeffs) / max(
+                np.linalg.norm(coeffs),
+                1e-12,
+            )
+            coeffs = next_coeffs
+            momentum = next_momentum
+            if tol > 0.0 and rel_change < tol:
+                break
+        return coeffs
+    raise ValueError(f"Unknown sensor decoder payload type: {decoder_type}")
+
+
+def sensor_innovation_residual(
+    measurements: np.ndarray,
+    coeffs: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> np.ndarray:
+    """Return QR sensor consistency residual `y - A c` for recovered coefficients."""
+    sensing_matrix = np.asarray(decoder_payload["sensing_matrix"], dtype=np.float64)
+    return np.asarray(measurements, dtype=np.float64) - np.asarray(coeffs, dtype=np.float64) @ sensing_matrix.T
+
+
+def fit_sensor_innovation_encoder(
+    measurements: np.ndarray,
+    coeffs: np.ndarray,
+    decoder_payload: dict[str, Any],
+    *,
+    rank: int,
+    include_norms: bool,
+    random_state: int,
+) -> dict[str, Any]:
+    """Fit a compact feature encoder for sensor innovation residuals."""
+    if rank < 0:
+        raise ValueError("correction_innovation_rank must be non-negative")
+    innovation = sensor_innovation_residual(measurements, coeffs, decoder_payload)
+    innovation_mean = innovation.mean(axis=0)
+    centered = innovation - innovation_mean
+    actual_rank = min(int(rank), centered.shape[0], centered.shape[1])
+    basis = np.empty((0, centered.shape[1]), dtype=np.float64)
+    projected = np.empty((centered.shape[0], 0), dtype=np.float64)
+    if actual_rank > 0:
+        _, _, vt = randomized_svd(
+            centered,
+            n_components=actual_rank,
+            n_iter=4,
+            random_state=random_state,
+        )
+        basis = vt.astype(np.float64)
+        projected = centered @ basis.T
+    pieces = [projected]
+    if include_norms:
+        innovation_rms = np.sqrt(np.mean(innovation**2, axis=1, keepdims=True))
+        measurement_rms = np.sqrt(np.mean(np.asarray(measurements, dtype=np.float64) ** 2, axis=1, keepdims=True))
+        relative_rms = innovation_rms / np.maximum(measurement_rms, 1e-12)
+        pieces.append(np.concatenate([innovation_rms, relative_rms], axis=1))
+    features = np.concatenate(pieces, axis=1) if pieces else np.empty((innovation.shape[0], 0))
+    feature_mean = features.mean(axis=0) if features.shape[1] else np.empty((0,), dtype=np.float64)
+    feature_std = features.std(axis=0) if features.shape[1] else np.empty((0,), dtype=np.float64)
+    feature_std[feature_std < 1e-8] = 1.0
+    return {
+        "innovation_rank": int(actual_rank),
+        "innovation_include_norms": bool(include_norms),
+        "innovation_mean": innovation_mean,
+        "innovation_basis": basis,
+        "innovation_feature_mean": feature_mean,
+        "innovation_feature_std": feature_std,
+    }
+
+
+def transform_sensor_innovation_features(
+    measurements: np.ndarray,
+    coeffs: np.ndarray,
+    decoder_payload: dict[str, Any],
+    encoder: dict[str, Any],
+) -> np.ndarray:
+    """Transform sensor innovation residuals to standardized correction features."""
+    rank = int(encoder.get("innovation_rank", 0))
+    include_norms = bool(encoder.get("innovation_include_norms", False))
+    if rank <= 0 and not include_norms:
+        return np.empty((np.asarray(coeffs).shape[0], 0), dtype=np.float64)
+    innovation = sensor_innovation_residual(measurements, coeffs, decoder_payload)
+    centered = innovation - np.asarray(encoder["innovation_mean"], dtype=np.float64)
+    pieces = []
+    if rank > 0:
+        pieces.append(centered @ np.asarray(encoder["innovation_basis"], dtype=np.float64).T)
+    if include_norms:
+        innovation_rms = np.sqrt(np.mean(innovation**2, axis=1, keepdims=True))
+        measurement_rms = np.sqrt(np.mean(np.asarray(measurements, dtype=np.float64) ** 2, axis=1, keepdims=True))
+        relative_rms = innovation_rms / np.maximum(measurement_rms, 1e-12)
+        pieces.append(np.concatenate([innovation_rms, relative_rms], axis=1))
+    features = np.concatenate(pieces, axis=1) if pieces else np.empty((innovation.shape[0], 0))
+    return (
+        features - np.asarray(encoder["innovation_feature_mean"], dtype=np.float64)
+    ) / np.asarray(encoder["innovation_feature_std"], dtype=np.float64)
+
+
+def build_correction_feature_matrix(
+    coeffs: np.ndarray,
+    corrector: dict[str, Any],
+    *,
+    measurements: np.ndarray | None = None,
+    decoder_payload: dict[str, Any] | None = None,
+) -> np.ndarray:
+    """Build residual-head features from coefficients and optional sensor innovation."""
+    coeffs = np.asarray(coeffs, dtype=np.float64)
+    encoder = corrector.get("innovation_encoder")
+    if not encoder:
+        return coeffs
+    if measurements is None or decoder_payload is None:
+        raise ValueError("measurements and decoder_payload are required for innovation features")
+    innovation_features = transform_sensor_innovation_features(
+        measurements,
+        coeffs,
+        decoder_payload,
+        encoder,
+    )
+    return np.concatenate([coeffs, innovation_features], axis=1)
+
+
+def predict_from_history_sensor_decoder(
+    history: np.ndarray,
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Predict centered next frames using a precomputed sensor decoder."""
+    _, target_dictionary = history_and_target(dictionary)
+    measurements = history_sensor_measurements(history, dictionary, spatial_sensor_indices)
+    coeffs = decode_sensor_coefficients(measurements, decoder_payload)
+    predictions = coeffs @ target_dictionary.reshape(-1, target_dictionary.shape[-1]).T
+    return predictions.reshape(coeffs.shape[0], *target_dictionary.shape[:-1]), coeffs
+
+
+def predict_from_history_sensor_decoder_with_measurements(
+    history: np.ndarray,
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Predict centered next frames and return sensor measurements used for decoding."""
+    _, target_dictionary = history_and_target(dictionary)
+    measurements = history_sensor_measurements(history, dictionary, spatial_sensor_indices)
+    coeffs = decode_sensor_coefficients(measurements, decoder_payload)
+    predictions = coeffs @ target_dictionary.reshape(-1, target_dictionary.shape[-1]).T
+    return predictions.reshape(coeffs.shape[0], *target_dictionary.shape[:-1]), coeffs, measurements
+
+
+def predict_next_sensor_decoder(
+    segments: np.ndarray,
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    history = segments[:-1].transpose(3, 0, 1, 2)
+    return predict_from_history_sensor_decoder(
+        history,
+        dictionary,
+        spatial_sensor_indices,
+        decoder_payload,
+    )
+
+
+def predict_next_sensor_decoder_with_measurements(
+    segments: np.ndarray,
+    dictionary: np.ndarray,
+    spatial_sensor_indices: np.ndarray,
+    decoder_payload: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    history = segments[:-1].transpose(3, 0, 1, 2)
+    return predict_from_history_sensor_decoder_with_measurements(
+        history,
+        dictionary,
+        spatial_sensor_indices,
+        decoder_payload,
+    )
+
+
 def predict_from_history_sensor_lstsq(
     history: np.ndarray,
     dictionary: np.ndarray,
@@ -227,6 +552,131 @@ def target_frames_from_segments(segments: np.ndarray) -> np.ndarray:
     return segments[-1].transpose(2, 0, 1)
 
 
+def reconstruct_target_from_coefficients(coeffs: np.ndarray, dictionary: np.ndarray) -> np.ndarray:
+    """Reconstruct centered target frames from TBMD target-slice coefficients."""
+    _, target_dictionary = history_and_target(dictionary)
+    coeffs = np.asarray(coeffs, dtype=np.float64)
+    flat_target_dictionary = target_dictionary.reshape(-1, target_dictionary.shape[-1])
+    predictions = coeffs @ flat_target_dictionary.T
+    return predictions.reshape(coeffs.shape[0], *target_dictionary.shape[:-1])
+
+
+def encode_target_coefficients(
+    target_frames: np.ndarray,
+    dictionary: np.ndarray,
+    *,
+    rcond: float = 1e-6,
+) -> np.ndarray:
+    """Encode true target frames in the target-slice TBMD dictionary."""
+    _, target_dictionary = history_and_target(dictionary)
+    target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
+    flat_target_dictionary = target_dictionary.reshape(-1, target_dictionary.shape[-1])
+    target_encoder = np.linalg.pinv(flat_target_dictionary.T, rcond=rcond)
+    return target_flat @ target_encoder
+
+
+def fit_coefficient_calibrator(
+    recovered_coeffs: np.ndarray,
+    target_frames: np.ndarray,
+    dictionary: np.ndarray,
+    *,
+    calibration_type: str,
+    target: str,
+    alpha: float,
+    blend: float,
+    rcond: float,
+) -> dict[str, Any]:
+    """Fit a low-dimensional map from recovered coefficients to target coefficients."""
+    calibration_type = calibration_type.lower()
+    target = target.lower()
+    if calibration_type == "none":
+        return {"type": "none", "blend": 0.0}
+    if calibration_type != "ridge":
+        raise ValueError(f"Unknown coefficient_calibration_type: {calibration_type}")
+    if target != "target":
+        raise ValueError(f"Unknown coefficient_calibration_target: {target}")
+    if alpha < 0:
+        raise ValueError("coefficient_calibration_alpha must be non-negative")
+    if not 0.0 <= blend <= 1.0:
+        raise ValueError("coefficient_calibration_blend must be in [0, 1]")
+
+    source = np.asarray(recovered_coeffs, dtype=np.float64)
+    target_coeffs = encode_target_coefficients(
+        target_frames,
+        dictionary,
+        rcond=rcond,
+    )
+    features = np.concatenate([source, np.ones((source.shape[0], 1), dtype=np.float64)], axis=1)
+    gram = features.T @ features
+    penalty = alpha * np.eye(features.shape[1], dtype=np.float64)
+    penalty[-1, -1] = 0.0
+    rhs = features.T @ target_coeffs
+    try:
+        weights = np.linalg.solve(gram + penalty, rhs)
+    except np.linalg.LinAlgError:
+        weights = np.linalg.lstsq(gram + penalty, rhs, rcond=None)[0]
+    train_calibrated = features @ weights
+    return {
+        "type": "ridge",
+        "target": "target",
+        "alpha": float(alpha),
+        "blend": float(blend),
+        "rcond": float(rcond),
+        "weights": weights,
+        "source_dim": int(source.shape[1]),
+        "target_dim": int(target_coeffs.shape[1]),
+        "train_coeff_rmse": float(np.sqrt(np.mean((train_calibrated - target_coeffs) ** 2))),
+    }
+
+
+def apply_coefficient_calibrator(
+    recovered_coeffs: np.ndarray,
+    calibrator: dict[str, Any],
+) -> np.ndarray:
+    """Apply optional coefficient calibration before target reconstruction."""
+    coeffs = np.asarray(recovered_coeffs, dtype=np.float64)
+    if not calibrator or calibrator.get("type", "none") == "none":
+        return coeffs
+    if calibrator.get("type") != "ridge":
+        raise ValueError(f"Unknown coefficient calibrator type: {calibrator.get('type')}")
+    features = np.concatenate([coeffs, np.ones((coeffs.shape[0], 1), dtype=np.float64)], axis=1)
+    calibrated = features @ np.asarray(calibrator["weights"], dtype=np.float64)
+    blend = float(calibrator.get("blend", 1.0))
+    return (1.0 - blend) * coeffs + blend * calibrated
+
+
+def _fit_residual_svd_targets(
+    target_flat: np.ndarray,
+    base_flat: np.ndarray,
+    residual_rank: int,
+    *,
+    residual_weighting: str,
+    residual_weight_floor: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
+    if residual_rank <= 0:
+        raise ValueError("residual_rank must be positive when provided")
+    if residual_weight_floor <= 0:
+        raise ValueError("residual_weight_floor must be positive")
+    residual = target_flat - base_flat
+    actual_rank = min(int(residual_rank), residual.shape[0], residual.shape[1])
+    residual_mean = residual.mean(axis=0)
+    centered_residual = residual - residual_mean
+    if residual_weighting == "uniform":
+        residual_weights = np.ones(centered_residual.shape[1], dtype=np.float64)
+    elif residual_weighting == "residual_energy":
+        residual_weights = np.sqrt(np.mean(centered_residual**2, axis=0) + 1e-12)
+        residual_weights /= max(float(np.mean(residual_weights)), 1e-12)
+        residual_weights = np.maximum(residual_weights, float(residual_weight_floor))
+        residual_weights /= max(float(np.mean(residual_weights)), 1e-12)
+    else:
+        raise ValueError(f"Unknown residual_weighting: {residual_weighting}")
+    weighted_residual = centered_residual * residual_weights
+    _, _, vt = np.linalg.svd(weighted_residual, full_matrices=False)
+    residual_basis = vt[:actual_rank]
+    residual_codes = weighted_residual @ residual_basis.T
+    return residual_mean, residual_basis, residual_codes, residual_weights, actual_rank
+
+
 def fit_ridge_residual_corrector(
     target_frames: np.ndarray,
     base_predictions: np.ndarray,
@@ -234,27 +684,40 @@ def fit_ridge_residual_corrector(
     *,
     alpha: float,
     residual_rank: Optional[int] = None,
+    residual_weighting: str = "uniform",
+    residual_weight_floor: float = 0.1,
+    feature_matrix: Optional[np.ndarray] = None,
 ) -> dict[str, Any]:
     if alpha < 0:
         raise ValueError("alpha must be non-negative")
     target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
     base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
     coeffs = np.asarray(coeffs, dtype=np.float64)
-    features = np.concatenate([coeffs, np.ones((coeffs.shape[0], 1), dtype=np.float64)], axis=1)
+    model_features = coeffs if feature_matrix is None else np.asarray(feature_matrix, dtype=np.float64)
+    features = np.concatenate(
+        [model_features, np.ones((model_features.shape[0], 1), dtype=np.float64)],
+        axis=1,
+    )
     residual = target_flat - base_flat
     residual_basis = None
     residual_mean = None
+    residual_weights = None
     regression_target = residual
     actual_residual_rank = None
     if residual_rank is not None:
-        if residual_rank <= 0:
-            raise ValueError("residual_rank must be positive when provided")
-        actual_residual_rank = min(int(residual_rank), residual.shape[0], residual.shape[1])
-        residual_mean = residual.mean(axis=0)
-        centered_residual = residual - residual_mean
-        _, _, vt = np.linalg.svd(centered_residual, full_matrices=False)
-        residual_basis = vt[:actual_residual_rank]
-        regression_target = centered_residual @ residual_basis.T
+        (
+            residual_mean,
+            residual_basis,
+            regression_target,
+            residual_weights,
+            actual_residual_rank,
+        ) = _fit_residual_svd_targets(
+            target_flat,
+            base_flat,
+            residual_rank,
+            residual_weighting=residual_weighting,
+            residual_weight_floor=residual_weight_floor,
+        )
     gram = features.T @ features
     penalty = alpha * np.eye(features.shape[1], dtype=np.float64)
     penalty[-1, -1] = 0.0
@@ -266,15 +729,281 @@ def fit_ridge_residual_corrector(
     corrector = {
         "alpha": float(alpha),
         "weights": weights,
-        "feature_dim": int(coeffs.shape[1]),
+        "feature_dim": int(model_features.shape[1]),
+        "coefficient_dim": int(coeffs.shape[1]),
         "output_dim": int(target_flat.shape[1]),
         "mode": "residual_svd" if residual_basis is not None else "full",
         "residual_rank": actual_residual_rank,
+        "residual_weighting": residual_weighting if residual_basis is not None else "uniform",
     }
     if residual_basis is not None:
         corrector["residual_basis"] = residual_basis
         corrector["residual_mean"] = residual_mean
+        corrector["residual_weights"] = residual_weights
     return corrector
+
+
+def fit_mlp_residual_corrector(
+    target_frames: np.ndarray,
+    base_predictions: np.ndarray,
+    coeffs: np.ndarray,
+    *,
+    residual_rank: int,
+    hidden_size: int,
+    num_epochs: int,
+    batch_size: int,
+    learning_rate: float,
+    weight_decay: float,
+    random_state: int,
+    residual_weighting: str = "uniform",
+    residual_weight_floor: float = 0.1,
+    feature_matrix: Optional[np.ndarray] = None,
+) -> dict[str, Any]:
+    if hidden_size <= 0 or num_epochs < 0 or batch_size <= 0:
+        raise ValueError("hidden_size and batch_size must be positive; num_epochs must be non-negative")
+    target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    coeffs = np.asarray(coeffs, dtype=np.float64)
+    model_features = coeffs if feature_matrix is None else np.asarray(feature_matrix, dtype=np.float64)
+    residual_mean, residual_basis, residual_codes, residual_weights, actual_rank = _fit_residual_svd_targets(
+        target_flat,
+        base_flat,
+        residual_rank,
+        residual_weighting=residual_weighting,
+        residual_weight_floor=residual_weight_floor,
+    )
+    input_mean = model_features.mean(axis=0)
+    input_std = model_features.std(axis=0)
+    input_std[input_std < 1e-8] = 1.0
+    target_mean = residual_codes.mean(axis=0)
+    target_std = residual_codes.std(axis=0)
+    target_std[target_std < 1e-8] = 1.0
+
+    x_np = ((model_features - input_mean) / input_std).astype(np.float32)
+    y_np = ((residual_codes - target_mean) / target_std).astype(np.float32)
+    torch.manual_seed(int(random_state))
+    rng = np.random.default_rng(random_state)
+    model = torch.nn.Sequential(
+        torch.nn.Linear(x_np.shape[1], hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(hidden_size, actual_rank),
+    )
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=float(learning_rate),
+        weight_decay=float(weight_decay),
+    )
+    x_tensor = torch.from_numpy(x_np)
+    y_tensor = torch.from_numpy(y_np)
+    losses: list[float] = []
+    for _ in range(num_epochs):
+        order = rng.permutation(x_np.shape[0])
+        epoch_loss = 0.0
+        for start in range(0, x_np.shape[0], batch_size):
+            idx = order[start : start + batch_size]
+            pred = model(x_tensor[idx])
+            loss = torch.mean((pred - y_tensor[idx]) ** 2)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            epoch_loss += float(loss.detach().cpu()) * len(idx)
+        losses.append(epoch_loss / x_np.shape[0])
+
+    layer0 = model[0]
+    layer1 = model[2]
+    return {
+        "mode": "residual_svd_mlp",
+        "residual_rank": actual_rank,
+        "residual_basis": residual_basis,
+        "residual_mean": residual_mean,
+        "residual_weights": residual_weights,
+        "residual_weighting": residual_weighting,
+        "input_mean": input_mean,
+        "input_std": input_std,
+        "target_mean": target_mean,
+        "target_std": target_std,
+        "hidden_size": int(hidden_size),
+        "num_epochs": int(num_epochs),
+        "learning_rate": float(learning_rate),
+        "weight_decay": float(weight_decay),
+        "train_loss": losses,
+        "feature_dim": int(model_features.shape[1]),
+        "coefficient_dim": int(coeffs.shape[1]),
+        "output_dim": int(target_flat.shape[1]),
+        "mlp_w0": layer0.weight.detach().cpu().numpy().astype(np.float64),
+        "mlp_b0": layer0.bias.detach().cpu().numpy().astype(np.float64),
+        "mlp_w1": layer1.weight.detach().cpu().numpy().astype(np.float64),
+        "mlp_b1": layer1.bias.detach().cpu().numpy().astype(np.float64),
+    }
+
+
+def _build_non_overlapping_patch_slices(
+    height: int,
+    width: int,
+    patch_size: int,
+) -> np.ndarray:
+    if patch_size <= 0:
+        raise ValueError("patch_size must be positive")
+    if height % patch_size != 0 or width % patch_size != 0:
+        raise ValueError("patch_size must evenly divide both spatial dimensions")
+    return np.asarray(
+        [
+            [row, row + patch_size, col, col + patch_size]
+            for row in range(0, height, patch_size)
+            for col in range(0, width, patch_size)
+        ],
+        dtype=np.int64,
+    )
+
+
+def fit_patch_residual_svd_corrector(
+    target_frames: np.ndarray,
+    base_predictions: np.ndarray,
+    coeffs: np.ndarray,
+    *,
+    alpha: float,
+    patch_size: int,
+    patch_residual_rank: int,
+    residual_weighting: str = "uniform",
+    residual_weight_floor: float = 0.1,
+    feature_matrix: Optional[np.ndarray] = None,
+) -> dict[str, Any]:
+    """Fit local residual-SVD ridge heads on non-overlapping spatial patches."""
+    if alpha < 0:
+        raise ValueError("alpha must be non-negative")
+    if patch_residual_rank <= 0:
+        raise ValueError("patch_residual_rank must be positive")
+    if residual_weight_floor <= 0:
+        raise ValueError("residual_weight_floor must be positive")
+
+    target = np.asarray(target_frames, dtype=np.float64)
+    base = np.asarray(base_predictions, dtype=np.float64)
+    coeffs = np.asarray(coeffs, dtype=np.float64)
+    model_features = coeffs if feature_matrix is None else np.asarray(feature_matrix, dtype=np.float64)
+    if target.shape != base.shape or target.ndim != 3:
+        raise ValueError("target_frames and base_predictions must share shape `(N,H,W)`")
+    patch_slices = _build_non_overlapping_patch_slices(
+        target.shape[1],
+        target.shape[2],
+        patch_size,
+    )
+    features = np.concatenate(
+        [model_features, np.ones((model_features.shape[0], 1), dtype=np.float64)],
+        axis=1,
+    )
+    residual = target - base
+
+    patch_means = []
+    patch_bases = []
+    patch_weights = []
+    patch_codes = []
+    actual_rank = None
+    for row0, row1, col0, col1 in patch_slices:
+        patch = residual[:, row0:row1, col0:col1].reshape(residual.shape[0], -1)
+        patch_mean = patch.mean(axis=0)
+        centered_patch = patch - patch_mean
+        if residual_weighting == "uniform":
+            weights = np.ones(centered_patch.shape[1], dtype=np.float64)
+        elif residual_weighting == "residual_energy":
+            weights = np.sqrt(np.mean(centered_patch**2, axis=0) + 1e-12)
+            weights /= max(float(np.mean(weights)), 1e-12)
+            weights = np.maximum(weights, float(residual_weight_floor))
+            weights /= max(float(np.mean(weights)), 1e-12)
+        else:
+            raise ValueError(f"Unknown residual_weighting: {residual_weighting}")
+        weighted_patch = centered_patch * weights
+        rank = min(int(patch_residual_rank), weighted_patch.shape[0], weighted_patch.shape[1])
+        if actual_rank is None:
+            actual_rank = rank
+        elif actual_rank != rank:
+            raise ValueError("All patches must have the same effective residual rank")
+        _, _, vt = np.linalg.svd(weighted_patch, full_matrices=False)
+        basis = vt[:rank]
+        patch_means.append(patch_mean)
+        patch_bases.append(basis)
+        patch_weights.append(weights)
+        patch_codes.append(weighted_patch @ basis.T)
+
+    regression_target = np.concatenate(patch_codes, axis=1)
+    gram = features.T @ features
+    penalty = alpha * np.eye(features.shape[1], dtype=np.float64)
+    penalty[-1, -1] = 0.0
+    rhs = features.T @ regression_target
+    try:
+        weights_matrix = np.linalg.solve(gram + penalty, rhs)
+    except np.linalg.LinAlgError:
+        weights_matrix = np.linalg.lstsq(gram + penalty, rhs, rcond=None)[0]
+    return {
+        "alpha": float(alpha),
+        "weights": weights_matrix,
+        "feature_dim": int(model_features.shape[1]),
+        "coefficient_dim": int(coeffs.shape[1]),
+        "output_dim": int(np.prod(target.shape[1:])),
+        "mode": "patch_residual_svd",
+        "patch_size": int(patch_size),
+        "patch_residual_rank": int(actual_rank or patch_residual_rank),
+        "patch_slices": patch_slices,
+        "patch_means": np.stack(patch_means, axis=0),
+        "patch_bases": np.stack(patch_bases, axis=0),
+        "patch_weights": np.stack(patch_weights, axis=0),
+        "residual_weighting": residual_weighting,
+        "residual_weight_floor": float(residual_weight_floor),
+    }
+
+
+def attach_coefficient_gate(
+    corrector: dict[str, Any],
+    coeffs: np.ndarray,
+    *,
+    gate_type: str,
+    threshold: float,
+    strength: float,
+    gate_min: float,
+) -> dict[str, Any]:
+    """Attach train-coefficient distribution stats for residual shrinkage."""
+    gate_type = gate_type.lower()
+    if gate_type == "none":
+        corrector["gate_type"] = "none"
+        return corrector
+    if gate_type != "coefficient_rms":
+        raise ValueError(f"Unknown correction_gate_type: {gate_type}")
+    if threshold < 0:
+        raise ValueError("correction_gate_threshold must be non-negative")
+    if strength < 0:
+        raise ValueError("correction_gate_strength must be non-negative")
+    if not 0.0 <= gate_min <= 1.0:
+        raise ValueError("correction_gate_min must be in [0, 1]")
+    coeffs = np.asarray(coeffs, dtype=np.float64)
+    coeff_mean = coeffs.mean(axis=0)
+    coeff_std = coeffs.std(axis=0)
+    coeff_std[coeff_std < 1e-8] = 1.0
+    corrector.update(
+        {
+            "gate_type": "coefficient_rms",
+            "gate_coeff_mean": coeff_mean,
+            "gate_coeff_std": coeff_std,
+            "gate_threshold": float(threshold),
+            "gate_strength": float(strength),
+            "gate_min": float(gate_min),
+        }
+    )
+    return corrector
+
+
+def _coefficient_gate_values(coeffs: np.ndarray, corrector: dict[str, Any]) -> np.ndarray:
+    gate_type = corrector.get("gate_type", "none")
+    if gate_type == "none":
+        return np.ones(coeffs.shape[0], dtype=np.float64)
+    if gate_type != "coefficient_rms":
+        raise ValueError(f"Unknown gate_type: {gate_type}")
+    standardized = (
+        (np.asarray(coeffs, dtype=np.float64) - np.asarray(corrector["gate_coeff_mean"], dtype=np.float64))
+        / np.asarray(corrector["gate_coeff_std"], dtype=np.float64)
+    )
+    rms = np.sqrt(np.mean(standardized**2, axis=1))
+    excess = np.maximum(rms - float(corrector["gate_threshold"]), 0.0)
+    gate = 1.0 / (1.0 + float(corrector["gate_strength"]) * excess)
+    return np.maximum(gate, float(corrector["gate_min"]))
 
 
 def apply_ridge_residual_corrector(
@@ -283,17 +1012,74 @@ def apply_ridge_residual_corrector(
     corrector: dict[str, Any],
     *,
     scale: float,
+    measurements: np.ndarray | None = None,
+    decoder_payload: dict[str, Any] | None = None,
 ) -> np.ndarray:
     base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
     coeffs = np.asarray(coeffs, dtype=np.float64)
-    features = np.concatenate([coeffs, np.ones((coeffs.shape[0], 1), dtype=np.float64)], axis=1)
-    correction = features @ np.asarray(corrector["weights"], dtype=np.float64)
-    if corrector.get("mode") == "residual_svd":
+    model_features = build_correction_feature_matrix(
+        coeffs,
+        corrector,
+        measurements=measurements,
+        decoder_payload=decoder_payload,
+    )
+    features = np.concatenate(
+        [model_features, np.ones((model_features.shape[0], 1), dtype=np.float64)],
+        axis=1,
+    )
+    mode = corrector.get("mode", "full")
+    if mode == "residual_svd_mlp":
+        standardized = (
+            (model_features - np.asarray(corrector["input_mean"], dtype=np.float64))
+            / np.asarray(corrector["input_std"], dtype=np.float64)
+        )
+        hidden = np.tanh(
+            standardized @ np.asarray(corrector["mlp_w0"], dtype=np.float64).T
+            + np.asarray(corrector["mlp_b0"], dtype=np.float64)
+        )
+        normalized_codes = (
+            hidden @ np.asarray(corrector["mlp_w1"], dtype=np.float64).T
+            + np.asarray(corrector["mlp_b1"], dtype=np.float64)
+        )
+        correction = (
+            normalized_codes * np.asarray(corrector["target_std"], dtype=np.float64)
+            + np.asarray(corrector["target_mean"], dtype=np.float64)
+        )
+    else:
+        correction = features @ np.asarray(corrector["weights"], dtype=np.float64)
+    if mode == "patch_residual_svd":
+        patch_slices = np.asarray(corrector["patch_slices"], dtype=np.int64)
+        patch_bases = np.asarray(corrector["patch_bases"], dtype=np.float64)
+        patch_means = np.asarray(corrector["patch_means"], dtype=np.float64)
+        patch_weights = np.asarray(corrector["patch_weights"], dtype=np.float64)
+        patch_rank = int(corrector["patch_residual_rank"])
+        residual_field = np.zeros_like(base_predictions, dtype=np.float64)
+        for patch_idx, (row0, row1, col0, col1) in enumerate(patch_slices):
+            start = patch_idx * patch_rank
+            stop = start + patch_rank
+            patch_codes = correction[:, start:stop]
+            patch_flat = (
+                patch_means[patch_idx]
+                + (patch_codes @ patch_bases[patch_idx]) / patch_weights[patch_idx]
+            )
+            residual_field[:, row0:row1, col0:col1] = patch_flat.reshape(
+                base_predictions.shape[0],
+                row1 - row0,
+                col1 - col0,
+            )
+        correction = residual_field.reshape(base_predictions.shape[0], -1)
+    elif mode in {"residual_svd", "residual_svd_mlp"}:
+        residual_weights = np.asarray(
+            corrector.get("residual_weights", np.ones(corrector["residual_basis"].shape[1])),
+            dtype=np.float64,
+        )
         correction = (
             np.asarray(corrector["residual_mean"], dtype=np.float64)
-            + correction @ np.asarray(corrector["residual_basis"], dtype=np.float64)
+            + (correction @ np.asarray(corrector["residual_basis"], dtype=np.float64))
+            / residual_weights
         )
-    return (base_flat + scale * correction).reshape(base_predictions.shape)
+    gate = _coefficient_gate_values(coeffs, corrector)
+    return (base_flat + scale * gate[:, None] * correction).reshape(base_predictions.shape)
 
 
 class FastWindowedTBMDQRCSForecaster:
@@ -305,6 +1091,8 @@ class FastWindowedTBMDQRCSForecaster:
         self._dictionary: Optional[np.ndarray] = None
         self._spatial_mask: Optional[np.ndarray] = None
         self._spatial_sensor_indices: Optional[np.ndarray] = None
+        self._sensor_decoder_payload: Optional[dict[str, Any]] = None
+        self._coefficient_calibrator: Optional[dict[str, Any]] = None
         self._coefficient_corrector: Optional[dict[str, Any]] = None
         self._metrics: dict[str, Any] = {}
         self._fitted = False
@@ -337,33 +1125,130 @@ class FastWindowedTBMDQRCSForecaster:
             n_spatial_sensors=self.config.n_spatial_sensors,
             random_state=self.config.random_state,
         )
-        base_pred, coeffs = predict_next_sensor_lstsq(
+        sensor_decoder_payload = fit_sensor_coefficient_decoder(
+            dictionary,
+            spatial_sensor_indices,
+            decoder=self.config.sensor_decoder,
+            rcond=self.config.sensor_rcond,
+            ridge_lambda=self.config.decoder_ridge_lambda,
+            l1_lambda=self.config.decoder_l1_lambda,
+            max_iter=self.config.decoder_max_iter,
+            tol=self.config.decoder_tol,
+        )
+        raw_base_pred, raw_coeffs, measurements = predict_next_sensor_decoder_with_measurements(
             segments,
             dictionary,
             spatial_sensor_indices,
-            rcond=self.config.sensor_rcond,
+            sensor_decoder_payload,
         )
         targets = target_frames_from_segments(segments)
-        corrector = fit_ridge_residual_corrector(
+        coefficient_calibrator = fit_coefficient_calibrator(
+            raw_coeffs,
             targets,
-            base_pred,
+            dictionary,
+            calibration_type=self.config.coefficient_calibration_type,
+            target=self.config.coefficient_calibration_target,
+            alpha=self.config.coefficient_calibration_alpha,
+            blend=self.config.coefficient_calibration_blend,
+            rcond=self.config.coefficient_calibration_rcond,
+        )
+        coeffs = apply_coefficient_calibrator(raw_coeffs, coefficient_calibrator)
+        base_pred = reconstruct_target_from_coefficients(coeffs, dictionary)
+        innovation_encoder = fit_sensor_innovation_encoder(
+            measurements,
+            raw_coeffs,
+            sensor_decoder_payload,
+            rank=self.config.correction_innovation_rank,
+            include_norms=self.config.correction_innovation_include_norms,
+            random_state=self.config.random_state,
+        )
+        feature_probe = {"innovation_encoder": innovation_encoder}
+        feature_matrix = build_correction_feature_matrix(
             coeffs,
-            alpha=self.config.correction_alpha,
-            residual_rank=self.config.correction_residual_rank,
+            feature_probe,
+            measurements=measurements,
+            decoder_payload=sensor_decoder_payload,
+        )
+        if self.config.correction_head_type == "ridge":
+            corrector = fit_ridge_residual_corrector(
+                targets,
+                base_pred,
+                coeffs,
+                alpha=self.config.correction_alpha,
+                residual_rank=self.config.correction_residual_rank,
+                residual_weighting=self.config.correction_residual_weighting,
+                residual_weight_floor=self.config.correction_residual_weight_floor,
+                feature_matrix=feature_matrix,
+            )
+        elif self.config.correction_head_type == "mlp_residual_svd":
+            if self.config.correction_residual_rank is None:
+                raise ValueError("mlp_residual_svd requires correction_residual_rank")
+            corrector = fit_mlp_residual_corrector(
+                targets,
+                base_pred,
+                coeffs,
+                residual_rank=self.config.correction_residual_rank,
+                residual_weighting=self.config.correction_residual_weighting,
+                residual_weight_floor=self.config.correction_residual_weight_floor,
+                hidden_size=self.config.correction_hidden_size,
+                num_epochs=self.config.correction_num_epochs,
+                batch_size=self.config.correction_batch_size,
+                learning_rate=self.config.correction_learning_rate,
+                weight_decay=self.config.correction_weight_decay,
+                random_state=self.config.random_state,
+                feature_matrix=feature_matrix,
+            )
+        elif self.config.correction_head_type == "patch_residual_svd":
+            patch_rank = (
+                self.config.correction_patch_residual_rank
+                if self.config.correction_patch_residual_rank is not None
+                else self.config.correction_residual_rank
+            )
+            if patch_rank is None:
+                raise ValueError(
+                    "patch_residual_svd requires correction_patch_residual_rank "
+                    "or correction_residual_rank"
+                )
+            corrector = fit_patch_residual_svd_corrector(
+                targets,
+                base_pred,
+                coeffs,
+                alpha=self.config.correction_alpha,
+                patch_size=self.config.correction_patch_size,
+                patch_residual_rank=patch_rank,
+                residual_weighting=self.config.correction_residual_weighting,
+                residual_weight_floor=self.config.correction_residual_weight_floor,
+                feature_matrix=feature_matrix,
+            )
+        else:
+            raise ValueError(f"Unknown correction_head_type: {self.config.correction_head_type}")
+        corrector["innovation_encoder"] = innovation_encoder
+        corrector = attach_coefficient_gate(
+            corrector,
+            coeffs,
+            gate_type=self.config.correction_gate_type,
+            threshold=self.config.correction_gate_threshold,
+            strength=self.config.correction_gate_strength,
+            gate_min=self.config.correction_gate_min,
         )
         corrected = apply_ridge_residual_corrector(
             base_pred,
             coeffs,
             corrector,
             scale=self.config.correction_scale,
+            measurements=measurements,
+            decoder_payload=sensor_decoder_payload,
         )
         self._dictionary = dictionary
         self._spatial_mask = spatial_mask
         self._spatial_sensor_indices = spatial_sensor_indices
+        self._sensor_decoder_payload = sensor_decoder_payload
+        self._coefficient_calibrator = coefficient_calibrator
         self._coefficient_corrector = corrector
         self._metrics = {
             "fit": {
                 "n_train_segments": int(segments.shape[-1]),
+                "train_raw_base": _compute_regression_metrics(targets, raw_base_pred),
                 "train_base": _compute_regression_metrics(targets, base_pred),
                 "train_corrected": _compute_regression_metrics(targets, corrected),
                 "tbmd_summary": tbmd_summary,
@@ -372,6 +1257,12 @@ class FastWindowedTBMDQRCSForecaster:
                 "total_history_measurements_per_prediction": int(
                     spatial_mask.sum() * self.config.history_length
                 ),
+                "sensor_decoder": self.config.sensor_decoder,
+                "coefficient_calibrator": {
+                    key: value
+                    for key, value in coefficient_calibrator.items()
+                    if key != "weights"
+                },
             }
         }
         self._fitted = True
@@ -393,17 +1284,21 @@ class FastWindowedTBMDQRCSForecaster:
         if history.shape[1:] != self._dictionary[:-1].shape[:-1]:
             raise ValueError("history_states must match fitted history shape")
         centered_history = history - self._spatial_mean
-        base_pred, coeffs = predict_from_history_sensor_lstsq(
+        _, raw_coeffs, measurements = predict_from_history_sensor_decoder_with_measurements(
             centered_history,
             self._dictionary,
             self._spatial_sensor_indices,
-            rcond=self.config.sensor_rcond,
+            self._sensor_decoder_payload,
         )
+        coeffs = apply_coefficient_calibrator(raw_coeffs, self._coefficient_calibrator or {})
+        base_pred = reconstruct_target_from_coefficients(coeffs, self._dictionary)
         corrected = apply_ridge_residual_corrector(
             base_pred,
             coeffs,
             self._coefficient_corrector,
             scale=self.config.correction_scale,
+            measurements=measurements,
+            decoder_payload=self._sensor_decoder_payload,
         )
         return corrected + self._spatial_mean, coeffs
 
@@ -447,6 +1342,9 @@ class FastWindowedTBMDQRCSForecaster:
         self._require_fitted()
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        corrector = self._coefficient_corrector
+        sensor_decoder = self._sensor_decoder_payload or {}
+        coefficient_calibrator = self._coefficient_calibrator or {"type": "none"}
         np.savez_compressed(
             path,
             config=np.asarray([asdict(self.config)], dtype=object),
@@ -454,21 +1352,178 @@ class FastWindowedTBMDQRCSForecaster:
             dictionary=self._dictionary.astype(np.float32),
             spatial_mask=self._spatial_mask.astype(bool),
             spatial_sensor_indices=self._spatial_sensor_indices.astype(np.int64),
-            coefficient_corrector_weights=self._coefficient_corrector["weights"].astype(np.float32),
-            coefficient_corrector_alpha=np.asarray(self._coefficient_corrector["alpha"], dtype=np.float64),
-            coefficient_corrector_mode=np.asarray(self._coefficient_corrector.get("mode", "full")),
+            sensor_decoder_type=np.asarray(sensor_decoder.get("type", self.config.sensor_decoder)),
+            sensor_decoder_matrix=np.asarray(
+                sensor_decoder.get("decoder_matrix", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            sensor_decoder_sensing_matrix=np.asarray(
+                sensor_decoder.get("sensing_matrix", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            sensor_decoder_lipschitz=np.asarray(
+                sensor_decoder.get("lipschitz", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_calibrator_type=np.asarray(
+                coefficient_calibrator.get("type", "none"),
+            ),
+            coefficient_calibrator_target=np.asarray(
+                coefficient_calibrator.get("target", "target"),
+            ),
+            coefficient_calibrator_alpha=np.asarray(
+                coefficient_calibrator.get("alpha", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_calibrator_blend=np.asarray(
+                coefficient_calibrator.get("blend", 0.0),
+                dtype=np.float64,
+            ),
+            coefficient_calibrator_rcond=np.asarray(
+                coefficient_calibrator.get("rcond", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_calibrator_weights=np.asarray(
+                coefficient_calibrator.get("weights", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_weights=np.asarray(
+                corrector.get("weights", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_alpha=np.asarray(corrector.get("alpha", np.nan), dtype=np.float64),
+            coefficient_corrector_mode=np.asarray(corrector.get("mode", "full")),
             coefficient_corrector_residual_rank=np.asarray(
                 -1
-                if self._coefficient_corrector.get("residual_rank") is None
-                else self._coefficient_corrector["residual_rank"],
+                if corrector.get("residual_rank") is None
+                else corrector["residual_rank"],
                 dtype=np.int64,
             ),
             coefficient_corrector_residual_basis=np.asarray(
-                self._coefficient_corrector.get("residual_basis", np.empty((0, 0))),
+                corrector.get("residual_basis", np.empty((0, 0))),
                 dtype=np.float32,
             ),
             coefficient_corrector_residual_mean=np.asarray(
-                self._coefficient_corrector.get("residual_mean", np.empty((0,))),
+                corrector.get("residual_mean", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_residual_weights=np.asarray(
+                corrector.get("residual_weights", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_residual_weighting=np.asarray(
+                corrector.get("residual_weighting", "uniform"),
+            ),
+            coefficient_corrector_patch_size=np.asarray(
+                corrector.get("patch_size", -1),
+                dtype=np.int64,
+            ),
+            coefficient_corrector_patch_residual_rank=np.asarray(
+                corrector.get("patch_residual_rank", -1),
+                dtype=np.int64,
+            ),
+            coefficient_corrector_patch_slices=np.asarray(
+                corrector.get("patch_slices", np.empty((0, 4))),
+                dtype=np.int64,
+            ),
+            coefficient_corrector_patch_means=np.asarray(
+                corrector.get("patch_means", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_patch_bases=np.asarray(
+                corrector.get("patch_bases", np.empty((0, 0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_patch_weights=np.asarray(
+                corrector.get("patch_weights", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_gate_type=np.asarray(
+                corrector.get("gate_type", "none"),
+            ),
+            coefficient_corrector_gate_coeff_mean=np.asarray(
+                corrector.get("gate_coeff_mean", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_gate_coeff_std=np.asarray(
+                corrector.get("gate_coeff_std", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_gate_threshold=np.asarray(
+                corrector.get("gate_threshold", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_corrector_gate_strength=np.asarray(
+                corrector.get("gate_strength", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_corrector_gate_min=np.asarray(
+                corrector.get("gate_min", np.nan),
+                dtype=np.float64,
+            ),
+            coefficient_corrector_innovation_rank=np.asarray(
+                corrector.get("innovation_encoder", {}).get("innovation_rank", 0),
+                dtype=np.int64,
+            ),
+            coefficient_corrector_innovation_include_norms=np.asarray(
+                corrector.get("innovation_encoder", {}).get("innovation_include_norms", False),
+                dtype=bool,
+            ),
+            coefficient_corrector_innovation_mean=np.asarray(
+                corrector.get("innovation_encoder", {}).get("innovation_mean", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_innovation_basis=np.asarray(
+                corrector.get("innovation_encoder", {}).get(
+                    "innovation_basis",
+                    np.empty((0, 0)),
+                ),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_innovation_feature_mean=np.asarray(
+                corrector.get("innovation_encoder", {}).get(
+                    "innovation_feature_mean",
+                    np.empty((0,)),
+                ),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_innovation_feature_std=np.asarray(
+                corrector.get("innovation_encoder", {}).get(
+                    "innovation_feature_std",
+                    np.empty((0,)),
+                ),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_input_mean=np.asarray(
+                corrector.get("input_mean", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_input_std=np.asarray(
+                corrector.get("input_std", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_target_mean=np.asarray(
+                corrector.get("target_mean", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_target_std=np.asarray(
+                corrector.get("target_std", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_mlp_w0=np.asarray(
+                corrector.get("mlp_w0", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_mlp_b0=np.asarray(
+                corrector.get("mlp_b0", np.empty((0,))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_mlp_w1=np.asarray(
+                corrector.get("mlp_w1", np.empty((0, 0))),
+                dtype=np.float32,
+            ),
+            coefficient_corrector_mlp_b1=np.asarray(
+                corrector.get("mlp_b1", np.empty((0,))),
                 dtype=np.float32,
             ),
             metrics=np.asarray([self._metrics], dtype=object),
@@ -486,6 +1541,55 @@ class FastWindowedTBMDQRCSForecaster:
         model._dictionary = data["dictionary"].astype(np.float64)
         model._spatial_mask = data["spatial_mask"].astype(bool)
         model._spatial_sensor_indices = data["spatial_sensor_indices"].astype(int)
+        if "sensor_decoder_type" in data:
+            decoder_type = str(data["sensor_decoder_type"].item())
+            model._sensor_decoder_payload = {"type": decoder_type}
+            decoder_matrix = data["sensor_decoder_matrix"].astype(np.float64)
+            sensing_matrix = data["sensor_decoder_sensing_matrix"].astype(np.float64)
+            if decoder_matrix.size:
+                model._sensor_decoder_payload["decoder_matrix"] = decoder_matrix
+            if sensing_matrix.size:
+                model._sensor_decoder_payload["sensing_matrix"] = sensing_matrix
+            if decoder_type == "lstsq":
+                model._sensor_decoder_payload["rcond"] = float(model.config.sensor_rcond)
+            elif decoder_type == "ridge":
+                model._sensor_decoder_payload["ridge_lambda"] = float(model.config.decoder_ridge_lambda)
+            elif decoder_type == "fista":
+                model._sensor_decoder_payload.update(
+                    {
+                        "lipschitz": float(data["sensor_decoder_lipschitz"]),
+                        "l1_lambda": float(model.config.decoder_l1_lambda),
+                        "max_iter": int(model.config.decoder_max_iter),
+                        "tol": float(model.config.decoder_tol),
+                    }
+                )
+        else:
+            model._sensor_decoder_payload = fit_sensor_coefficient_decoder(
+                model._dictionary,
+                model._spatial_sensor_indices,
+                decoder=model.config.sensor_decoder,
+                rcond=model.config.sensor_rcond,
+                ridge_lambda=model.config.decoder_ridge_lambda,
+                l1_lambda=model.config.decoder_l1_lambda,
+                max_iter=model.config.decoder_max_iter,
+                tol=model.config.decoder_tol,
+            )
+        if "coefficient_calibrator_type" in data:
+            calibrator_type = str(data["coefficient_calibrator_type"].item())
+            model._coefficient_calibrator = {
+                "type": calibrator_type,
+                "target": str(data["coefficient_calibrator_target"].item()),
+                "alpha": float(data["coefficient_calibrator_alpha"]),
+                "blend": float(data["coefficient_calibrator_blend"]),
+                "rcond": float(data["coefficient_calibrator_rcond"]),
+            }
+            calibrator_weights = data["coefficient_calibrator_weights"].astype(np.float64)
+            if calibrator_weights.size:
+                model._coefficient_calibrator["weights"] = calibrator_weights
+                model._coefficient_calibrator["source_dim"] = int(calibrator_weights.shape[0] - 1)
+                model._coefficient_calibrator["target_dim"] = int(calibrator_weights.shape[1])
+        else:
+            model._coefficient_calibrator = {"type": "none", "blend": 0.0}
         weights = data["coefficient_corrector_weights"].astype(np.float64)
         mode = "full"
         if "coefficient_corrector_mode" in data:
@@ -498,7 +1602,56 @@ class FastWindowedTBMDQRCSForecaster:
             "mode": mode,
             "residual_rank": None,
         }
-        if mode == "residual_svd":
+        if "coefficient_corrector_gate_type" in data:
+            gate_type = str(data["coefficient_corrector_gate_type"].item())
+            model._coefficient_corrector["gate_type"] = gate_type
+            if gate_type != "none":
+                model._coefficient_corrector.update(
+                    {
+                        "gate_coeff_mean": data[
+                            "coefficient_corrector_gate_coeff_mean"
+                        ].astype(np.float64),
+                        "gate_coeff_std": data[
+                            "coefficient_corrector_gate_coeff_std"
+                        ].astype(np.float64),
+                        "gate_threshold": float(
+                            data["coefficient_corrector_gate_threshold"]
+                        ),
+                        "gate_strength": float(
+                            data["coefficient_corrector_gate_strength"]
+                        ),
+                        "gate_min": float(data["coefficient_corrector_gate_min"]),
+                    }
+                )
+        else:
+            model._coefficient_corrector["gate_type"] = "none"
+        if "coefficient_corrector_innovation_rank" in data:
+            innovation_rank = int(data["coefficient_corrector_innovation_rank"])
+            innovation_include_norms = bool(
+                data["coefficient_corrector_innovation_include_norms"]
+            )
+            if innovation_rank > 0 or innovation_include_norms:
+                model._coefficient_corrector["innovation_encoder"] = {
+                    "innovation_rank": innovation_rank,
+                    "innovation_include_norms": innovation_include_norms,
+                    "innovation_mean": data[
+                        "coefficient_corrector_innovation_mean"
+                    ].astype(np.float64),
+                    "innovation_basis": data[
+                        "coefficient_corrector_innovation_basis"
+                    ].astype(np.float64),
+                    "innovation_feature_mean": data[
+                        "coefficient_corrector_innovation_feature_mean"
+                    ].astype(np.float64),
+                    "innovation_feature_std": data[
+                        "coefficient_corrector_innovation_feature_std"
+                    ].astype(np.float64),
+                }
+            else:
+                model._coefficient_corrector["innovation_encoder"] = None
+        else:
+            model._coefficient_corrector["innovation_encoder"] = None
+        if mode in {"residual_svd", "residual_svd_mlp"}:
             residual_rank = int(data["coefficient_corrector_residual_rank"])
             model._coefficient_corrector["residual_rank"] = residual_rank
             model._coefficient_corrector["residual_basis"] = data[
@@ -507,6 +1660,64 @@ class FastWindowedTBMDQRCSForecaster:
             model._coefficient_corrector["residual_mean"] = data[
                 "coefficient_corrector_residual_mean"
             ].astype(np.float64)
+            if "coefficient_corrector_residual_weights" in data:
+                model._coefficient_corrector["residual_weights"] = data[
+                    "coefficient_corrector_residual_weights"
+                ].astype(np.float64)
+            else:
+                model._coefficient_corrector["residual_weights"] = np.ones(
+                    model._coefficient_corrector["residual_basis"].shape[1],
+                    dtype=np.float64,
+                )
+            if "coefficient_corrector_residual_weighting" in data:
+                model._coefficient_corrector["residual_weighting"] = str(
+                    data["coefficient_corrector_residual_weighting"].item()
+                )
+            else:
+                model._coefficient_corrector["residual_weighting"] = "uniform"
+        if mode == "patch_residual_svd":
+            model._coefficient_corrector.update(
+                {
+                    "patch_size": int(data["coefficient_corrector_patch_size"]),
+                    "patch_residual_rank": int(
+                        data["coefficient_corrector_patch_residual_rank"]
+                    ),
+                    "patch_slices": data[
+                        "coefficient_corrector_patch_slices"
+                    ].astype(np.int64),
+                    "patch_means": data[
+                        "coefficient_corrector_patch_means"
+                    ].astype(np.float64),
+                    "patch_bases": data[
+                        "coefficient_corrector_patch_bases"
+                    ].astype(np.float64),
+                    "patch_weights": data[
+                        "coefficient_corrector_patch_weights"
+                    ].astype(np.float64),
+                }
+            )
+            if "coefficient_corrector_residual_weighting" in data:
+                model._coefficient_corrector["residual_weighting"] = str(
+                    data["coefficient_corrector_residual_weighting"].item()
+                )
+            else:
+                model._coefficient_corrector["residual_weighting"] = "uniform"
+        if mode == "residual_svd_mlp":
+            model._coefficient_corrector.update(
+                {
+                    "input_mean": data["coefficient_corrector_input_mean"].astype(np.float64),
+                    "input_std": data["coefficient_corrector_input_std"].astype(np.float64),
+                    "target_mean": data["coefficient_corrector_target_mean"].astype(np.float64),
+                    "target_std": data["coefficient_corrector_target_std"].astype(np.float64),
+                    "mlp_w0": data["coefficient_corrector_mlp_w0"].astype(np.float64),
+                    "mlp_b0": data["coefficient_corrector_mlp_b0"].astype(np.float64),
+                    "mlp_w1": data["coefficient_corrector_mlp_w1"].astype(np.float64),
+                    "mlp_b1": data["coefficient_corrector_mlp_b1"].astype(np.float64),
+                }
+            )
+            model._coefficient_corrector["feature_dim"] = int(
+                model._coefficient_corrector["mlp_w0"].shape[1]
+            )
         metrics_payload = data["metrics"][0]
         if hasattr(metrics_payload, "item"):
             metrics_payload = metrics_payload.item()
@@ -524,6 +1735,18 @@ class FastWindowedTBMDQRCSForecaster:
 __all__ = [
     "FastWindowedTBMDQRCSConfig",
     "FastWindowedTBMDQRCSForecaster",
+    "apply_coefficient_calibrator",
+    "attach_coefficient_gate",
     "build_forecast_segment_tensor",
+    "encode_target_coefficients",
+    "fit_coefficient_calibrator",
+    "fit_sensor_innovation_encoder",
+    "fit_patch_residual_svd_corrector",
+    "fit_sensor_coefficient_decoder",
+    "predict_from_history_sensor_decoder",
+    "predict_from_history_sensor_decoder_with_measurements",
     "predict_from_history_sensor_lstsq",
+    "reconstruct_target_from_coefficients",
+    "sensor_innovation_residual",
+    "transform_sensor_innovation_features",
 ]

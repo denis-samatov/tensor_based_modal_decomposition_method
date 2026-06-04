@@ -1,8 +1,4 @@
-"""
-Reconstruction Module
-
-Модули для реконструкции полных полей по измерениям сенсоров
-"""
+"""Reconstruction modules for full-field recovery from sensor measurements."""
 
 
 
@@ -25,5 +21,4 @@ __all__ = [
     'CompressiveSensingConfig',
     'GeometryAwareCSConfig'
 ]
-
 

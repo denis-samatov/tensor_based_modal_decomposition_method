@@ -1,229 +1,83 @@
-# Geometry-Aware TBMD - Полная документация
+# Geometry-Aware TBMD
 
-## 📖 Оглавление
+## Overview
 
-1. [Введение](#введение)
-2. [Теоретические основы](#теоретические-основы)
-3. [Архитектура](#архитектура)
-4. [Установка и использование](#установка-и-использование)
-5. [API Reference](#api-reference)
-6. [Примеры](#примеры)
+Geometry-aware TBMD extends the standard tensor workflow with graph or mesh information. It is intended for data where Euclidean tensor-grid assumptions are too restrictive, such as active-cell reservoir grids, masked domains, or irregular spatial connectivity.
 
----
+The implementation provides geometry-aware decomposition, reconstruction, and sensor placement utilities. These components are experimental and should be validated on the target dataset before being used for conclusions.
 
-## Введение
+## Motivation
 
-**Geometry-Aware TBMD** — это расширение классического метода TBMD, которое учитывает сложную геометрию резервуара и неструктурированные сетки.
+Standard TBMD treats tensor axes as regular dimensions. Real spatial domains may include:
 
-### Проблема классического TBMD
-Классический TBMD работает с тензорами на регулярных сетках (декартовых). Однако реальные резервуары имеют:
-- ❌ Сложные границы (разломы, выклинивания)
-- ❌ Неактивные ячейки (null blocks)
-- ❌ Неструктурированные сетки (Corner Point Geometry)
+- inactive cells;
+- non-rectangular boundaries;
+- irregular connectivity;
+- anisotropic or graph-defined neighborhoods.
 
-### Решение
-Использование **Graph Laplacian** (Лапласиана графа) для кодирования топологии сетки в модальное разложение.
+Geometry-aware variants encode spatial relationships through graph and mesh structures, including graph Laplacian regularization.
 
----
+## Main Components
 
-## Теоретические основы
+- `GeometryAwareTuckerDecomposer`: decomposition with geometry-aware regularization.
+- `GeometryAwareTensorCS`: reconstruction with geometry-aware penalties.
+- `GeometryAwareTensorQR`: sensor placement with geometry-aware scoring.
+- `MeshGeometry` and `MeshGraphBuilder`: helpers for constructing spatial graph representations.
 
-### 1. Графовое представление
-Резервуар представляется как граф $G = (V, E)$, где:
-- $V$ — активные ячейки (узлы)
-- $E$ — связи между соседними ячейками (ребра)
-
-### 2. Лапласиан графа
-Строится матрица Лапласа $L = D - A$, где:
-- $A$ — матрица смежности (кто с кем сосед)
-- $D$ — диагональная матрица степеней вершин
-
-Нормированный Лапласиан:
-$$ \mathcal{L} = I - D^{-1/2} A D^{-1/2} $$
-
-### 3. Спектральное разложение
-Собственные векторы Лапласиана $\mathcal{L} u_k = \lambda_k u_k$ образуют базис, адаптированный к геометрии.
-- Низкочастотные моды (малые $\lambda$) — плавные изменения
-- Высокочастотные моды (большие $\lambda$) — локальные детали
-
-### 4. Интеграция с TBMD
-Вместо стандартного SVD/HOSVD по пространственным модам, мы используем регуляризацию Лапласианом (Laplacian Regularization) в процессе ALS (Alternating Least Squares) для получения пространственно гладких мод, уважающих геометрию.
-
----
-
-## Архитектура
-
-### Основные компоненты
-
-1. **`GeometryAwareTuckerDecomposer`**
-   - Главный класс для декомпозиции
-   - Принимает тензор и геометрию сетки (MeshGeometry)
-   - Выполняет HOSVD с регуляризацией Лапласианом
-
-2. **`GeometryAwareConfig`**
-   - Конфигурация параметров регуляризации
-   - Параметры: `alpha` (сила регуляризации), `spatial_modes`, `laplacian_type`
-
-3. **`MeshGraphBuilder`** и **`MeshGeometry`**
-   - Утилиты для построения графов смежности из сеток
-   - Поддержка регулярных сеток, KNN, radius-based графов
-
----
-
-## Установка и использование
-
-### Инициализация
+## Basic Example
 
 ```python
 from TBMD.core.decomposition.geometry_aware import (
+    GeometryAwareConfig,
     GeometryAwareTuckerDecomposer,
-    GeometryAwareConfig
 )
 from TBMD.core.geometry import MeshGraphBuilder
 
-# 1. Построение геометрии сетки
-builder = MeshGraphBuilder(connectivity_type='grid')
-# Для 2D данных (100x100)
+builder = MeshGraphBuilder(connectivity_type="grid")
 mesh = builder.build_from_shape(spatial_shape=(100, 100))
 
-# 2. Конфигурация
 geo_config = GeometryAwareConfig(
-    alpha=0.1,             # Сила сглаживания
-    spatial_modes=[0],     # Индекс пространственной моды (в тензоре)
-    laplacian_type='normalized'
+    alpha=0.1,
+    spatial_modes=[0],
+    laplacian_type="normalized",
 )
 
-# 3. Создание декомпозитора
 decomposer = GeometryAwareTuckerDecomposer(
-    tensor=data_tensor,    # (Spatial, Time) or (X, Y, Time)
+    tensor=data_tensor,
     mesh=mesh,
     geo_config=geo_config,
-    ranks=[20, 10]         # [spatial_rank, temporal_rank]
+    ranks=[20, 10],
 )
-```
-
-### Декомпозиция
-
-```python
 decomposer.decompose()
-
-# Доступ к результатам
-core = decomposer.cores
-factors = decomposer.factors
-spatial_modes = factors[0]
-```
-
-### Реконструкция
-
-```python
 reconstructed = decomposer.reconstruct()
 ```
 
----
+## Configuration Notes
 
-## API Reference
+- `alpha` controls the strength of Laplacian regularization.
+- `spatial_modes` selects which tensor modes receive geometry-aware regularization.
+- `laplacian_type` selects the Laplacian normalization strategy supported by the implementation.
+- Graph construction parameters should be chosen to match the physical interpretation of adjacency in the dataset.
 
-### `GeometryAwareTuckerDecomposer`
+## Working With Masks
 
-#### `__init__(tensor, mesh, geo_config, ranks, ...)`
-- `tensor`: Входной тензор
-- `mesh`: `MeshGeometry` или tuple размеров (для авто-генерации сетки)
-- `geo_config`: Экземпляр `GeometryAwareConfig`
-- `ranks`: Целевые ранги Таккера
-
-#### `decompose()`
-Запускает процесс декомпозиции с ALS и регуляризацией. Сохраняет результаты в свойствах `cores` и `factors`.
-
-#### `reconstruct()` -> `torch.Tensor`
-Восстанавливает тензор из разложения.
-
-### `GeometryAwareConfig`
+For masked domains, verify the current graph builder API before assuming direct mask support. If a direct mask API is not available, construct the adjacency matrix explicitly and pass it through the mesh representation.
 
 ```python
-@dataclass
-class GeometryAwareConfig:
-    alpha: float = 0.01                 # Коэффициент регуляризации
-    spatial_modes: List[int] = [0]      # Индексы мод для применения Лапласиана
-    laplacian_type: str = 'normalized'  # 'standard' или 'normalized'
-    connectivity_type: str = 'grid'     # Метод построения графа
-    connectivity_params: Dict = {}      # Параметры графа
-```
-
----
-
-## Примеры
-
-### Пример 1: L-образный домен (с маской)
-
-```python
-import numpy as np
-from TBMD.core.decomposition.geometry_aware import GeometryAwareTuckerDecomposer, GeometryAwareConfig
-from TBMD.core.geometry import MeshGraphBuilder
-
-# 1. Создаем маску (L-shape)
-mask = np.ones((20, 20))
-mask[10:, 10:] = 0  # Вырезаем угол
-
-# 2. Строим граф с учетом маски
-builder = MeshGraphBuilder(connectivity_type='grid')
-# Предполагаем, что есть метод build_from_mask или передаем active_cells_mask (зависит от API MeshGraphBuilder)
-# В текущей реализации MeshGraphBuilder может принимать параметры в build_from_shape или конструкторе
-# Для сложных масок лучше создать adjacency matrix вручную или использовать спец. методы
-mesh = builder.build_from_shape((20, 20)) 
-# TODO: Уточнить передачу маски в MeshGraphBuilder API если поддерживается напрямую
-
-# 3. Декомпозиция
-config = GeometryAwareConfig(alpha=0.5)
-decomposer = GeometryAwareTuckerDecomposer(
-    tensor=data_l_shape, 
-    mesh=mesh, 
-    geo_config=config,
-    ranks=[10, 5]
-)
-
-decomposer.decompose()
-```
-
-### Пример 2: Brugge Field (3D)
-
-Для реальных месторождений данные часто линеаризуются (Active Cells).
-
-```python
-# data shape: (N_active_cells, T)
-
-# Предположим у нас есть матрица смежности для активных ячеек
-adjacency_matrix = load_brugge_adjacency() 
-
 from TBMD.core.geometry import MeshGeometry
+
 mesh = MeshGeometry(adjacency_matrix=adjacency_matrix)
-
-# Конфиг
-config = GeometryAwareConfig(alpha=0.1)
-
-# TBMD
-decomposer = GeometryAwareTuckerDecomposer(
-    tensor=data,
-    mesh=mesh,
-    geo_config=config,
-    ranks=[100, 20] # [spatial, temporal]
-)
-decomposer.decompose()
 ```
 
----
+## Validation
 
-## Преимущества перед обычным TBMD
+Before using geometry-aware outputs in a report:
 
-| Характеристика | Standard TBMD | Geometry-Aware TBMD |
-|----------------|---------------|---------------------|
-| Сетка | Только регулярная | Любая (граф) |
-| Границы | Ступенчатые | Гладкие / Точные |
-| Неактивные ячейки | Заполняются нулями (ошибки на границах) | Игнорируются (корректная физика) |
-| Базис | Фурье / Полиномы | Собственные функции домена |
-| Эффективность | Низкая для сложных форм | Высокая (меньше мод для той же точности) |
+1. Compare reconstruction error against standard TBMD on the same split.
+2. Inspect selected sensor locations for domain validity.
+3. Check whether graph construction matches the intended physical neighborhood.
+4. Record all graph and regularization parameters with the experiment output.
 
----
+## Examples
 
-**Версия**: 2.0
-**Дата**: Январь 2026
-**Автор**: TBMD Team
+Runnable examples are under `examples/geometry_aware/`.

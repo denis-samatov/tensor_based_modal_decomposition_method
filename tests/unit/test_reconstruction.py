@@ -1,6 +1,4 @@
-"""
-Тесты для модулей реконструкции
-"""
+"""Tests for reconstruction modules."""
 import pytest
 import torch
 import numpy as np
@@ -10,10 +8,10 @@ from TBMD.config import ReconstructionConfig, CompressiveSensingConfig
 
 
 class TestTensorCompressiveSensing:
-    """Тесты для TensorCompressiveSensing"""
+    """Tests for TensorCompressiveSensing."""
     
     def test_initialization(self, sample_spatial_modes, sample_measurements, reconstruction_config):
-        """Тест инициализации"""
+        """Test initialization."""
         n_sensors = 30
         I = sample_spatial_modes.shape[0]
         sensor_indices = np.random.choice(I, n_sensors, replace=False)
@@ -45,7 +43,7 @@ class TestTensorCompressiveSensing:
         assert cs.cfg is not None
         
     def test_basic_reconstruction_admm(self, sample_spatial_modes):
-        """Тест базовой реконструкции с ADMM"""
+        """Test basic ADMM reconstruction."""
         I = sample_spatial_modes.shape[0]
         W = sample_spatial_modes.shape[1]
         
@@ -77,7 +75,7 @@ class TestTensorCompressiveSensing:
         assert metrics.iterations <= 50
         
     def test_reconstruction_error(self, sample_spatial_modes):
-        """Тест вычисления ошибки реконструкции"""
+        """Test reconstruction error calculation."""
         I = sample_spatial_modes.shape[0]
         W = sample_spatial_modes.shape[1]
         x_true = torch.randn(W)
@@ -98,7 +96,7 @@ class TestTensorCompressiveSensing:
         assert err < 1e-4 # Should be small for noiseless synthetic case
 
     def test_invalid_dimensions(self):
-        """Тест невалидных размерностей"""
+        """Test invalid dimensions."""
         A = torch.randn(10, 5)
         P = torch.zeros(12, dtype=torch.bool) # Wrong size
         Y = torch.zeros(10)
@@ -107,7 +105,7 @@ class TestTensorCompressiveSensing:
              TensorCompressiveSensing(A, P, Y)
 
     def test_metrics_content(self, sample_spatial_modes):
-        """Тест содержимого метрик"""
+        """Test metrics content."""
         I = sample_spatial_modes.shape[0]
         n_sensors = 30
         sensor_indices = np.random.choice(I, n_sensors, replace=False)
@@ -122,4 +120,3 @@ class TestTensorCompressiveSensing:
         assert hasattr(metrics, 'converged')
         assert hasattr(metrics, 'primal_residual')
         assert hasattr(metrics, 'dual_residual')
-

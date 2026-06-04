@@ -1,11 +1,10 @@
-"""
-Конфигурация для реконструкции (TBMD-CS Algorithm 3)
+"""Configuration for reconstruction and TBMD-CS Algorithm 3.
 
-Модуль содержит конфигурации для ADMM-based компрессивного сенсинга:
-- CompressiveSensingConfig: основные гиперпараметры алгоритма
-- ExtensionCompressiveSensingConfig: расширенные настройки (solver, policies)
-- ReconstructionConfig: legacy конфиг для обратной совместимости
-- GeometryAwareReconstructionConfig: geometry-aware реконструкция
+This module contains configuration objects for ADMM-based compressive sensing:
+- CompressiveSensingConfig: core algorithm hyperparameters
+- ExtensionCompressiveSensingConfig: solver and policy settings
+- ReconstructionConfig: legacy backward-compatible config
+- GeometryAwareReconstructionConfig: geometry-aware reconstruction config
 
 References:
 - Algorithm 3: TBMD-CS (formulas 32-36)
@@ -41,7 +40,7 @@ class CompressiveSensingConfig:
     """
     Core hyperparameters of the TBMD-CS algorithm.
     
-    Это основной конфиг для Algorithm 3 (ADMM-based compressive sensing).
+    This is the primary config for Algorithm 3 (ADMM-based compressive sensing).
     
     Parameters
     ----------
@@ -144,28 +143,28 @@ class ExtensionCompressiveSensingConfig:
 @dataclass
 class ReconstructionConfig(BaseConfig):
     """
-    Legacy конфигурация для компрессивного сенсинга.
+    Legacy configuration for compressive sensing.
     
-    DEPRECATED: Используйте CompressiveSensingConfig + ExtensionCompressiveSensingConfig.
-    Этот класс сохранён для обратной совместимости.
+    DEPRECATED: use CompressiveSensingConfig + ExtensionCompressiveSensingConfig.
+    This class is kept for backward compatibility.
     """
     
-    # Алгоритм решения
+    # Solver
     solver: Literal['admm', 'ista', 'fista', 'least_squares'] = 'admm'
     
-    # Параметры оптимизации
+    # Optimization parameters
     max_iterations: int = 100
     convergence_eps: float = 1e-2
     
-    # ADMM параметры
+    # ADMM parameters
     damping_factor: float = 0.95  # ρ (rho)
-    over_relaxation: float = 1.0  # α для over-relaxation
+    over_relaxation: float = 1.0
     
     # Regularization
-    l1_lambda: float = 0.01  # L1 регуляризация
-    l2_lambda: float = 0.0   # L2 регуляризация
+    l1_lambda: float = 0.01
+    l2_lambda: float = 0.0
     
-    # Адаптивный шаг
+    # Adaptive step
     adaptive_step_size: bool = True
     initial_step_size: float = 1.0
     max_step_size: float = 1.0
@@ -179,18 +178,18 @@ class ReconstructionConfig(BaseConfig):
         self._validate()
     
     def _validate(self):
-        """Валидация параметров"""
+        """Validate parameter ranges."""
         if self.max_iterations <= 0:
-            raise ValueError("max_iterations должен быть положительным")
+            raise ValueError("max_iterations must be positive")
         
         if self.convergence_eps <= 0:
-            raise ValueError("convergence_eps должен быть положительным")
+            raise ValueError("convergence_eps must be positive")
         
         if not 0 < self.damping_factor <= 1:
-            raise ValueError("damping_factor должен быть в (0, 1]")
+            raise ValueError("damping_factor must be in (0, 1]")
         
         if self.l1_lambda < 0 or self.l2_lambda < 0:
-            raise ValueError("lambda параметры должны быть неотрицательными")
+            raise ValueError("lambda parameters must be non-negative")
     
     def to_core_config(self) -> CompressiveSensingConfig:
         """Convert to new CompressiveSensingConfig format."""
@@ -208,32 +207,32 @@ class ReconstructionConfig(BaseConfig):
 
 @dataclass
 class GeometryAwareReconstructionConfig(ReconstructionConfig):
-    """Конфигурация для geometry-aware реконструкции"""
+    """Configuration for geometry-aware reconstruction."""
     
-    # Геометрическая регуляризация
-    geometric_lambda: float = 0.1  # Вес Laplacian регуляризации
-    adaptive_lambda: bool = False  # Адаптивный выбор
+    # Geometry regularization
+    geometric_lambda: float = 0.1
+    adaptive_lambda: bool = False
     
-    # Laplacian параметры
+    # Laplacian parameters
     laplacian_type: Literal['unnormalized', 'symmetric', 'random_walk'] = 'symmetric'
-    laplacian_power: int = 1  # Степень Laplacian (1 = градиент, 2 = лапласиан)
+    laplacian_power: int = 1
     
-    # Локальная гладкость
+    # Local smoothness
     enforce_local_smoothness: bool = True
     smoothness_weight: float = 0.5
     
     def _validate(self):
-        """Дополнительная валидация"""
+        """Validate geometry-aware parameters."""
         super()._validate()
         
         if self.geometric_lambda < 0:
-            raise ValueError("geometric_lambda должен быть неотрицательным")
+            raise ValueError("geometric_lambda must be non-negative")
         
         if self.laplacian_power < 1:
-            raise ValueError("laplacian_power должен быть >= 1")
+            raise ValueError("laplacian_power must be >= 1")
         
         if not 0 <= self.smoothness_weight <= 1:
-            raise ValueError("smoothness_weight должен быть в диапазоне [0, 1]")
+            raise ValueError("smoothness_weight must be in the range [0, 1]")
 
 
 # Aliases for backward compatibility

@@ -1,270 +1,171 @@
-# TBMD API Reference
+# API Reference
 
-Полная справка по API библиотеки TBMD.
-
-## 📦 Содержание
-
-- [Configuration](#configuration)
-- [Core Modules](#core-modules)
-  - [Decomposition](#decomposition)
-  - [Sensor Placement](#sensor-placement)
-  - [Reconstruction](#reconstruction)
-- [Digital Twin](#digital-twin)
-- [Utilities](#utilities)
-
----
+This reference covers the primary public classes used by examples and tests. It is not generated automatically, so check source docstrings for implementation-level details.
 
 ## Configuration
 
 ### `BaseConfig`
 
-Базовый класс конфигурации.
+Base configuration shared by most TBMD components.
 
 ```python
 from TBMD.config import BaseConfig
 
-class BaseConfig:
-    backend: str = 'pytorch'         # 'pytorch', 'numpy'
-    dtype: str = 'float32'           # 'float32', 'float64'
-    device: Optional[str] = None     # 'cpu', 'cuda', 'mps' (auto if None)
-    seed: Optional[int] = 0
-    deterministic: bool = True
-    verbose: bool = True
-    log_level: str = 'INFO'
+config = BaseConfig(
+    backend="pytorch",
+    dtype="float32",
+    device=None,
+    seed=0,
+    deterministic=True,
+    verbose=True,
+)
 ```
 
 ### `DecompositionConfig`
 
-Конфигурация для Tucker декомпозиции.
+Configuration for Tucker/HOSVD decomposition.
 
 ```python
 from TBMD.config import DecompositionConfig
 
 config = DecompositionConfig(
-    ranks: Optional[Union[int, List[int]]] = None,  # Tucker ranks
-    method: str = 'hosvd',
-    epsilon: float = 1e-2,            # Convergence tolerance
-    min_rank: int = 1,                # Minimum rank
-    max_workers: Optional[int] = None, # For parallel processing
-    **base_config_params
+    ranks=[20, 20, 10],
+    method="hosvd",
+    energy_threshold=0.99,
+    normalize=False,
 )
 ```
 
 ### `SensorPlacementConfig`
 
-Конфигурация для размещения сенсоров.
+Configuration for tensor QR sensor placement.
 
 ```python
 from TBMD.config import SensorPlacementConfig
 
 config = SensorPlacementConfig(
-    n_sensors: int,                   # Количество сенсоров (обязательно)
-    check_orthogonality: bool = False, # Проверять ортогональность
-    uniform_distribution: bool = False, # Равномерное распределение
-    **base_config_params
+    n_sensors=30,
+    uniform_distribution=False,
+    check_orthogonality=False,
 )
 ```
 
 ### `CompressiveSensingConfig`
 
-Конфигурация для реконструкции.
+Core ADMM configuration for TBMD compressive sensing reconstruction.
 
 ```python
 from TBMD.config import CompressiveSensingConfig
 
 config = CompressiveSensingConfig(
-    max_iter: int = 1000,
-    tol: float = 1e-4,
-    epsilon_l1: float = 1e-2,         # L1 regularization
-    delta_init: float = 1.0,          # ADMM delta parameter
-    delta_max: float = 1.0,
-    relax_lambda: float = 0.95,       # ADMM relaxation (0 < relax_lambda < 1)
-    device: str = 'cpu',
-    dtype: str = 'float32'
+    max_iter=1000,
+    tol=1e-4,
+    epsilon_l1=1e-2,
+    delta_init=1.0,
+    delta_max=1.0,
+    relax_lambda=0.95,
+    device="cpu",
+    dtype="float32",
 )
 ```
 
 ### `DigitalTwinConfig`
 
-Конфигурация для цифрового двойника.
+Configuration for the digital twin orchestration class.
 
 ```python
 from TBMD.config import DigitalTwinConfig
 
 config = DigitalTwinConfig(
-    n_spatial_modes: int = 40,
-    n_temporal_modes: int = 20,
-    n_sensors: int = 30,
-    forecaster_type: str = 'lstm', # 'linear', 'mlp', 'lstm', 'persistence'
-    proxy_model_type: Optional[str] = None, # 'linear_dynamics', 'neural', 'physics_informed'
-    **base_config_params
+    n_spatial_modes=40,
+    n_temporal_modes=20,
+    n_sensors=30,
+    forecaster_type="linear",
 )
 ```
 
----
+## Decomposition
 
-## Core Modules
+### `TuckerDecomposer`
 
-### Decomposition
-
-#### `TuckerDecomposer`
-
-Tucker (HOSVD) декомпозиция.
+Performs Tucker/HOSVD decomposition and reconstruction.
 
 ```python
 from TBMD.core.decomposition.hosvd import TuckerDecomposer
 
-decomposer = TuckerDecomposer(
-    tensors: Union[torch.Tensor, Dict[str, torch.Tensor]],
-    config: Optional[DecompositionConfig] = None,
-    # Или параметры напрямую:
-    ranks=[20, 10, 5],
-    device='cpu'
-)
-```
-
-**Методы и Свойства:**
-
-##### `decompose()`
-
-Выполнить декомпозицию.
-
-```python
+decomposer = TuckerDecomposer(tensors=data, config=config)
 decomposer.decompose()
+decomposer.reconstruct()
+
+core = decomposer.cores
+factors = decomposer.factors
+reconstructed = decomposer.reconstructed_tensors
 ```
 
-##### Результаты
+## Sensor Placement
 
-После вызова `decompose()`:
+### `TensorTubeQRDecomposition`
 
-```python
-cores = decomposer.cores       # Core tensors
-factors = decomposer.factors   # Factor matrices
-```
-
-### Sensor Placement
-
-#### `TensorTubeQRDecomposition`
-
-QR-based sensor placement (Algorithm 2).
+Selects sensor locations using a tensor tube QR factorization workflow.
 
 ```python
 from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
-from TBMD.config import SensorPlacementConfig
 
-placer = TensorTubeQRDecomposition(
-    tensor: torch.Tensor,           # Input tensor (e.g. spatial modes)
-    config: SensorPlacementConfig
-)
-```
-
-**Методы:**
-
-##### `factorize()`
-
-Выполнить факторизацию и размещение сенсоров.
-
-```python
+placer = TensorTubeQRDecomposition(tensor=A_tensor, config=sensor_config)
 P, Q, R = placer.factorize()
-# P: Binary mask of sensor locations
-# Q: Orthogonal basis
-# R: Upper triangular matrix
 ```
 
-### Reconstruction
+`P` is the sensor mask used by reconstruction code.
 
-#### `TensorCompressiveSensing`
+## Reconstruction
 
-Compressive sensing reconstruction (Algorithm 3).
+### `TensorCompressiveSensing`
+
+Solves for modal coefficients from sparse measurements.
 
 ```python
 from TBMD.core.reconstruction.tensor_compressive_sensing import TensorCompressiveSensing
 
 reconstructor = TensorCompressiveSensing(
-    A: torch.Tensor,                # Dictionary (spatial modes)
-    P: torch.Tensor,                # Sensor mask
-    Y: torch.Tensor,                # Measurements
-    core_cfg: Optional[CompressiveSensingConfig] = None
+    A=A_tensor,
+    P=P,
+    Y=Y,
+    core_cfg=cs_config,
 )
-```
 
-**Методы:**
-
-##### `solve()`
-
-Реконструировать модальные коэффициенты.
-
-```python
 x_hat, metrics = reconstructor.solve()
-# x_hat: Reconstructed coefficients
-# metrics: Reconstruction statistics
 ```
-
----
 
 ## Digital Twin
 
 ### `DigitalTwin`
 
-Цифровой двойник с TBMD.
+Coordinates decomposition, modal processing, sensor placement, reconstruction, and forecasting.
 
 ```python
 from TBMD.digital_twin.digital_twin import DigitalTwin
-from TBMD.config import DigitalTwinConfig
 
-twin = DigitalTwin(config: DigitalTwinConfig)
+twin = DigitalTwin(config)
+summary = twin.train(historical_data, normalize=False)
+forecast = twin.predict(current_state, n_steps=10)
 ```
 
-**Методы:**
+Common methods:
 
-##### `train()`
+- `train(historical_data, normalize=False, ranks=None)`: fit decomposition, sensor placement, and forecaster components.
+- `predict(current_state, n_steps=1, return_full_field=True)`: forecast future states.
+- `update_from_sensors(sensor_readings, timestamp=None)`: reconstruct state from sensor readings.
+- `get_sensor_locations()`: return selected sensor indices.
+- `get_statistics()`: return current model and monitoring state.
 
-Обучить digital twin на исторических данных.
+## Forecasting
 
-```python
-summary = twin.train(
-    historical_data: Union[torch.Tensor, Dict[str, torch.Tensor]],
-    normalize: bool = False,
-    ranks: Optional[List[int]] = None
-) -> Dict[str, Any]
-```
-
-##### `predict()`
-
-Прогнозировать будущие состояния (автономный режим).
-
-```python
-forecast = twin.predict(
-    current_state: torch.Tensor,
-    n_steps: int = 1,
-    return_full_field: bool = True
-) -> torch.Tensor
-# Returns: (spatial..., n_steps)
-```
-
-##### `predict_next_state()`
-
-Прогнозировать следующее состояние с учетом управлений (для сценарного анализа).
-
-```python
-prediction = twin.predict_next_state(
-    current_state: Union[torch.Tensor, ReservoirState],
-    controls: Any
-) -> List[ReservoirState]
-```
-
----
+The package includes linear, MLP, LSTM, latent modal, and multi-resolution forecasters under `TBMD.core.forecasting`. The Navier-Stokes experiment layer also provides registry helpers in `TBMD.experiments`.
 
 ## Utilities
 
-### Tensor helpers
 ```python
-from TBMD.core.utils.misc import (
-    get_torch_device, to_torch_tensor,
-    reconstruct_tensor
-)
+from TBMD.core.utils.misc import get_torch_device, reconstruct_tensor, to_torch_tensor
 ```
 
----
-
-**Версия API**: 2.0.0
+These helpers centralize tensor conversion, device selection, seeding, and modal reconstruction utilities.

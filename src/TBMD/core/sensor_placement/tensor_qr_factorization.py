@@ -406,7 +406,7 @@ class UniformDistributionManager:
             self.slice_counts[z] = self.slice_counts.get(z, 0) + 1
     
     def mark_similar_regions_unavailable(self, pivot: Tuple[int, ...], available: torch.Tensor) -> None:
-        """Исправленная версия - менее агрессивная блокировка."""
+        """Mark nearby similar regions unavailable with conservative blocking."""
         if len(self.spatial_shape) < 3 or len(pivot) < 2:
             return
         
@@ -416,15 +416,15 @@ class UniformDistributionManager:
         if region_id is not None and region_id in self.similar_regions:
             similar_positions = self.similar_regions[region_id]
             
-            # ИЗМЕНЕНИЕ: блокировать только ближайшие позиции
+            # Block only the nearest positions.
             blocked_count = 0
-            max_blocks_per_region = max(1, len(similar_positions) // 4)  # Максимум 25%
+            max_blocks_per_region = max(1, len(similar_positions) // 4)  # Maximum 25%
             
             for row in similar_positions:
                 px = int(row[0].item()) if hasattr(row[0], "item") else int(row[0])
                 py = int(row[1].item()) if hasattr(row[1], "item") else int(row[1])
                 if (px, py) != (x, y) and blocked_count < max_blocks_per_region:
-                    # Блокировать только тот же z-уровень
+                    # Block only the same z-level
                     if len(pivot) >= 3:
                         z = pivot[2]
                         available[px, py, z] = False
@@ -494,8 +494,8 @@ class TensorTubeQRDecomposition:
             ValueError: If inputs don't meet algorithm requirements
             
         Note:
-            Все параметры опциональны и берутся из config если не переданы явно.
-            Приоритет: явный аргумент > config > значение по умолчанию.
+            All parameters are optional and are read from config if not passed explicitly.
+            Priority: explicit argument > config > default value.
         """
         # Configuration first (needed for defaults)
         self.config = config or SensorPlacementConfig()
@@ -652,7 +652,7 @@ class TensorTubeQRDecomposition:
             print(f"  Success rate: {actual_rank/self.N*100:.1f}%")
             print(f"  Early stops: {self.N - successful_steps}")
             
-            if actual_rank < self.N * 0.5:  # Менее 50% успеха
+            if actual_rank < self.N * 0.5:  # Less than 50% success
                 print("WARNING: Low rank achieved - consider relaxing thresholds!")
             
             return self.P, self.Q, self.R

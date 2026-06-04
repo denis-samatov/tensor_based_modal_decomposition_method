@@ -1,172 +1,59 @@
 # TBMD Examples
 
-Примеры использования Tensor-Based Modal Decomposition
+This directory contains runnable examples for the TBMD package. Run commands from the repository root after installing the package.
 
-## Структура
+## Directory Overview
 
-### 📁 `basic/` - Базовые примеры
-Знакомство с основными компонентами TBMD:
-- `01_tucker_decomposition.py` - Tucker разложение
-- `02_sensor_placement.py` - Размещение сенсоров
-- `03_field_reconstruction.py` - Реконструкция полей
-- `04_complete_pipeline.py` - Полный пайплайн TBMD
+| Directory | Contents |
+| --- | --- |
+| `basic/` | Minimal decomposition, sensor placement, reconstruction, and complete-pipeline examples. |
+| `digital_twin/` | Digital twin workflow examples. |
+| `geometry_aware/` | Examples for graph and mesh-aware workflows. |
+| `advanced/` | Advanced and legacy workflows. |
+| `applications/` | Dataset-specific scripts. |
+| `experiments/` | Experimental visualization and validation scripts. |
 
-### 📁 `digital_twin/` - Цифровой двойник
-Примеры работы с цифровым двойником:
-- `01_digital_twin_basic.py` - Базовый digital twin
-- `02_digital_twin_monitoring.py` - Мониторинг и алерты
-- `03_digital_twin_scenarios.py` - Сценарный анализ
+## Basic Examples
 
-### 📁 `geometry_aware/` - Geometry-Aware TBMD
-Примеры с учетом геометрии:
-- `01_geometry_aware_basic.py` - Базовый пример с геометрией
-- `02_graph_based_tbmd.py` - TBMD на графах
-- `03_anisotropic_fields.py` - Анизотропные поля
-
-### 📁 `advanced/` - Продвинутые примеры
-Сложные применения:
-- `01_multiphysics.py` - Мультифизика
-- `02_uncertainty_quantification.py` - Квантификация неопределенности
-- `03_online_learning.py` - Онлайн-обучение
-
-### 📁 `applications/` - Прикладные примеры
-Реальные приложения:
-- `brugge_field/` - Месторождение Brugge
-- `fluid_dynamics/` - Динамика жидкости
-- `climate_data/` - Климатические данные
-
-## Быстрый старт
-
-### 1. Базовый пример - Tucker декомпозиция
-
-```python
-import torch
-from TBMD.config import DecompositionConfig
-from TBMD.core.decomposition import TuckerDecomposer
-
-# Данные
-data = torch.randn(100, 3, 50)  # (I, J, T)
-
-# Конфигурация
-config = DecompositionConfig(
-    ranks=[20, 10],
-    verbose=True
-)
-
-# Декомпозиция
-decomposer = TuckerDecomposer(config)
-result = decomposer.decompose(data)
-
-print(f"Spatial modes: {result.spatial_modes.shape}")
-print(f"Reconstruction error: {result.reconstruction_error:.4f}")
-```
-
-### 2. Полный пайплайн
-
-```python
-from TBMD.config import (
-    DecompositionConfig,
-    SensorPlacementConfig,
-    ReconstructionConfig
-)
-from TBMD.core import (
-    TuckerDecomposer,
-    TensorTubeQRDecomposition,
-    TensorCompressiveSensing
-)
-
-# 1. Декомпозиция
-decomposer = TuckerDecomposer(
-    DecompositionConfig(ranks=[20, 10])
-)
-result = decomposer.decompose(historical_data)
-
-# 2. Размещение сенсоров
-sensor_placer = TensorTubeQRDecomposition(
-    SensorPlacementConfig(n_sensors=30)
-)
-sensors = sensor_placer.place_sensors(result.spatial_modes)
-
-# 3. Реконструкция
-reconstructor = TensorCompressiveSensing(
-    ReconstructionConfig(solver='admm')
-)
-recon = reconstructor.reconstruct(
-    dictionary=result.spatial_modes,
-    measurements=measurements,
-    measurement_matrix=sensors.measurement_matrix
-)
-```
-
-### 3. Digital Twin
-
-```python
-from TBMD.config import DigitalTwinConfig
-from TBMD.digital_twin import DigitalTwin
-
-# Конфигурация
-config = DigitalTwinConfig(
-    n_spatial_modes=40,
-    n_sensors=30
-)
-
-# Создать и обучить
-twin = DigitalTwin(config)
-twin.train(historical_data)
-
-# Прогноз
-forecast = twin.predict(current_state, n_steps=10)
-
-# Реконструкция из сенсоров
-reconstructed = twin.update_from_sensors(sensor_readings)
-```
-
-## Запуск примеров
-
-### Из корня проекта
 ```bash
-cd algorithm
 python examples/basic/01_tucker_decomposition.py
+python examples/basic/02_sensor_placement.py
+python examples/basic/03_field_reconstruction.py
+python examples/basic/04_complete_pipeline.py
 ```
 
-### С параметрами
-```bash
-python examples/basic/04_complete_pipeline.py --n-modes 30 --n-sensors 20
-```
-
-## Зависимости
+## Digital Twin Examples
 
 ```bash
-pip install torch numpy tensorly matplotlib
+python examples/digital_twin/01_digital_twin_basic.py
+python examples/digital_twin/02_digital_twin_advanced.py
+python examples/digital_twin/04_digital_twin_type_demo.py
 ```
 
-Для geometry-aware примеров:
+## Geometry-Aware Examples
+
 ```bash
-pip install torch-geometric scipy
+python examples/geometry_aware/01_graph_based_tbmd.py
+python examples/geometry_aware/02_geometry_aware_cs.py
+python examples/geometry_aware/03_geometry_aware_decomposition.py
+python examples/geometry_aware/04_geometry_utils.py
+python examples/geometry_aware/05_test_components.py
+python examples/geometry_aware/06_geometry_aware_run.py
 ```
 
-## Датасеты
+## Dataset-Specific Examples
 
-### Синтетические
-Все базовые примеры генерируют синтетические данные
+Application examples may require local datasets that are not included in git:
 
-### Реальные датасеты
-- **Brugge Field**: `data/Brugge data/`
-- **Navier-Stokes**: `data/navier_stokes/`
-- **HW Dynamic**: `data/HW dynamic data/`
+```bash
+python examples/applications/brugge_field/run_brugge_enhanced.py
+python examples/02_navier_stokes_optimal_forecasting.py
+```
 
-## Дополнительная информация
+Check each script before running it on a new machine. Keep local datasets and generated outputs out of version control.
 
-- 📖 [TBMD Overview](../TBMD/docs/TBMD_OVERVIEW.md)
-- 📖 [Configuration Guide](../TBMD/docs/TBMD_CONFIGURATION.md)
-- 📖 [Core Modules](../TBMD/docs/TBMD_CORE_MODULES.md)
-- 📖 [Quick Start](../../QUICK_START_REFACTORING.md)
+## Additional Documentation
 
-## Поддержка
-
-При возникновении проблем:
-1. Проверьте версии зависимостей
-2. Убедитесь, что `PYTHONPATH` настроен правильно
-3. Обратитесь к документации модулей
-4. Создайте issue в репозитории
-
+- [Quick start](../docs/guides/quick_start.md)
+- [API reference](../docs/api/api_reference.md)
+- [Model and data guide](../docs/guides/data_and_models.md)

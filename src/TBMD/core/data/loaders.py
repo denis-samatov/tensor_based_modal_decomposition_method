@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class BaseDataLoader:
     """
-    Базовый класс для загрузки данных (Generic Loader).
+    Base class for loading tensor data.
     
     Examples:
         >>> loader = BaseDataLoader('data.h5')
@@ -35,7 +35,7 @@ class BaseDataLoader:
     ):
         """
         Args:
-            data_path: Путь к файлу данных
+            data_path: Path to the data file.
             device: Torch device
             dtype: Torch dtype
         """
@@ -44,7 +44,7 @@ class BaseDataLoader:
         self.dtype = dtype
         
         if not self.data_path.exists():
-            raise FileNotFoundError(f"Файл не найден: {self.data_path}")
+            raise FileNotFoundError(f"File not found: {self.data_path}")
     
     def load_tensor(
         self,
@@ -52,14 +52,14 @@ class BaseDataLoader:
         **kwargs
     ) -> torch.Tensor:
         """
-        Загрузить тензор из файла
+        Load a tensor from file.
         
         Args:
-            key: Ключ для HDF5 файлов
-            **kwargs: Дополнительные параметры
+            key: Key for HDF5 or NPZ files.
+            **kwargs: Additional parameters.
             
         Returns:
-            Загруженный тензор
+            Loaded tensor.
         """
         suffix = self.data_path.suffix.lower()
         
@@ -70,14 +70,14 @@ class BaseDataLoader:
         elif suffix in ['.pt', '.pth']:
             return self._load_pytorch(key, **kwargs)
         else:
-            raise ValueError(f"Неподдерживаемый формат: {suffix}")
+            raise ValueError(f"Unsupported format: {suffix}")
     
     def _load_hdf5(
         self,
         key: Optional[str] = None,
         **kwargs
     ) -> torch.Tensor:
-        """Загрузить из HDF5"""
+        """Load from HDF5."""
         try:
             import h5py
         except ImportError:
@@ -85,9 +85,9 @@ class BaseDataLoader:
 
         with h5py.File(self.data_path, 'r') as f:
             if key is None:
-                # Взять первый ключ
+                # Use the first key
                 key = list(f.keys())[0]
-                logger.info(f"Ключ не указан, используется: {key}")
+                logger.info(f"No key specified; using: {key}")
             
             data = f[key][:]
         
@@ -98,7 +98,7 @@ class BaseDataLoader:
         key: Optional[str] = None,
         **kwargs
     ) -> torch.Tensor:
-        """Загрузить из NumPy"""
+        """Load from NumPy."""
         if self.data_path.suffix == '.npz':
             data_dict = np.load(self.data_path)
             if key is None:
@@ -114,7 +114,7 @@ class BaseDataLoader:
         key: Optional[str] = None,
         **kwargs
     ) -> torch.Tensor:
-        """Загрузить из PyTorch"""
+        """Load from PyTorch."""
         data = torch.load(self.data_path, map_location=self.device)
         
         if isinstance(data, dict) and key is not None:
@@ -124,10 +124,10 @@ class BaseDataLoader:
     
     def load_metadata(self) -> Dict[str, Any]:
         """
-        Загрузить метаданные из файла
+        Load metadata from file.
         
         Returns:
-            Словарь с метаданными
+            Metadata dictionary.
         """
         metadata = {
             'path': str(self.data_path),
@@ -142,7 +142,7 @@ class BaseDataLoader:
                 import h5py
                 with h5py.File(self.data_path, 'r') as f:
                     metadata['keys'] = list(f.keys())
-                    # Размеры первого dataset
+                    # Shape of the first dataset
                     if metadata['keys']:
                         first_key = metadata['keys'][0]
                         metadata['shape'] = f[first_key].shape
@@ -159,13 +159,13 @@ class BaseDataLoader:
 
 class HDF5Loader(BaseDataLoader):
     """
-    Специализированный загрузчик для HDF5
+    Specialized loader for HDF5 files.
     
-    Поддерживает дополнительные функции для HDF5 файлов
+    Provides convenience methods for HDF5 files.
     """
     
     def list_keys(self) -> List[str]:
-        """Получить список всех ключей в HDF5 файле"""
+        """Return all keys in the HDF5 file."""
         try:
             import h5py
         except ImportError:
@@ -179,13 +179,13 @@ class HDF5Loader(BaseDataLoader):
         keys: List[str]
     ) -> Dict[str, torch.Tensor]:
         """
-        Загрузить несколько тензоров
+        Load multiple tensors.
         
         Args:
-            keys: Список ключей
+            keys: Keys to load.
             
         Returns:
-            Словарь {key: tensor}
+            Dictionary mapping keys to tensors.
         """
         try:
             import h5py
@@ -210,14 +210,14 @@ class HDF5Loader(BaseDataLoader):
         slices: tuple
     ) -> torch.Tensor:
         """
-        Загрузить срез данных (эффективно для больших файлов)
+        Load a slice of data efficiently for large files.
         
         Args:
-            key: Ключ dataset
-            slices: Tuple срезов, например (slice(0, 100), slice(0, 50))
+            key: Dataset key.
+            slices: Tuple of slices, for example (slice(0, 100), slice(0, 50)).
             
         Returns:
-            Срез данных
+            Data slice.
         """
         try:
             import h5py
@@ -232,7 +232,7 @@ class HDF5Loader(BaseDataLoader):
 
 class TensorDataLoader:
     """
-    Загрузчик для тензорных данных с pre-processing
+    Loader for tensor data with optional preprocessing.
     
     Examples:
         >>> loader = TensorDataLoader('data.h5')
@@ -259,16 +259,16 @@ class TensorDataLoader:
         **kwargs
     ) -> tuple:
         """
-        Загрузить тензор с предобработкой
+        Load a tensor with preprocessing.
         
         Args:
-            key: Ключ для HDF5
-            normalize: Нормализовать к [0, 1]
-            remove_mean: Удалить среднее
-            remove_trend: Удалить тренд
+            key: HDF5 key.
+            normalize: Normalize to [0, 1].
+            remove_mean: Remove the mean along the last dimension.
+            remove_trend: Remove a linear trend along the last dimension.
             
         Returns:
-            (tensor, metadata) где metadata содержит параметры обработки
+            (tensor, metadata), where metadata contains preprocessing parameters.
         """
         tensor = self.loader.load_tensor(key, **kwargs)
         metadata = {}
@@ -279,16 +279,16 @@ class TensorDataLoader:
             metadata['mean'] = mean
         
         if remove_trend:
-            # Простое удаление линейного тренда
+            # Simple linear detrending
             T = tensor.shape[-1]
             t = torch.linspace(0, 1, T, device=tensor.device)
             
-            # Для каждой временной серии
+            # For each time series
             original_shape = tensor.shape
             tensor_2d = tensor.reshape(-1, T)
             
             for i in range(tensor_2d.shape[0]):
-                # Линейная регрессия
+                # Linear regression
                 A = torch.stack([t, torch.ones_like(t)], dim=1)
                 coeffs = torch.linalg.lstsq(A, tensor_2d[i]).solution
                 trend = A @ coeffs

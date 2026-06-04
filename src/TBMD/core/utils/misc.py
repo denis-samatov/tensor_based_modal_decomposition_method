@@ -1,8 +1,4 @@
-"""
-TBMD Utility Functions
-
-Централизованный модуль вспомогательных функций для TBMD проекта.
-"""
+"""Centralized helper functions for the TBMD project."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -434,18 +430,18 @@ def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
 
 def set_seed(seed: int) -> None:
     """
-    Установить seed для воспроизводимости результатов.
+    Set seeds for reproducible results.
     
-    Устанавливает seed для:
+    Sets seeds for:
     - NumPy
-    - PyTorch (CPU и CUDA)
+    - PyTorch (CPU and CUDA)
     - Python random
     - TensorLy
     
     Parameters
     ----------
     seed : int
-        Значение seed для всех генераторов случайных чисел.
+        Seed value for all random number generators.
     """
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -459,7 +455,7 @@ def set_seed(seed: int) -> None:
     try:
         tl.set_random_state(seed)
     except:
-        pass  # TensorLy может не поддерживать set_random_state
+        pass  # TensorLy may not support set_random_state
 
 
 def compute_reconstruction_metrics(
@@ -467,38 +463,38 @@ def compute_reconstruction_metrics(
     reconstructed_field: Union[np.ndarray, torch.Tensor]
 ) -> Dict[str, float]:
     """
-    Вычислить метрики качества реконструкции.
+    Compute reconstruction quality metrics.
     
-    Вычисляет:
+    Computes:
     - RMSE (Root Mean Square Error)
     - SSIM (Structural Similarity Index)
-    - Relative Error (нормированная ошибка)
+    - Relative Error (normalized error)
     
     Parameters
     ----------
     true_field : array_like
-        Истинное поле
+        Reference field.
     reconstructed_field : array_like
-        Реконструированное поле
+        Reconstructed field.
         
     Returns
     -------
     Dict[str, float]
-        Словарь с метриками:
+        Dictionary with metrics:
         - 'rmse': Root Mean Square Error
         - 'ssim': Structural Similarity Index
-        - 'relative_error': Относительная ошибка (||true - recon|| / ||true||)
+        - 'relative_error': Relative error (||true - recon|| / ||true||)
         - 'mse': Mean Square Error
     """
-    # Импортировать compute_metrics из metrics.py
+    # Import compute_metrics from metrics.py
     try:
         from TBMD.core.metrics.metrics import compute_metrics
     except ImportError:
-        # Fallback: простая реализация без SSIM
+        # Fallback: simple implementation without SSIM
         true_t = torch.from_numpy(true_field) if isinstance(true_field, np.ndarray) else true_field
         recon_t = torch.from_numpy(reconstructed_field) if isinstance(reconstructed_field, np.ndarray) else reconstructed_field
         
-        # Убедиться, что на CPU и в numpy для совместимости
+        # Ensure CPU NumPy arrays for compatibility
         if isinstance(true_t, torch.Tensor):
             true_np = true_t.cpu().numpy()
         else:
@@ -509,7 +505,7 @@ def compute_reconstruction_metrics(
         else:
             recon_np = recon_t
         
-        # Выровнять формы
+        # Align shapes
         true_flat = true_np.flatten()
         recon_flat = recon_np.flatten()
         
@@ -517,7 +513,7 @@ def compute_reconstruction_metrics(
         rmse = float(np.sqrt(mse))
         relative_error = float(np.linalg.norm(true_flat - recon_flat) / np.linalg.norm(true_flat))
         
-        # Простой SSIM (упрощенный)
+        # Simple SSIM approximation
         ssim = 1.0 - min(relative_error, 1.0)
         
         return {
@@ -527,13 +523,13 @@ def compute_reconstruction_metrics(
             'relative_error': relative_error
         }
     
-    # Использовать полную реализацию из metrics.py
+    # Use the full implementation from metrics.py
     true_np = true_field.cpu().numpy() if isinstance(true_field, torch.Tensor) else np.asarray(true_field)
     recon_np = reconstructed_field.cpu().numpy() if isinstance(reconstructed_field, torch.Tensor) else np.asarray(reconstructed_field)
     
     err_norm, mse, ssim_val, psnr = compute_metrics(true_np, recon_np)
     
-    # Вычислить RMSE
+    # Compute RMSE
     rmse = float(np.sqrt(mse))
     
     return {

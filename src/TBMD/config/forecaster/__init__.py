@@ -1,6 +1,4 @@
-"""
-Конфигурация для forecaster моделей
-"""
+"""Configuration objects for forecasting models."""
 from dataclasses import dataclass, field
 from typing import Literal, Optional, List
 from ..base import BaseConfig
@@ -8,23 +6,23 @@ from ..base import BaseConfig
 
 @dataclass
 class ForecasterConfig(BaseConfig):
-    """Базовая конфигурация для forecaster моделей"""
+    """Base configuration for forecasting models."""
     
-    # Архитектура
+    # Architecture
     model_type: Literal['linear', 'mlp', 'lstm', 'transformer'] = 'lstm'
-    in_dim: Optional[int] = None  # Входная размерность (устанавливается при инициализации)
-    out_dim: Optional[int] = None  # Выходная размерность (устанавливается при инициализации)
+    in_dim: Optional[int] = None  # Input dimension set during initialization
+    out_dim: Optional[int] = None  # Output dimension set during initialization
     hidden_size: int = 64
     num_layers: int = 2
     dropout: float = 0.1
-    seq_length: int = 5  # Для LSTM/Transformer
+    seq_length: int = 5  # For LSTM/Transformer
     
-    # Оптимизация
+    # Optimization
     learning_rate: float = 0.001
     weight_decay: float = 1e-5
     optimizer: Literal['adam', 'sgd', 'adamw'] = 'adam'
     
-    # Обучение
+    # Training
     num_epochs: int = 300
     batch_size: int = 32
     val_split: float = 0.2
@@ -43,72 +41,71 @@ class ForecasterConfig(BaseConfig):
         self._validate()
     
     def _validate(self):
-        """Валидация параметров"""
+        """Validate parameter ranges."""
         if self.hidden_size <= 0:
-            raise ValueError("hidden_size должен быть положительным")
+            raise ValueError("hidden_size must be positive")
         
         if self.num_layers <= 0:
-            raise ValueError("num_layers должен быть положительным")
+            raise ValueError("num_layers must be positive")
         
         if not 0 <= self.dropout <= 1:
-            raise ValueError("dropout должен быть в диапазоне [0, 1]")
+            raise ValueError("dropout must be in the range [0, 1]")
         
         if self.learning_rate <= 0:
-            raise ValueError("learning_rate должен быть положительным")
+            raise ValueError("learning_rate must be positive")
         
         if not 0 < self.val_split < 1:
-            raise ValueError("val_split должен быть в диапазоне (0, 1)")
+            raise ValueError("val_split must be in the range (0, 1)")
 
 
 @dataclass
 class LinearForecasterConfig(ForecasterConfig):
-    """Конфигурация для Linear forecaster"""
+    """Configuration for the linear forecaster."""
     model_type: Literal['linear'] = 'linear'
     
-    # Linear не использует эти параметры
-    hidden_size: int = 0  # Не используется
-    num_layers: int = 0  # Не используется
-    dropout: float = 0.0  # Не используется
-    seq_length: int = 1  # Linear работает с одним шагом
+    # Linear models do not use these parameters
+    hidden_size: int = 0
+    num_layers: int = 0
+    dropout: float = 0.0
+    seq_length: int = 1
     
-    # Упрощенное обучение для линейной модели
-    num_epochs: int = 1  # Обучается за одну итерацию (pseudoinverse)
-    early_stopping_patience: int = 0  # Не используется
+    # Simplified training for the linear model
+    num_epochs: int = 1
+    early_stopping_patience: int = 0
     
     def _validate(self):
-        """Переопределить валидацию - для linear модели не проверяем hidden_size"""
-        # Linear модель не использует большинство параметров, skip validation
+        """Skip neural-network-specific validation for the linear model."""
         pass
 
 
 @dataclass
 class MLPForecasterConfig(ForecasterConfig):
-    """Конфигурация для MLP forecaster"""
+    """Configuration for the MLP forecaster."""
     model_type: Literal['mlp'] = 'mlp'
     
-    # MLP использует больший hidden size и больше эпох
+    # MLP defaults
     hidden_size: int = 256
     num_layers: int = 2
     dropout: float = 0.3
-    seq_length: int = 1  # MLP работает с одним состоянием
+    seq_length: int = 1
     
-    # MLP требует больше эпох для сходимости
+    # MLP usually needs more epochs to converge
     num_epochs: int = 500
     early_stopping_patience: int = 20
 
 
 @dataclass
 class LSTMForecasterConfig(ForecasterConfig):
-    """Конфигурация для LSTM forecaster"""
+    """Configuration for the LSTM forecaster."""
     model_type: Literal['lstm'] = 'lstm'
     
-    # LSTM параметры
+    # LSTM parameters
     hidden_size: int = 64
     num_layers: int = 1
-    dropout: float = 0.0  # Применяется только если num_layers > 1
+    dropout: float = 0.0  # Applied only when num_layers > 1
     seq_length: int = 5
     
-    # LSTM обучение
+    # LSTM training
     num_epochs: int = 300
     early_stopping_patience: int = 20
     
@@ -255,17 +252,17 @@ class MultiResolutionTBMDConfig(BaseConfig):
         self._validate()
 
 
-# Для обратной совместимости с DigitalTwinConfig
+# Backward compatibility with DigitalTwinConfig
 def create_forecaster_config_from_dict(config_dict: dict, model_type: str = 'lstm') -> ForecasterConfig:
     """
-    Создать ForecasterConfig из словаря (для совместимости с DigitalTwinConfig.forecaster_config)
+    Create a ForecasterConfig from a dictionary.
     
     Args:
-        config_dict: Словарь параметров
-        model_type: Тип модели ('linear', 'mlp', 'lstm')
+        config_dict: Parameter dictionary.
+        model_type: Model type ('linear', 'mlp', 'lstm').
     
     Returns:
-        Соответствующий ForecasterConfig
+        Matching ForecasterConfig instance.
     """
     if model_type == 'linear':
         return LinearForecasterConfig(**config_dict)

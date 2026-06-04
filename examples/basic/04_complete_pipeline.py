@@ -2,7 +2,7 @@
 """
 Complete TBMD Pipeline Example
 
-Полный pipeline: декомпозиция -> размещение -> реконструкция
+Complete pipeline: decomposition -> placement -> reconstruction.
 """
 import torch
 import numpy as np
@@ -31,57 +31,56 @@ def parse_args():
     return parser.parse_args()
 
 def create_synthetic_reservoir_data(I=200, J=3, T=50, seed=42):
-    """
-    Создать синтетические данные месторождения
+    """Create synthetic reservoir data.
     
     Variables:
-    - J=0: Давление (pressure)
-    - J=1: Насыщенность нефтью (oil saturation)
-    - J=2: Температура (temperature)
+    - J=0: pressure
+    - J=1: oil saturation
+    - J=2: temperature
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
     
-    # Пространственная сетка
+    # Spatial grid.
     x = torch.linspace(0, 1, I)
     
-    # Временная сетка
+    # Time grid.
     time = torch.linspace(0, 1, T)
     
     data = torch.zeros(I, J, T)
     
-    # Давление: экспоненциальный спад с пространственной неоднородностью
-    pressure_base = 1.0 - 0.5 * x  # Градиент давления
+    # Pressure: exponential decay with spatial heterogeneity.
+    pressure_base = 1.0 - 0.5 * x  # Pressure gradient.
     for ti, t in enumerate(time):
         decay = torch.exp(-0.5 * t)
         data[:, 0, ti] = pressure_base * decay + 0.1 * torch.sin(5 * x) * decay
     
-    # Насыщенность: волновой фронт
+    # Saturation: wavefront.
     for ti, t in enumerate(time):
         wavefront = torch.sigmoid(10 * (x - 0.5 * t - 0.2))
         data[:, 1, ti] = wavefront + 0.05 * torch.sin(3 * x)
     
-    # Температура: диффузия
+    # Temperature: diffusion.
     temp_center = I // 2
     for ti, t in enumerate(time):
         spread = 0.1 + 0.3 * t
         data[:, 2, ti] = torch.exp(-((x - x[temp_center]) ** 2) / spread)
     
-    # Добавить реалистичный шум
+    # Add realistic noise.
     data += 0.02 * torch.randn_like(data)
     
-    # Нормализовать каждую переменную
+    # Normalize each variable.
     for j in range(J):
         data[:, j, :] = (data[:, j, :] - data[:, j, :].mean()) / (data[:, j, :].std() + 1e-8)
     
     return data
 
 def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
-    """Запустить полный TBMD pipeline"""
+    """Run the complete TBMD pipeline."""
     
     results = {}
     
-    # Step 1: Декомпозиция
+    # Step 1: Decomposition
     print("\n" + "=" * 60)
     print("Step 1: Tucker Decomposition")
     print("=" * 60)
@@ -97,14 +96,14 @@ def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
     
     results['decomposition'] = decomp_result
     
-    print(f"✅ Decomposition complete:")
+    print("Decomposition complete:")
     print(f"   - Spatial modes: {decomp_result.spatial_modes.shape}")
     print(f"   - Temporal modes: {decomp_result.temporal_modes.shape}")
     print(f"   - Core tensor: {decomp_result.core.shape}")
     print(f"   - Energy retained: {decomp_result.energy_retained:.2%}")
     print(f"   - Reconstruction error: {decomp_result.reconstruction_error:.4f}")
     
-    # Step 2: Размещение сенсоров
+    # Step 2: Sensor placement
     print("\n" + "=" * 60)
     print("Step 2: Sensor Placement")
     print("=" * 60)
@@ -120,12 +119,12 @@ def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
     
     results['sensors'] = sensor_result
     
-    print(f"✅ Sensor placement complete:")
+    print("Sensor placement complete:")
     print(f"   - Number of sensors: {len(sensor_result.sensor_indices)}")
     print(f"   - Coverage score: {sensor_result.coverage_score:.4f}")
     print(f"   - Measurement matrix: {sensor_result.measurement_matrix.shape}")
     
-    # Step 3: Реконструкция
+    # Step 3: Reconstruction
     print("\n" + "=" * 60)
     print("Step 3: Field Reconstruction")
     print("=" * 60)
@@ -140,7 +139,7 @@ def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
     
     reconstructor = TensorCompressiveSensing(recon_config)
     
-    # Реконструировать все временные шаги
+    # Reconstruct every time step.
     I, J, T = data.shape
     reconstructed_data = torch.zeros_like(data)
     reconstruction_errors = []
@@ -168,13 +167,13 @@ def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
         'std_error': np.std(reconstruction_errors)
     }
     
-    print(f"✅ Reconstruction complete:")
+    print("Reconstruction complete:")
     print(f"   - Mean error: {results['reconstruction']['mean_error']:.4f}")
     print(f"   - Std error: {results['reconstruction']['std_error']:.4f}")
     print(f"   - Min error: {min(reconstruction_errors):.4f}")
     print(f"   - Max error: {max(reconstruction_errors):.4f}")
     
-    # Step 4: Анализ
+    # Step 4: Analysis
     print("\n" + "=" * 60)
     print("Step 4: Analysis")
     print("=" * 60)
@@ -187,18 +186,18 @@ def run_tbmd_pipeline(data, n_modes, n_sensors, solver='admm'):
     
     sensing_ratio = n_sensors / (I * J)
     
-    print(f"📊 Compression Analysis:")
+    print("Compression analysis:")
     print(f"   - Original size: {I * J * T} elements")
     print(f"   - Compressed size: {decomp_result.spatial_modes.numel() + decomp_result.temporal_modes.numel() + decomp_result.core.numel()} elements")
     print(f"   - Compression ratio: {compression_ratio:.2f}x")
-    print(f"\n📊 Sensing Analysis:")
+    print("\nSensing analysis:")
     print(f"   - Sensors needed: {n_sensors} / {I * J} = {sensing_ratio:.2%}")
     print(f"   - Data reduction: {(1 - sensing_ratio) * 100:.1f}%")
     
     return results
 
 def visualize_results(data, results, args):
-    """Создать визуализацию результатов"""
+    """Create result visualizations."""
     
     I, J, T = data.shape
     decomp = results['decomposition']
@@ -208,7 +207,7 @@ def visualize_results(data, results, args):
     fig = plt.figure(figsize=(20, 12))
     gs = fig.add_gridspec(4, 4, hspace=0.35, wspace=0.35)
     
-    # Row 1: Первые 3 пространственные моды
+    # Row 1: first 3 spatial modes.
     for i in range(3):
         ax = fig.add_subplot(gs[0, i])
         mode = decomp.spatial_modes[:, i].reshape(I, J).mean(dim=1)
@@ -217,7 +216,7 @@ def visualize_results(data, results, args):
         ax.set_xlabel('Spatial Points')
         ax.grid(True, alpha=0.3)
     
-    # Row 1, Col 4: Энергия мод
+    # Row 1, Col 4: mode energy.
     ax = fig.add_subplot(gs[0, 3])
     mode_energies = torch.norm(decomp.spatial_modes, dim=0)[:15]
     ax.bar(range(len(mode_energies)), mode_energies.numpy())
@@ -226,7 +225,7 @@ def visualize_results(data, results, args):
     ax.set_ylabel('Energy')
     ax.grid(True, alpha=0.3, axis='y')
     
-    # Row 2: Размещение сенсоров по переменным
+    # Row 2: sensor placement by variable.
     sensor_indices = sensors.sensor_indices
     sensor_i = sensor_indices // J
     sensor_j = sensor_indices % J
@@ -240,7 +239,7 @@ def visualize_results(data, results, args):
         ax.set_ylabel('Count')
         ax.grid(True, alpha=0.3)
     
-    # Row 2, Col 4: Coverage score
+    # Row 2, Col 4: coverage score.
     ax = fig.add_subplot(gs[1, 3])
     ax.text(0.5, 0.5, f"Coverage Score\n{sensors.coverage_score:.4f}\n\n"
                       f"Sensors: {len(sensor_indices)}\n"
@@ -249,14 +248,14 @@ def visualize_results(data, results, args):
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     ax.axis('off')
     
-    # Row 3: Реконструкция vs Original
+    # Row 3: reconstruction vs original.
     t_sample = T // 2
     for j in range(3):
         ax = fig.add_subplot(gs[2, j])
         ax.plot(data[:, j, t_sample].numpy(), label='Original', linewidth=2)
         ax.plot(recon['data'][:, j, t_sample].numpy(), 
                label='Reconstructed', linestyle='--', linewidth=2)
-        # Отметить сенсоры
+        # Mark sensors.
         var_sensors = sensor_i[sensor_j == j]
         if len(var_sensors) > 0:
             ax.scatter(var_sensors.numpy(), 
@@ -267,7 +266,7 @@ def visualize_results(data, results, args):
         ax.legend()
         ax.grid(True, alpha=0.3)
     
-    # Row 3, Col 4: Ошибка реконструкции во времени
+    # Row 3, Col 4: reconstruction error over time.
     ax = fig.add_subplot(gs[2, 3])
     ax.plot(recon['errors'], linewidth=2)
     ax.axhline(y=recon['mean_error'], color='red', linestyle='--', 
@@ -282,7 +281,7 @@ def visualize_results(data, results, args):
     ax.legend()
     ax.grid(True, alpha=0.3)
     
-    # Row 4: Heatmaps для одной переменной
+    # Row 4: heatmaps for one variable.
     var_idx = 0
     for idx, (data_slice, title) in enumerate([
         (data[:, var_idx, :], 'Original (Variable 0)'),
@@ -305,7 +304,7 @@ def visualize_results(data, results, args):
     
     filename = f'tbmd_complete_pipeline_{args.n_modes}modes_{args.n_sensors}sensors.png'
     plt.savefig(filename, dpi=150, bbox_inches='tight')
-    print(f"\n✅ Visualization saved: {filename}")
+    print(f"\nVisualization saved: {filename}")
 
 def main():
     args = parse_args()
@@ -318,29 +317,28 @@ def main():
     print(f"  - Sensors: {args.n_sensors}")
     print(f"  - Solver: {args.solver}")
     
-    # Создать данные
+    # Create data.
     print("\nGenerating synthetic reservoir data...")
     data = create_synthetic_reservoir_data()
     I, J, T = data.shape
-    print(f"✅ Data generated: {data.shape}")
+    print(f"Data generated: {data.shape}")
     print(f"   - Spatial points: {I}")
     print(f"   - Variables: {J} (pressure, oil saturation, temperature)")
     print(f"   - Time steps: {T}")
     
-    # Запустить pipeline
+    # Run pipeline.
     results = run_tbmd_pipeline(data, args.n_modes, args.n_sensors, args.solver)
     
-    # Визуализация
+    # Visualization.
     if args.visualize:
         print("\nCreating visualization...")
         visualize_results(data, results, args)
     
     print("\n" + "=" * 60)
-    print("✅ TBMD Complete Pipeline завершен успешно!")
+    print("TBMD Complete Pipeline completed successfully.")
     print("=" * 60)
     
     return results
 
 if __name__ == '__main__':
     main()
-

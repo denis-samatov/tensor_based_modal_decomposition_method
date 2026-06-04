@@ -1,14 +1,13 @@
-"""
-Digital Twin для мониторинга и прогнозирования месторождений
+"""Digital twin support for reservoir monitoring and forecasting.
 
-Объединяет TBMD с прогнозными моделями для создания цифрового двойника.
+This module combines TBMD with forecasting models to create a digital twin.
 
-Полный workflow:
-1. Tucker Decomposition → cores + factors
-2. Modal Tensor Processing → A_tensor (modal basis)
-3. QR Factorization → sensor placement (P matrix)
-4. Compressive Sensing → reconstruction from sparse sensors
-5. Forecasting → предсказание следующих состояний (Linear/MLP/LSTM)
+Complete workflow:
+1. Tucker Decomposition -> cores + factors
+2. Modal Tensor Processing -> A_tensor (modal basis)
+3. QR Factorization -> sensor placement (P matrix)
+4. Compressive Sensing -> reconstruction from sparse sensors
+5. Forecasting -> next-state prediction (Linear/MLP/LSTM)
 """
 import torch
 import numpy as np
@@ -39,7 +38,7 @@ from TBMD.core.forecasting.LinearForecaster import LinearForecaster
 from TBMD.core.forecasting.MLPForecaster import MLPForecaster
 from TBMD.core.forecasting.LSTMForecaster import LSTMForecaster
 
-# Reservoir Proxy Models (как в system.py)
+# Reservoir proxy models
 from TBMD.core.forecasting.ReservoirProxyModel import (
     ReservoirProxyModelBase,
     LinearDynamicsProxyModel,
@@ -63,22 +62,18 @@ logger = logging.getLogger(__name__)
 
 
 class ForecasterType(Enum):
-    """Типы прогнозных моделей для модальных коэффициентов"""
+    """Forecasting model types for modal coefficients."""
     LINEAR = "linear"
     MLP = "mlp"
     LSTM = "lstm"
-    PERSISTENCE = "persistence"  # Просто повторяет текущее состояние
+    PERSISTENCE = "persistence"  # Repeats the current state.
 
 
 class ProxyModelType(Enum):
-    """
-    Типы proxy-моделей для физического прогнозирования резервуара.
-    
-    Как в system.py - для сценарного анализа с well controls.
-    """
+    """Proxy model types for physics-oriented reservoir forecasting."""
     LINEAR_DYNAMICS = "linear_dynamics"   # x(t+1) = A @ x(t) + B @ u(t)
     NEURAL = "neural"                     # Neural network proxy
-    PHYSICS_INFORMED = "physics_informed" # С физическими ограничениями
+    PHYSICS_INFORMED = "physics_informed" # Uses physical constraints
 
 
 # Type alias for ranks
@@ -89,16 +84,15 @@ RanksType = UnionType[int, list]
 
 @dataclass
 class DigitalTwinState:
-    """
-    Текущее состояние цифрового двойника
+    """Current digital twin state.
     
     Attributes:
-        current_time: Текущее время
-        modal_coefficients: Текущие модальные коэффициенты
-        prediction_error: Ошибка прогнозирования
-        is_calibrated: Откалиброван ли twin
-        alert_status: Статус алерта ('normal', 'warning', 'critical')
-        history: История измерений и прогнозов
+        current_time: Current time.
+        modal_coefficients: Current modal coefficients.
+        prediction_error: Prediction error.
+        is_calibrated: Whether the twin has been calibrated.
+        alert_status: Alert status ('normal', 'warning', 'critical').
+        history: Measurement and forecast history.
     """
     current_time: float = 0.0
     modal_coefficients: Optional[torch.Tensor] = None
@@ -114,15 +108,14 @@ class DigitalTwinState:
 
 
 class DigitalTwin:
-    """
-    Цифровой двойник месторождения с TBMD
+    """Reservoir digital twin built on TBMD.
     
-    Объединяет:
-    1. TBMD декомпозицию для снижения размерности
-    2. Оптимальное размещение сенсоров
-    3. Реконструкцию полных полей по измерениям
-    4. Прогнозирование будущих состояний
-    5. Мониторинг и детекцию аномалий
+    Combines:
+    1. TBMD decomposition for dimensionality reduction.
+    2. Optimal sensor placement.
+    3. Full-field reconstruction from measurements.
+    4. Future-state forecasting.
+    5. Monitoring and anomaly detection.
     
     Examples:
         >>> config = DigitalTwinConfig(
@@ -137,41 +130,41 @@ class DigitalTwin:
     def __init__(self, config: DigitalTwinConfig):
         """
         Args:
-            config: Конфигурация цифрового двойника
+            config: Digital twin configuration.
         """
         self.config = config
         self.device = torch.device(config.device)
         self.dtype = getattr(torch, config.dtype)
         
-        # Состояние
+        # State
         self.state = DigitalTwinState()
         
-        # Компоненты TBMD
+        # TBMD components
         self.decomposer = None
         self.sensor_placer = None
         self.reconstructor = None
         
-        # Forecaster (прогнозная модель для модальных коэффициентов)
+        # Forecaster for modal coefficients
         self.forecaster = None
         self.forecaster_type = ForecasterType(config.forecaster_type) if hasattr(config, 'forecaster_type') else ForecasterType.PERSISTENCE
-        self._modal_history = None  # История модальных коэффициентов для обучения forecaster
+        self._modal_history = None  # Modal coefficient history for forecaster training
         
-        # Proxy Model (для сценарного анализа с well controls, как в system.py)
+        # Proxy model for scenario analysis with well controls
         self.proxy_model: Optional[ReservoirProxyModelBase] = None
-        # Проверяем на None перед преобразованием в enum
+        # Check for None before enum conversion
         _proxy_type = getattr(config, 'proxy_model_type', None)
         self.proxy_model_type = ProxyModelType(_proxy_type) if _proxy_type is not None else None
         self._spatial_shape: Optional[Tuple[int, ...]] = None
         
-        # Обученные параметры
+        # Trained parameters
         self.spatial_modes = None
         self.temporal_modes = None
         self.core_tensor = None
-        self.sensor_mask = None          # Boolean mask на пространственной сетке
-        self.sensor_indices = None       # Линейные индексы сенсоров
-        self.measurement_matrix = None   # Совместимый с CS формат маски
+        self.sensor_mask = None          # Boolean mask on the spatial grid
+        self.sensor_indices = None       # Linear sensor indices
+        self.measurement_matrix = None   # Sensor mask in a CS-compatible format
         
-        # Статистика
+        # Statistics
         self.mean = None
         self.std = None
         
@@ -179,31 +172,30 @@ class DigitalTwin:
         self.monitor = None
         
         if config.verbose:
-            logger.info(f"Digital Twin инициализирован: {config.n_spatial_modes} мод, {config.n_sensors} сенсоров")
+            logger.info(f"Digital Twin initialized: {config.n_spatial_modes} modes, {config.n_sensors} sensors")
     
     def _validate_tensor_shape(self, tensor: torch.Tensor, expected_dims: int, param_name: str):
-        """
-        Валидировать форму входного тензора.
+        """Validate an input tensor shape.
         
         Args:
-            tensor: Тензор для проверки
-            expected_dims: Ожидаемое количество размерностей
-            param_name: Название параметра для сообщения об ошибке
+            tensor: Tensor to validate.
+            expected_dims: Expected number of dimensions.
+            param_name: Parameter name used in error messages.
             
         Raises:
-            ValueError: Если форма неправильная
+            ValueError: If the tensor shape or values are invalid.
         """
         if tensor.ndim != expected_dims:
             raise ValueError(
-                f"{param_name} должен иметь {expected_dims} размерностей, "
-                f"получено {tensor.ndim} с формой {tensor.shape}"
+                f"{param_name} must have {expected_dims} dimensions, "
+                f"got {tensor.ndim} with shape {tensor.shape}"
             )
         
         if not torch.isfinite(tensor).all():
-            raise ValueError(f"{param_name} содержит NaN или Inf значения")
+            raise ValueError(f"{param_name} contains NaN or Inf values")
         
         if tensor.numel() == 0:
-            raise ValueError(f"{param_name} не может быть пустым")
+            raise ValueError(f"{param_name} cannot be empty")
     
     def train(
         self,
@@ -211,25 +203,23 @@ class DigitalTwin:
         normalize: bool = False,
         ranks: Optional[RanksType] = None
     ):
-        """
-        Обучить digital twin на исторических данных
+        """Train the digital twin on historical data.
         
-        Правильная последовательность (как в new_tbmd.ipynb):
-        1. Tucker Decomposition с config → cores + factors
-        2. Modal Tensor Processing → A_tensor
-        3. QR Factorization с config → sensor placement
+        Expected sequence:
+        1. Tucker Decomposition with config -> cores + factors
+        2. Modal Tensor Processing -> A_tensor
+        3. QR Factorization with config -> sensor placement
         
         Args:
-            historical_data: Исторические данные - torch.Tensor (любой размерности)
-                            или Dict[str, torch.Tensor] для нескольких subjects
-            normalize: Нормализовать данные внутри метода (по умолчанию False).
-                       Если данные уже нормализованы извне, оставьте False.
-            ranks: Ranks для Tucker decomposition. Если None, автоматически
-                   создаётся [n_spatial_modes, n_temporal_modes] или 
-                   используется размерность данных
+            historical_data: Historical data as a torch.Tensor of arbitrary
+                dimensionality or a dict of named tensors for multiple subjects.
+            normalize: Normalize data inside the method. Keep False when data
+                has already been normalized externally.
+            ranks: Tucker decomposition ranks. If None, ranks are derived from
+                configuration and data dimensions.
         """
-        # Обработка входных данных
-        # Сброс статистики нормализации (нормализуйте данные заранее, если нужно)
+        # Input conversion
+        # Reset normalization statistics. Normalize data before calling this method if needed.
         self.mean, self.std = None, None
         if isinstance(historical_data, dict):
             data_dict = {
@@ -240,30 +230,30 @@ class DigitalTwin:
             historical_data = to_torch_tensor(historical_data, device=self.device, dtype=self.dtype)
             data_dict = {"train": historical_data}
         
-        # Все тензоры должны иметь одинаковую форму
+        # All tensors must have the same shape.
         shapes = {v.shape for v in data_dict.values()}
         if len(shapes) != 1:
-            raise ValueError(f"Все тензоры должны иметь одинаковую форму, получены формы: {shapes}")
+            raise ValueError(f"All tensors must have the same shape, got: {shapes}")
         
         sample_tensor = next(iter(data_dict.values()))
         
-        # Валидация входных данных
+        # Input validation
         if sample_tensor.ndim < 3:
             raise ValueError(
-                f"historical_data должен иметь как минимум 3 размерности (spatial_dims..., time), "
-                f"получено {sample_tensor.ndim}"
+                f"historical_data must have at least 3 dimensions (spatial_dims..., time), "
+                f"got {sample_tensor.ndim}"
             )
         
         self._original_ndim = sample_tensor.ndim
         self._spatial_shape = sample_tensor.shape[:-1]
         
         if self.config.verbose:
-            logger.info(f"Начало обучения Digital Twin на данных формы {sample_tensor.shape}")
+            logger.info(f"Starting Digital Twin training on data with shape {sample_tensor.shape}")
         
         # ========================================================================
-        # Step 1: TBMD Tucker Декомпозиция (как в new_tbmd.ipynb)
+        # Step 1: TBMD Tucker decomposition
         # ========================================================================
-        # Определить ranks
+        # Determine ranks.
         if ranks is not None:
             effective_ranks = ranks if isinstance(ranks, list) else [ranks] * sample_tensor.ndim
         else:
@@ -275,7 +265,7 @@ class DigitalTwin:
                     min(self.config.n_temporal_modes, sample_tensor.shape[2])
                 ]
             else:
-                # Для 4D+ данных: первые N-1 = spatial, последний = temporal
+                # For 4D+ data, the first N-1 dimensions are spatial and the last is temporal.
                 effective_ranks = [
                     min(self.config.n_spatial_modes, sample_tensor.shape[i])
                     for i in range(sample_tensor.ndim - 1)
@@ -289,7 +279,7 @@ class DigitalTwin:
             dtype=self.config.dtype
         )
         
-        # Создать decomposer с config (как в new_tbmd.ipynb)
+        # Create decomposer with config.
         self.decomposer = TuckerDecomposer(
             tensors=data_dict,
             device=self.config.device,
@@ -298,15 +288,15 @@ class DigitalTwin:
         
         self.decomposer.decompose()
         
-        # Извлечь cores и factors
+        # Extract cores and factors.
         cores = self.decomposer.cores
         factors = self.decomposer.factors
         
         if self.config.verbose:
-            logger.info(f"✅ Декомпозиция завершена, ranks={effective_ranks}")
+            logger.info(f"Decomposition complete, ranks={effective_ranks}")
         
         # ========================================================================
-        # Step 2: Modal Tensor Processing (как в new_tbmd.ipynb)
+        # Step 2: Modal tensor processing
         # ========================================================================
         modal_config = ModalProcessorConfig(
             device=self.config.device,
@@ -318,33 +308,33 @@ class DigitalTwin:
         batch_processor = BatchModalProcessor(modal_config)
         stacker = ModalTensorStacker(modal_config)
         
-        # Вычислить modal tensors
+        # Compute modal tensors.
         modal_tensors = batch_processor.process_multiple_subjects(cores, factors)
         
-        # Сложить в A_tensor (время‑инвариантные моды)
+        # Stack into A_tensor (time-invariant modes).
         A_tensor = stacker.stack_modal_tensors(modal_tensors)
         
-        # Сохранить для использования
+        # Store for later use.
         self.spatial_modes = A_tensor  # Modal basis
         self.core_tensor = cores
         self.temporal_modes = factors
-        # Количество мод = последняя размерность A_tensor
+        # Number of modes equals the last A_tensor dimension.
         modal_dim = A_tensor.shape[-1]
-        # Автоподстройка числа сенсоров, чтобы не решать недоопределённую задачу CS
+        # Adjust the sensor count to avoid an underdetermined CS problem.
         max_sensors = int(np.prod(self._spatial_shape))
         if self.config.n_sensors < modal_dim:
             adjusted = min(modal_dim, max_sensors)
             logger.warning(
-                f"n_sensors={self.config.n_sensors} меньше числа мод {modal_dim}; "
-                f"устанавливаю n_sensors={adjusted} для устойчивой реконструкции."
+                f"n_sensors={self.config.n_sensors} is smaller than the number of modes {modal_dim}; "
+                f"setting n_sensors={adjusted} for stable reconstruction."
             )
             self.config.n_sensors = adjusted
         
         if self.config.verbose:
-            logger.info(f"✅ Modal tensor вычислен: {A_tensor.shape}")
+            logger.info(f"Modal tensor computed: {A_tensor.shape}")
         
         # ========================================================================
-        # Step 3: Размещение сенсоров через QR с config (как в new_tbmd.ipynb)
+        # Step 3: Sensor placement through QR factorization
         # ========================================================================
         sensor_config = SensorPlacementConfig(
             n_sensors=self.config.n_sensors,
@@ -361,25 +351,25 @@ class DigitalTwin:
         )
         
         if self.config.verbose:
-            logger.info("Выполняется QR факторизация...")
+            logger.info("Running QR factorization...")
         
         P, Q, R = qr_decomposer.factorize()
         
-        # Проверка
+        # Validation
         is_valid, error, metrics = qr_decomposer.check_factorization()
         
         if self.config.verbose:
-            logger.info(f"✅ QR факторизация: valid={is_valid}, error={error:.2e}")
+            logger.info(f"QR factorization: valid={is_valid}, error={error:.2e}")
             logger.info(f"   Orthogonality deviation: {metrics['orthogonality_deviation']:.2e}")
             logger.info(f"   Sensors placed: {metrics['sensor_count']}/{qr_decomposer.N}")
         
-        # Сохранить результаты
+        # Store results.
         self.sensor_mask = P.bool()
         self.sensor_indices = torch.nonzero(self.sensor_mask.reshape(-1), as_tuple=False).squeeze(-1)
         self.measurement_matrix = self.sensor_mask
         
         # ========================================================================
-        # Step 4: Обучение прогнозной модели (Forecaster)
+        # Step 4: Forecasting model training
         # ========================================================================
         # Prepare summary
         summary = {
@@ -401,7 +391,7 @@ class DigitalTwin:
         self.state.current_time = 0.0
 
         if self.config.verbose:
-            logger.info("✅ Digital Twin обучен успешно")
+            logger.info("Digital Twin trained successfully")
             
         return summary
     
@@ -410,8 +400,7 @@ class DigitalTwin:
         data_dict: Dict[str, torch.Tensor],
         sample_tensor: torch.Tensor
     ) -> Dict[str, Any]:
-        """
-        Обучить прогнозную модель на модальных коэффициентах.
+        """Train the forecasting model on modal coefficients.
         
         Returns:
              Dict with training metrics
@@ -419,13 +408,13 @@ class DigitalTwin:
         metrics = {}
         if self.forecaster_type == ForecasterType.PERSISTENCE:
             if self.config.verbose:
-                logger.info("📊 Forecaster: persistence (без обучения)")
+                logger.info("Forecaster: persistence (no training)")
             return {"forecaster": "persistence"}
         
         if self.config.verbose:
-            logger.info(f"📊 Обучение forecaster ({self.forecaster_type.value})...")
+            logger.info(f"Training forecaster ({self.forecaster_type.value})...")
         
-        # Проецировать данные в модальное пространство.
+        # Project data into modal space.
         first_key = next(iter(data_dict))
         data = data_dict[first_key]
         T = data.shape[-1]
@@ -441,7 +430,7 @@ class DigitalTwin:
         n_modes = modal_history.shape[1]
         forecaster_config = getattr(self.config, 'forecaster_config', {})
         
-        # Создать и обучить forecaster
+        # Create and train the forecaster.
         if self.forecaster_type == ForecasterType.LINEAR:
             m = self._train_linear_forecaster(modal_history, forecaster_config)
             metrics.update(m)
@@ -453,7 +442,7 @@ class DigitalTwin:
             metrics.update(m)
         
         if self.config.verbose:
-            logger.info(f"✅ Forecaster ({self.forecaster_type.value}) обучен")
+            logger.info(f"Forecaster ({self.forecaster_type.value}) trained")
             
         return metrics
     
@@ -462,8 +451,8 @@ class DigitalTwin:
         modal_history: torch.Tensor,
         config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Обучить линейный forecaster: x(t+1) = A @ x(t)"""
-        # LinearForecaster работает с numpy
+        """Train a linear forecaster: x(t+1) = A @ x(t)."""
+        # LinearForecaster expects NumPy input.
         x_history = modal_history.cpu().numpy()
         
         self.forecaster = LinearForecaster(use_torch=True)
@@ -472,9 +461,9 @@ class DigitalTwin:
         if self.config.verbose:
             r2 = metrics.get('r2_score', 'N/A')
             if isinstance(r2, (int, float)):
-                logger.info(f"   Linear forecaster R²: {r2:.4f}")
+                logger.info(f"   Linear forecaster R2: {r2:.4f}")
             else:
-                logger.info(f"   Linear forecaster R²: {r2}")
+                logger.info(f"   Linear forecaster R2: {r2}")
         return metrics
     
     def _train_mlp_forecaster(
@@ -483,10 +472,10 @@ class DigitalTwin:
         n_modes: int,
         config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Обучить MLP forecaster"""
+        """Train an MLP forecaster."""
         x_history = modal_history.cpu().numpy()
         
-        # Параметры из config
+        # Parameters from config.
         hidden_dim = config.get('hidden_size', 256)
         num_layers = config.get('num_layers', 2)
         dropout = config.get('dropout', 0.3)
@@ -504,7 +493,7 @@ class DigitalTwin:
             device=self.config.device
         )
         
-        # Обучение
+        # Training
         history = self.forecaster.train(
             x_history,
             num_epochs=self.config.epochs if hasattr(self.config, 'epochs') else 300,
@@ -526,10 +515,10 @@ class DigitalTwin:
         n_modes: int,
         config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Обучить LSTM forecaster"""
+        """Train an LSTM forecaster."""
         x_history = modal_history.cpu().numpy()
         
-        # Параметры из config
+        # Parameters from config.
         hidden_dim = config.get('hidden_size', 64)
         num_layers = config.get('num_layers', 1)
         dropout = config.get('dropout', 0.0)
@@ -549,7 +538,7 @@ class DigitalTwin:
             device=self.config.device
         )
         
-        # Обучение
+        # Training
         history = self.forecaster.train(
             x_history,
             num_epochs=self.config.epochs if hasattr(self.config, 'epochs') else 300,
@@ -566,37 +555,36 @@ class DigitalTwin:
         return {"lstm_history": history, "final_loss": final_loss}
     
     def _project_to_modal_space(self, state: torch.Tensor) -> torch.Tensor:
-        """
-        Проецировать состояние на модальное пространство.
+        """Project a state into modal space.
         
-        Использует правильную tensorly операцию для проекции на A_tensor.
+        Uses a tensor operation to project onto A_tensor.
         
         Args:
-            state: Пространственное состояние (spatial_shape)
+            state: Spatial state with shape spatial_shape.
             
         Returns:
-            Модальные коэффициенты (n_modes,)
+            Modal coefficients with shape (n_modes,).
         """
-        # A_tensor это modal basis, нужно найти коэффициенты x такие что:
-        # state ≈ A_tensor @ x
-        # Решаем через least squares: x = (A^T A)^{-1} A^T state
+        # A_tensor is the modal basis. Find coefficients x such that:
+        # state ~= A_tensor @ x.
+        # Solve via least squares: x = (A^T A)^{-1} A^T state.
         
         A_tensor = self.spatial_modes
         state_flat = state.reshape(-1)
         
         # Solve least squares
         try:
-            # Используем torch.linalg.lstsq для численно стабильного решения
+            # Use torch.linalg.lstsq for a numerically stable solution.
             if A_tensor.ndim == 2:
-                # Если A_tensor это матрица (spatial_points, n_modes)
+                # A_tensor is a matrix with shape (spatial_points, n_modes).
                 x_modal = torch.linalg.lstsq(A_tensor, state_flat.unsqueeze(-1)).solution.squeeze(-1)
             else:
-                # Если A_tensor это тензор, flatten первую размерность
+                # A_tensor is a tensor; flatten spatial dimensions.
                 A_flat = A_tensor.reshape(-1, A_tensor.shape[-1])
                 x_modal = torch.linalg.lstsq(A_flat, state_flat.unsqueeze(-1)).solution.squeeze(-1)
         except Exception as e:
             logger.warning(f"Least squares failed, using transpose: {e}")
-            # Fallback: простая проекция через транспонирование
+            # Fallback: simple transpose-based projection.
             if A_tensor.ndim == 2:
                 x_modal = A_tensor.T @ state_flat
             else:
@@ -606,18 +594,17 @@ class DigitalTwin:
         return x_modal
     
     def _reconstruct_from_modal(self, modal_coeffs: torch.Tensor) -> torch.Tensor:
-        """
-        Реконструировать пространственное поле из модальных коэффициентов.
+        """Reconstruct a spatial field from modal coefficients.
         
         Args:
-            modal_coeffs: Модальные коэффициенты (n_modes,) или (n_modes, n_steps)
+            modal_coeffs: Modal coefficients with shape (n_modes,) or (n_modes, n_steps).
             
         Returns:
-            Реконструированное поле (spatial_shape) или (spatial_shape, n_steps)
+            Reconstructed field with shape spatial_shape or (spatial_shape, n_steps).
         """
         A_tensor = self.spatial_modes
         
-        # Если modal_coeffs это вектор
+        # modal_coeffs is a vector.
         if modal_coeffs.ndim == 1:
             reconstructed = reconstruct_tensor(
                 A_tensor=A_tensor,
@@ -627,14 +614,14 @@ class DigitalTwin:
             )
             
             if reconstructed is None:
-                # Fallback: простое умножение
+                # Fallback: simple multiplication.
                 if A_tensor.ndim == 2:
                     reconstructed = A_tensor @ modal_coeffs
                 else:
                     A_flat = A_tensor.reshape(-1, A_tensor.shape[-1])
                     reconstructed = A_flat @ modal_coeffs
         else:
-            # Если modal_coeffs это матрица (n_modes, n_steps)
+            # modal_coeffs is a matrix with shape (n_modes, n_steps).
             n_steps = modal_coeffs.shape[1]
             reconstructed_list = []
             
@@ -662,7 +649,7 @@ class DigitalTwin:
     
     def predict_next_state(self, current_state: torch.Tensor, controls: Any) -> torch.Tensor:
         """
-        Предсказать следующее состояние с учетом управляющих воздействий.
+        Predict the next state with control inputs.
         Delegates to proxy_model if available, otherwise uses internal forecaster (ignoring controls).
         """
         if self.proxy_model is not None:
@@ -742,37 +729,36 @@ class DigitalTwin:
         use_history: Optional[bool] = None,
         history: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        """
-        Прогнозировать будущие состояния используя обученную модель
+        """Forecast future states using the trained model.
         
-        Правильный workflow:
-        1. Проекция на модальное пространство
-        2. Прогноз модальных коэффициентов через forecaster (Linear/MLP/LSTM)
-        3. Реконструкция полного поля
+        Workflow:
+        1. Project into modal space.
+        2. Forecast modal coefficients with the forecaster (Linear/MLP/LSTM).
+        3. Reconstruct the full field.
         
         Args:
-            current_state: Текущее состояние (spatial_shape)
-            n_steps: Количество шагов прогноза
-            return_full_field: Вернуть полное поле или только коэффициенты
-            use_history: Для LSTM - использовать историю (если доступна)
-            history: История состояний (spatial_shape, history_len) для инициализации LSTM
+            current_state: Current state with shape spatial_shape.
+            n_steps: Number of forecast steps.
+            return_full_field: Return the full field instead of modal coefficients.
+            use_history: For LSTM, use history when available.
+            history: State history with shape (spatial_shape, history_len) for LSTM initialization.
             
         Returns:
-            Прогноз (spatial_shape, n_steps) если return_full_field=True
-            или модальные коэффициенты (n_modes, n_steps)
+            Forecast with shape (spatial_shape, n_steps) when return_full_field=True,
+            otherwise modal coefficients with shape (n_modes, n_steps).
         """
         if not self.state.is_calibrated:
-            raise ValueError("Digital Twin не обучен. Сначала вызовите train()")
+            raise ValueError("Digital Twin is not trained. Call train() first.")
         
         current_state = current_state.to(device=self.device, dtype=self.dtype)
         
-        # Нормализация
+        # Normalization
         if self.mean is not None:
             state_norm = (current_state - self.mean.squeeze(-1)) / self.std.squeeze(-1)
         else:
             state_norm = current_state
             
-        # Обработка истории если передана
+        # Process history when provided.
         modal_history_tensor = None
         if history is not None:
             history = history.to(device=self.device, dtype=self.dtype)
@@ -794,12 +780,12 @@ class DigitalTwin:
             modal_history_tensor = torch.stack(modal_seq, dim=0) # (T, n_modes)
         
         # ========================================================================
-        # Step 1: Проекция на модальное пространство
+        # Step 1: Project into modal space
         # ========================================================================
         modal_current = self._project_to_modal_space(state_norm)
         
         # ========================================================================
-        # Step 2: Прогноз модальных коэффициентов через Forecaster
+        # Step 2: Forecast modal coefficients with the forecaster
         # ========================================================================
         modal_forecast = self._forecast_modal_coefficients(
             modal_current, 
@@ -808,24 +794,24 @@ class DigitalTwin:
             external_history=modal_history_tensor
         )
         
-        # Сохранить в состояние
+        # Save into state.
         self.state.modal_coefficients = modal_forecast
         
         if not return_full_field:
             return modal_forecast
         
         # ========================================================================
-        # Step 3: Реконструкция полного поля
+        # Step 3: Reconstruct the full field
         # ========================================================================
         forecast = self._reconstruct_from_modal(modal_forecast)
         
-        # Reshape если нужно
+        # Reshape if needed.
         if forecast.ndim > current_state.ndim:
-            pass  # forecast уже имеет форму (spatial_shape, n_steps)
+            pass  # forecast already has shape (spatial_shape, n_steps).
         else:
             forecast = forecast.unsqueeze(-1).repeat(1, 1, n_steps) if current_state.ndim == 2 else forecast.unsqueeze(-1)
         
-        # Денормализация
+        # Denormalization
         if self.mean is not None:
             if forecast.ndim == 3:
                 forecast = forecast * self.std + self.mean
@@ -841,27 +827,26 @@ class DigitalTwin:
         use_history: Optional[bool] = None,
         external_history: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        """
-        Прогнозировать модальные коэффициенты используя обученный forecaster.
+        """Forecast modal coefficients using the trained forecaster.
         
         Args:
-            modal_current: Текущие модальные коэффициенты (n_modes,)
-            n_steps: Количество шагов прогноза
-            use_history: Использовать историю для LSTM
-            external_history: Внешняя история (T, n_modes) для инициализации
+            modal_current: Current modal coefficients with shape (n_modes,).
+            n_steps: Number of forecast steps.
+            use_history: Whether to use history for LSTM.
+            external_history: External history with shape (T, n_modes) for initialization.
             
         Returns:
-            Прогноз модальных коэффициентов (n_modes, n_steps)
+            Modal coefficient forecast with shape (n_modes, n_steps).
         """
-        # Автовыбор использования истории для LSTM, если параметр не задан явно
+        # Automatically use history for LSTM unless explicitly configured.
         if use_history is None:
             use_history = self.forecaster_type == ForecasterType.LSTM
 
-        # Persistence (fallback или если forecaster не обучен)
+        # Persistence fallback or untrained forecaster.
         if self.forecaster is None or self.forecaster_type == ForecasterType.PERSISTENCE:
             return modal_current.unsqueeze(1).repeat(1, n_steps)
         
-        # Используем forecaster
+        # Use the forecaster.
         x_current = modal_current.cpu().numpy()
         
         try:
@@ -876,7 +861,7 @@ class DigitalTwin:
                 # future_seq shape: (n_steps, n_modes)
                 
             elif self.forecaster_type == ForecasterType.LSTM:
-                # LSTM forecaster: нужна последовательность для входа
+                # LSTM forecaster requires an input sequence.
                 seq_length = self.forecaster.seq_length if hasattr(self.forecaster, 'seq_length') else 5
                 
                 if external_history is not None:
@@ -895,7 +880,7 @@ class DigitalTwin:
                         x_window = np.tile(x_current, (seq_length, 1))
                         x_window[-len(history):] = history
                 else:
-                    # Создать окно из текущего состояния
+                    # Create a window from the current state.
                     x_window = np.tile(x_current, (seq_length, 1))
                 
                 future_seq = self.forecaster.predict_sequence(x_window, n_steps=n_steps)
@@ -904,7 +889,7 @@ class DigitalTwin:
                 # Fallback to persistence
                 return modal_current.unsqueeze(1).repeat(1, n_steps)
             
-            # Конвертировать в torch и транспонировать в (n_modes, n_steps)
+            # Convert to torch and transpose to (n_modes, n_steps).
             modal_forecast = torch.tensor(
                 future_seq, 
                 device=self.device, 
@@ -918,28 +903,27 @@ class DigitalTwin:
             return modal_current.unsqueeze(1).repeat(1, n_steps)
     
     def _prepare_sensor_measurements(self, sensor_readings: torch.Tensor) -> torch.Tensor:
-        """
-        Унифицировать формат измерений сенсоров.
+        """Normalize the sensor measurement format.
         
-        Поддерживаемые форматы:
-        - Тензор формы (spatial_shape[, ...]) с ненулевыми значениями на позициях сенсоров.
-        - Тензор формы (n_sensors[, ...]) где порядок соответствует self.sensor_indices.
+        Supported formats:
+        - Tensor with shape (spatial_shape[, ...]) and nonzero values at sensor positions.
+        - Tensor with shape (n_sensors[, ...]) where order matches self.sensor_indices.
         
-        Возвращает тензор формы spatial_shape или spatial_shape + trailing_dims.
+        Returns a tensor with shape spatial_shape or spatial_shape + trailing_dims.
         """
         if self.sensor_mask is None or self.sensor_indices is None:
-            raise ValueError("Сенсоры еще не размещены. Выполните train().")
+            raise ValueError("Sensors have not been placed. Run train().")
         
         readings = sensor_readings.to(device=self.device, dtype=self.dtype)
         spatial_shape = self.sensor_mask.shape
         flat_mask = self.sensor_mask.reshape(-1)
         n_sensors = int(flat_mask.sum().item())
         
-        # Если уже передана полная маска (возможно с временным измерением)
+        # A full mask was already passed, possibly with a time dimension.
         if readings.shape[:len(spatial_shape)] == spatial_shape:
             return readings
         
-        # Формат (n_sensors, ...) – раскладываем по маске
+        # Format (n_sensors, ...): scatter values into the full mask.
         if readings.shape[0] == n_sensors:
             trailing = readings.shape[1:]
             full_flat = torch.zeros((flat_mask.numel(),) + trailing, device=self.device, dtype=self.dtype)
@@ -947,8 +931,8 @@ class DigitalTwin:
             return full_flat.reshape(spatial_shape + trailing)
         
         raise ValueError(
-            f"sensor_readings форма {readings.shape} не совместима: ожидалась {spatial_shape} "
-            f"или ({n_sensors}, ...)"
+            f"sensor_readings shape {readings.shape} is incompatible: expected {spatial_shape} "
+            f"or ({n_sensors}, ...)"
         )
     
     def update_from_sensors(
@@ -956,46 +940,45 @@ class DigitalTwin:
         sensor_readings: torch.Tensor,
         timestamp: Optional[float] = None
     ) -> torch.Tensor:
-        """
-        Обновить состояние из измерений сенсоров
+        """Update state from sensor measurements.
         
-        Правильная логика TBMD CS:
-        1. Построить Y (full-size tensor с измерениями на позициях сенсоров)
-        2. Создать solver с A_tensor, P, Y
-        3. Решить x_hat = solver.solve()
-        4. Реконструировать поле: X_reconstructed = A_tensor @ x_hat
+        TBMD CS workflow:
+        1. Build Y as a full-size tensor with measurements at sensor positions.
+        2. Create a solver with A_tensor, P, and Y.
+        3. Solve x_hat = solver.solve().
+        4. Reconstruct the field: X_reconstructed = A_tensor @ x_hat.
         
         Args:
-            sensor_readings: Измерения с сенсоров. Поддерживается либо полный тензор 
-                             формы spatial_shape (ненулевые значения только на сенсорах),
-                             либо массив длиной n_sensors (или n_sensors × ... для батча/времени).
-            timestamp: Временная метка
+            sensor_readings: Sensor measurements. Supports either a full tensor
+                with shape spatial_shape and nonzero values only at sensors, or
+                an array with length n_sensors (or n_sensors x ... for batch/time).
+            timestamp: Timestamp.
             
         Returns:
-            Реконструированное полное поле (spatial_shape)
+            Reconstructed full field with shape spatial_shape.
         """
         if not self.state.is_calibrated:
-            raise ValueError("Digital Twin не обучен")
+            raise ValueError("Digital Twin is not trained")
         
         if self.mean is None:
             logger.warning(
-                "Нормализация не настроена внутри DigitalTwin. "
-                "Ожидаются заранее нормализованные измерения сенсоров."
+                "Internal normalization is not configured in DigitalTwin. "
+                "Sensor measurements are expected to be normalized beforehand."
             )
         
-        # Приводим измерения к полной форме spatial_shape (ненулевые значения на сенсорах)
+        # Convert measurements to full spatial_shape with nonzero values at sensors.
         Y = self._prepare_sensor_measurements(sensor_readings)
         
-        # P - это бинарная маска сенсоров
+        # P is the binary sensor mask.
         P = self.sensor_mask
         
-        # A_tensor - это modal basis (уже есть в self.spatial_modes)
+        # A_tensor is the modal basis stored in self.spatial_modes.
         A_tensor = self.spatial_modes
         
         spatial_shape = self._spatial_shape if self._spatial_shape is not None else Y.shape
         spatial_ndim = len(spatial_shape)
         
-        # Поддержка батчей/времени: раскладываем trailing_dims в последовательность срезов
+        # Batch/time support: flatten trailing dimensions into a sequence of slices.
         if Y.ndim == spatial_ndim:
             Y_slices = [Y]
             trailing_shape: Tuple[int, ...] = ()
@@ -1009,7 +992,7 @@ class DigitalTwin:
         sensor_errors: List[float] = []
         for idx, Y_slice in enumerate(Y_slices):
             # ====================================================================
-            # Создать Compressive Sensing solver
+            # Create a Compressive Sensing solver.
             # ====================================================================
             cs_config = CompressiveSensingConfig(
                 max_iter=self.config.max_iterations if hasattr(self.config, 'max_iterations') else 1000,
@@ -1035,12 +1018,12 @@ class DigitalTwin:
             solver = TensorCompressiveSensing(
                 A_tensor,  # Modal basis
                 P,         # Sensor mask  
-                Y_slice,   # Measurements (full-size с нулями)
+                Y_slice,   # Full-size measurements with zeros away from sensors
                 cs_config,
                 ext_config
             )
             
-            # Решить и реконструировать
+            # Solve and reconstruct.
             x_hat, metrics = solver.solve()
             
             if self.config.verbose:
@@ -1057,7 +1040,7 @@ class DigitalTwin:
             if X_reconstructed is None:
                 raise RuntimeError("Reconstruction failed")
             
-            # Ошибка на сенсорах
+            # Sensor error
             sensor_err = torch.norm((X_reconstructed - Y_slice)[self.sensor_mask]).item()
             sensor_errors.append(sensor_err)
             
@@ -1068,18 +1051,18 @@ class DigitalTwin:
         else:
             reconstructed = torch.stack(reconstructed_slices, dim=-1).reshape(spatial_shape + trailing_shape)
         
-        # Денормализация
+        # Denormalization
         if self.mean is not None:
             if reconstructed.ndim == len(spatial_shape):
                 reconstructed = reconstructed * self.std.squeeze(-1) + self.mean.squeeze(-1)
             else:
                 reconstructed = reconstructed * self.std + self.mean
         
-        # Обновить состояние
+        # Update state.
         if timestamp is not None:
             self.state.current_time = timestamp
         
-        # Обновить метрики/коэффициенты по последнему срезу
+        # Update metrics and coefficients from the last slice.
         last_reconstructed = reconstructed if reconstructed.ndim == len(spatial_shape) else reconstructed[..., -1]
         if self.mean is not None:
             last_norm = (last_reconstructed - self.mean.squeeze(-1)) / self.std.squeeze(-1)
@@ -1091,7 +1074,7 @@ class DigitalTwin:
             self.state.history['errors'].append(sensor_errors[-1])
         self.state.history['observations'].append(reconstructed.cpu().numpy())
         
-        # Обновить proxy model, если есть
+        # Update proxy model if available.
         if self.proxy_model is not None:
             observed_state = self.create_reservoir_state(
                 pressure=last_reconstructed,
@@ -1125,49 +1108,47 @@ class DigitalTwin:
         scenarios: List[Dict[str, Any]],
         n_steps: int = 10
     ) -> Dict[str, Dict[str, float]]:
-        """
-        Оценить несколько сценариев развития
+        """Evaluate multiple development scenarios.
         
         Args:
-            scenarios: Список сценариев с параметрами
-                      Каждый сценарий должен содержать:
-                      - 'name': название сценария
-                      - 'initial_state': начальное состояние (optional)
-            n_steps: Длина прогноза
+            scenarios: Scenario list with parameters. Each scenario should contain:
+                - 'name': scenario name
+                - 'initial_state': optional initial state
+            n_steps: Forecast length.
             
         Returns:
-            Словарь {scenario_name: metrics}
+            Dictionary mapping scenario names to metrics.
         """
         if not self.state.is_calibrated:
-            raise ValueError("Digital Twin не обучен")
+            raise ValueError("Digital Twin is not trained")
         
         results = {}
         
         for scenario in scenarios:
             scenario_name = scenario.get('name', f"scenario_{len(results)}")
             
-            # Получить начальное состояние для сценария
+            # Get the initial state for the scenario.
             if 'initial_state' in scenario:
                 initial_state = scenario['initial_state']
             elif self.state.modal_coefficients is not None:
-                # Реконструировать текущее состояние из модальных коэффициентов
+                # Reconstruct the current state from modal coefficients.
                 initial_state = self._reconstruct_from_modal(
                     self.state.modal_coefficients[:, 0]
                 )
             else:
-                # Нет данных для прогноза
+                # No data available for forecasting.
                 logger.warning(f"No initial state for scenario {scenario_name}, skipping")
                 continue
             
             try:
-                # Сделать прогноз
+                # Run forecast.
                 forecast = self.predict(
                     current_state=initial_state,
                     n_steps=n_steps,
                     return_full_field=True
                 )
                 
-                # Вычислить метрики
+                # Compute metrics.
                 metrics = {
                     'mean_value': forecast.mean().item(),
                     'std_value': forecast.std().item(),
@@ -1189,24 +1170,23 @@ class DigitalTwin:
         sensor_data: torch.Tensor,
         threshold: float = 3.0
     ) -> List[Dict[str, Any]]:
-        """
-        Детектировать аномалии в данных сенсоров
+        """Detect anomalies in sensor data.
         
-        Использует правильный TBMD CS workflow для каждого временного шага.
+        Uses the TBMD CS workflow for each time step.
         
         Args:
-            sensor_data: Данные с сенсоров (spatial_shape, n_timesteps)
-                        где ненулевые значения только на позициях сенсоров
-            threshold: Порог для детекции (в сигмах)
+            sensor_data: Sensor data with shape (spatial_shape, n_timesteps)
+                and nonzero values only at sensor positions.
+            threshold: Detection threshold in standard deviations.
             
         Returns:
-            Список обнаруженных аномалий с timestamp, residual, severity
+            List of detected anomalies with timestamp, residual, and severity.
         """
         if not self.state.is_calibrated:
-            raise ValueError("Digital Twin не обучен")
+            raise ValueError("Digital Twin is not trained")
         
         anomalies = []
-        # Приводим данные к полной форме (spatial_shape[, time])
+        # Convert data to full shape (spatial_shape[, time]).
         sensor_tensor = self._prepare_sensor_measurements(
             sensor_data.to(device=self.device, dtype=self.dtype)
         )
@@ -1216,7 +1196,7 @@ class DigitalTwin:
         else:
             sensor_tensor = sensor_tensor.reshape(self._spatial_shape + (-1,))
         
-        # Prepare CS configs (создаем один раз для эффективности)
+        # Prepare CS configs once for efficiency.
         cs_config = CompressiveSensingConfig(
             max_iter=self.config.max_iterations if hasattr(self.config, 'max_iterations') else 1000,
             tol=1e-4,
@@ -1235,21 +1215,21 @@ class DigitalTwin:
             stop_policy="residual",
             relative_window=5,
             relative_drop=1e-3,
-            collect_history=False  # Не собираем историю для скорости
+            collect_history=False  # Do not collect history for speed.
         )
         
         A_tensor = self.spatial_modes
         P = self.sensor_mask
         
-        # Реконструкция для каждого временного шага
+        # Reconstruct each time step.
         n_timesteps = sensor_tensor.shape[-1]
         
         for t in range(n_timesteps):
             try:
-                # Извлечь измерения для текущего шага
+                # Extract measurements for the current step.
                 Y = sensor_tensor[..., t]
                 
-                # Создать solver
+                # Create solver.
                 solver = TensorCompressiveSensing(
                     A_tensor,
                     P,
@@ -1258,10 +1238,10 @@ class DigitalTwin:
                     ext_config
                 )
                 
-                # Решить
+                # Solve.
                 x_hat, metrics = solver.solve()
                 
-                # Вычислить reconstruction error
+                # Compute reconstruction error.
                 X_reconstructed = reconstruct_tensor(
                     A_tensor=A_tensor,
                     x_hat=x_hat,
@@ -1270,16 +1250,16 @@ class DigitalTwin:
                 )
                 
                 if X_reconstructed is not None:
-                    # Вычислить residual
+                    # Compute residual.
                     residual = torch.norm((X_reconstructed - Y)[self.sensor_mask]).item()
                     
-                    # Определить порог аномалии
+                    # Determine anomaly threshold.
                     if self.std is not None:
                         threshold_value = threshold * self.std.mean().item()
                     else:
                         threshold_value = threshold
                     
-                    # Проверить на аномалию
+                    # Check for anomaly.
                     if residual > threshold_value:
                         severity = 'high' if residual > 5 * threshold_value else 'medium'
                         anomalies.append({
@@ -1291,7 +1271,7 @@ class DigitalTwin:
                         })
                 
             except Exception as e:
-                logger.warning(f"Ошибка реконструкции на шаге {t}: {e}")
+                logger.warning(f"Reconstruction error at step {t}: {e}")
                 anomalies.append({
                     'timestamp': t,
                     'error': str(e),
@@ -1301,13 +1281,13 @@ class DigitalTwin:
         return anomalies
     
     def get_sensor_locations(self) -> np.ndarray:
-        """Получить индексы размещенных сенсоров"""
+        """Return placed sensor indices."""
         if self.sensor_indices is None:
-            raise ValueError("Сенсоры еще не размещены")
+            raise ValueError("Sensors have not been placed")
         return self.sensor_indices.cpu().numpy()
     
     def get_statistics(self) -> Dict[str, Any]:
-        """Получить статистику работы twin"""
+        """Return digital twin runtime statistics."""
         return {
             'is_calibrated': self.state.is_calibrated,
             'current_time': self.state.current_time,
@@ -1322,20 +1302,19 @@ class DigitalTwin:
         }
     
     # ==========================================================================
-    # PROXY MODEL METHODS (как в system.py)
+    # PROXY MODEL METHODS
     # ==========================================================================
     
     def _init_proxy_model(self):
-        """
-        Инициализировать proxy model для сценарного анализа с well controls.
+        """Initialize the proxy model for scenario analysis with well controls.
         
-        Как в system.py - создаёт LinearDynamicsProxyModel, NeuralProxyModel 
-        или PhysicsInformedProxyModel на основе modal basis.
+        Creates a LinearDynamicsProxyModel, NeuralProxyModel, or
+        PhysicsInformedProxyModel from the modal basis.
         """
         if self.spatial_modes is None:
-            raise ValueError("Modal basis не вычислен. Сначала выполните decomposition.")
+            raise ValueError("Modal basis has not been computed. Run decomposition first.")
         
-        # Flatten modal basis если нужно
+        # Flatten modal basis if needed.
         if self.spatial_modes.ndim == 2:
             modal_basis = self.spatial_modes
         else:
@@ -1351,7 +1330,7 @@ class DigitalTwin:
                 dtype=self.dtype
             )
             if self.config.verbose:
-                logger.info("✅ LinearDynamicsProxyModel инициализирован")
+                logger.info("LinearDynamicsProxyModel initialized")
                 
         elif self.proxy_model_type == ProxyModelType.NEURAL:
             hidden_layers = getattr(self.config, 'proxy_hidden_layers', [128, 64])
@@ -1363,7 +1342,7 @@ class DigitalTwin:
                 dtype=self.dtype
             )
             if self.config.verbose:
-                logger.info(f"✅ NeuralProxyModel инициализирован (hidden={hidden_layers})")
+                logger.info(f"NeuralProxyModel initialized (hidden={hidden_layers})")
                 
         elif self.proxy_model_type == ProxyModelType.PHYSICS_INFORMED:
             porosity = getattr(self.config, 'porosity', None)
@@ -1377,15 +1356,15 @@ class DigitalTwin:
                 dtype=self.dtype
             )
             if self.config.verbose:
-                logger.info("✅ PhysicsInformedProxyModel инициализирован")
+                logger.info("PhysicsInformedProxyModel initialized")
     
     def _build_proxy_training_sets(
         self,
         data_dict: Dict[str, torch.Tensor]
     ) -> Tuple[List[ReservoirState], List[List[WellControl]]]:
-        """
-        Подготовить исторические состояния и простые well controls для калибровки proxy.
-        Используется первый субъект в data_dict.
+        """Prepare historical states and simple well controls for proxy calibration.
+
+        Uses the first subject in data_dict.
         """
         first_key = next(iter(data_dict))
         data = data_dict[first_key]
@@ -1415,27 +1394,25 @@ class DigitalTwin:
         historical_controls: List[List[WellControl]],
         **kwargs
     ) -> Dict[str, float]:
-        """
-        Калибровать proxy model на исторических данных.
+        """Calibrate the proxy model on historical data.
         
-        Как в system.py - обучает proxy model предсказывать динамику резервуара
-        с учётом well controls.
+        Trains the proxy model to predict reservoir dynamics with well controls.
         
         Args:
-            historical_states: Список исторических состояний резервуара
-            historical_controls: Список well controls для каждого временного шага
-            **kwargs: Дополнительные параметры для калибровки
-                - regularization: float для LinearDynamicsProxyModel
-                - epochs, learning_rate, batch_size: для NeuralProxyModel
+            historical_states: Historical reservoir states.
+            historical_controls: Well controls for each time step.
+            **kwargs: Additional calibration parameters:
+                - regularization: float for LinearDynamicsProxyModel
+                - epochs, learning_rate, batch_size: for NeuralProxyModel
             
         Returns:
-            Метрики калибровки (mse, relative_error, и т.д.)
+            Calibration metrics such as mse and relative_error.
         """
         if self.proxy_model is None:
-            raise ValueError("Proxy model не инициализирован. Установите proxy_model_type в config.")
+            raise ValueError("Proxy model is not initialized. Set proxy_model_type in config.")
         
         if self.config.verbose:
-            logger.info(f"Калибровка {self.proxy_model_type.value} proxy model...")
+            logger.info(f"Calibrating {self.proxy_model_type.value} proxy model...")
         
         if isinstance(self.proxy_model, LinearDynamicsProxyModel):
             regularization = kwargs.get('regularization', 1e-4)
@@ -1463,10 +1440,10 @@ class DigitalTwin:
                 regularization=regularization
             )
         else:
-            raise ValueError(f"Неизвестный тип proxy model: {type(self.proxy_model)}")
+            raise ValueError(f"Unknown proxy model type: {type(self.proxy_model)}")
         
         if self.config.verbose:
-            logger.info(f"✅ Proxy model откалиброван: {metrics}")
+            logger.info(f"Proxy model calibrated: {metrics}")
         
         return metrics
     
@@ -1477,22 +1454,21 @@ class DigitalTwin:
         time_horizon: float = 1.0,
         time_steps: int = 10
     ) -> List[ReservoirState]:
-        """
-        Прогнозировать состояние резервуара с учётом well controls.
+        """Forecast reservoir state with well controls.
         
-        Как в system.py - использует proxy model для быстрого сценарного анализа.
+        Uses the proxy model for fast scenario analysis.
         
         Args:
-            current_state: Текущее состояние резервуара (ReservoirState)
-            well_controls: Управление скважинами (WellControl)
-            time_horizon: Горизонт прогноза
-            time_steps: Количество временных шагов
+            current_state: Current reservoir state.
+            well_controls: Well controls.
+            time_horizon: Forecast horizon.
+            time_steps: Number of time steps.
             
         Returns:
-            Список прогнозированных состояний
+            List of forecasted states.
         """
         if self.proxy_model is None:
-            raise ValueError("Proxy model не инициализирован или не откалиброван.")
+            raise ValueError("Proxy model is not initialized or calibrated.")
         
         forecasted_states = self.proxy_model.forecast(
             current_state=current_state,
@@ -1510,31 +1486,30 @@ class DigitalTwin:
         time_horizon: float = 10.0,
         time_steps: int = 10
     ) -> Dict[str, Dict[str, Any]]:
-        """
-        Оценить несколько сценариев управления скважинами.
+        """Evaluate multiple well-control scenarios.
         
-        Как ScenarioAnalyzer в system.py - быстрый what-if анализ.
+        Provides fast what-if analysis through the proxy model.
         
         Args:
-            initial_state: Начальное состояние резервуара
-            scenarios: Словарь {scenario_name: well_controls}
-            time_horizon: Горизонт прогноза
-            time_steps: Количество шагов
+            initial_state: Initial reservoir state.
+            scenarios: Dictionary mapping scenario names to well controls.
+            time_horizon: Forecast horizon.
+            time_steps: Number of steps.
             
         Returns:
-            Словарь {scenario_name: {forecasted_states, kpis}}
+            Dictionary mapping scenario names to forecasted states and KPIs.
         """
         if self.proxy_model is None:
-            raise ValueError("Proxy model не инициализирован.")
+            raise ValueError("Proxy model is not initialized.")
         
         results = {}
         
         for scenario_name, well_controls in scenarios.items():
             if self.config.verbose:
-                logger.info(f"Оценка сценария: {scenario_name}")
+                logger.info(f"Evaluating scenario: {scenario_name}")
             
             try:
-                # Прогноз
+                # Forecast
                 forecasted_states = self.predict_with_controls(
                     current_state=initial_state,
                     well_controls=well_controls,
@@ -1542,7 +1517,7 @@ class DigitalTwin:
                     time_steps=time_steps
                 )
                 
-                # Вычислить KPIs
+                # Compute KPIs.
                 kpis = self._compute_scenario_kpis(forecasted_states, well_controls)
                 
                 results[scenario_name] = {
@@ -1552,7 +1527,7 @@ class DigitalTwin:
                 }
                 
             except Exception as e:
-                logger.error(f"Ошибка в сценарии {scenario_name}: {e}")
+                logger.error(f"Error in scenario {scenario_name}: {e}")
                 results[scenario_name] = {'error': str(e)}
         
         return results
@@ -1562,14 +1537,10 @@ class DigitalTwin:
         forecasted_states: List[ReservoirState],
         well_controls: List[WellControl]
     ) -> Dict[str, float]:
-        """
-        Вычислить Key Performance Indicators для сценария.
-        
-        Как в system.py ScenarioAnalyzer._compute_kpis().
-        """
+        """Compute key performance indicators for a scenario."""
         kpis = {}
         
-        # Статистика давления
+        # Pressure statistics
         pressures = [state.pressure for state in forecasted_states]
         avg_pressures = [torch.mean(p).item() for p in pressures]
         
@@ -1578,7 +1549,7 @@ class DigitalTwin:
         kpis['max_pressure'] = float(np.max(avg_pressures))
         kpis['pressure_std'] = float(np.std(avg_pressures))
         
-        # Производство и инжекция
+        # Production and injection
         production_wells = [ctrl for ctrl in well_controls if ctrl.value < 0]
         injection_wells = [ctrl for ctrl in well_controls if ctrl.value > 0]
         
@@ -1586,7 +1557,7 @@ class DigitalTwin:
         kpis['total_injection'] = sum(ctrl.value for ctrl in injection_wells) * len(forecasted_states)
         kpis['net_production'] = kpis['total_production'] - kpis['total_injection']
         
-        # Количество активных скважин
+        # Number of active wells
         kpis['n_production_wells'] = len(production_wells)
         kpis['n_injection_wells'] = len(injection_wells)
         
@@ -1599,16 +1570,15 @@ class DigitalTwin:
         time: float = 0.0,
         well_rates: Optional[Dict[str, float]] = None
     ) -> ReservoirState:
-        """
-        Создать ReservoirState из данных.
+        """Create a ReservoirState from input data.
         
-        Вспомогательный метод для удобного создания состояний.
+        Convenience helper for creating states.
         
         Args:
-            pressure: Поле давления
-            saturation: Поле насыщенности (опционально)
-            time: Время
-            well_rates: Дебиты скважин
+            pressure: Pressure field.
+            saturation: Optional saturation field.
+            time: Time.
+            well_rates: Well rates.
             
         Returns:
             ReservoirState
@@ -1627,16 +1597,15 @@ class DigitalTwin:
         value: float,
         location: Tuple[int, ...]
     ) -> WellControl:
-        """
-        Создать WellControl.
+        """Create a WellControl instance.
         
-        Вспомогательный метод для удобного создания well controls.
+        Convenience helper for creating well controls.
         
         Args:
-            well_name: Имя скважины
-            control_type: Тип контроля ('rate', 'pressure', 'bhp')
-            value: Значение (положительное = инжекция, отрицательное = добыча)
-            location: Координаты скважины
+            well_name: Well name.
+            control_type: Control type ('rate', 'pressure', 'bhp').
+            value: Value where positive means injection and negative means production.
+            location: Well coordinates.
             
         Returns:
             WellControl
@@ -1653,20 +1622,19 @@ class DigitalTwin:
         observed_state: ReservoirState,
         sensor_locations: torch.Tensor
     ) -> None:
-        """
-        Обновить proxy model по новым наблюдениям (data assimilation).
+        """Update the proxy model from new observations (data assimilation).
         
-        Как в system.py - онлайн обновление модели.
+        Performs online model updates.
         
         Args:
-            observed_state: Наблюдаемое состояние
-            sensor_locations: Позиции сенсоров
+            observed_state: Observed state.
+            sensor_locations: Sensor positions.
         """
         if self.proxy_model is not None:
             self.proxy_model.update_from_observations(observed_state, sensor_locations)
             if self.config.verbose:
-                logger.info("Proxy model обновлён по наблюдениям")
+                logger.info("Proxy model updated from observations")
 
 
-# Alias для обратной совместимости
+# Backward compatibility alias
 DigitalTwinTBMD = DigitalTwin

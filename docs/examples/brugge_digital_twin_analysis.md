@@ -1,210 +1,58 @@
-# Brugge Digital Twin - Отчет по анализу
+# Brugge Digital Twin Analysis Notes
 
-## Сводка выполнения
+This page documents the intended Brugge digital twin workflow and the checks maintainers should perform when local Brugge data is available.
 
-### ✅ Успешно выполнено
-Скрипт `examples/applications/brugge_field/run_brugge_enhanced.py` успешно выполнил полный рабочий процесс Цифрового Двойника на наборе данных резервуара Brugge.
+The repository does not include a reproducible public Brugge benchmark fixture. Avoid treating any historical metric in local reports as a general project claim unless the data source, split, configuration, and command are recorded.
 
-## Этапы рабочего процесса
+## Script
 
-### 1. Загрузка данных ✓
-- **Набор данных**: `data_exp_4_.h5`, содержащий 10 геологических кейсов
-- **Скважины**: 30 локаций скважин на кейс из `all_wells_exp_4.json`
-- **Выбранный кейс**: `case1`
-- **Размер данных**: `(139, 48, 2, 133)` - (x, y, слои, временные шаги)
-- **Разделение Train/Test**: 80/20 → 106 шагов обучения, 27 шагов тестирования
-
-### 2. Обработка данных ✓
-- **Нормализация**: MinMax (от 0.0 до 171.87)
-- **Тип данных**: Конвертировано в `torch.float32`
-- **Обработка**: Глобальная статистика рассчитана только на основе обучающей выборки
-
-### 3. Фаза обучения ✓
-
-#### TBMD Декомпозиция
-- **Пространственные моды**: 20
-- **Временные моды**: 10
-- **Ошибка реконструкции**: 1.63% (отлично)
-
-#### Размещение сенсоров
-- **Метод**: Тензорная QR-факторизация (tube pivoting)
-- **Запрошено сенсоров**: 50
-- **Фактически сенсоров**: 50
-- **Эффективность размещения**: 100%
-
-#### Калибровка Proxy-модели
-- **Тип модели**: Physics-Informed (Физически обоснованная)
-- **MSE**: 0.000566
-- **Относительная ошибка**: 0.163%
-- **Обучающие примеры**: 105
-
-### 4. Цикл симуляции в реальном времени ✓
-- **Симулировано шагов**: 27
-- **Средняя ошибка прогноза**: **28.31%**
-- **Статус алертов**: Все шаги вызвали **CRITICAL** уведомления
-
-## Ключевые выводы
-
-### ⚠️ Выявленные проблемы
-
-1. **Высокая ошибка прогноза (28.31%)**
-   - Причина: Proxy-модель не учитывает реальную физику резервуара
-   - Dummy (фиктивные) управления скважинами не отражают реальные производственные сценарии
-   - Отсутствует информация о дебитах скважин в исходных данных
-
-2. **Препупреждения о дисбалансе масс (Mass Imbalance Warnings)**
-   ```
-   Mass imbalance: injection=3000+, production=0.00
-   ```
-   - Все скважины работают как нагнетательные (injection)
-   - Отсутствуют добывающие скважины (production)
-   - Нереалистичная физика для резервуара
-
-3. **Критические уведомления на всех шагах**
-   - Ошибка реконструкции постоянно > 40% (пороговое значение)
-   - Указывает на систематическое несоответствие между прогнозом и реальностью
-   - Предлагает необходимость перекалибровки модели или улучшения физики
-
-### ✅ Что работает хорошо
-
-1. **TBMD Декомпозиция**
-   - Очень низкая ошибка реконструкции (1.63%)
-   - Модальный базис эффективно захватывает пространственно-временные паттерны
-   - Эффективное сжатие: 20 пространственных мод захватывают 139×48×2 = 13,344 пространственных степеней свободы
-
-2. **Размещение сенсоров**
-   - 100% эффективность в размещении запрошенных сенсоров
-   - QR алгоритм успешно определил оптимальные точки измерения
-
-3. **Интеграция кода**
-   - Чистый пайплайн данных: H5 → Обработка → Обучение → Симуляция
-   - Все компоненты TBMD (декомпозиция, QR, CS) работают корректно
-   - Нет сбоев во время выполнения
-
-## Рекомендации
-
-### Немедленные улучшения
-
-#### 1. Реалистичные управления скважинами (Well Controls)
-```python
-def generate_realistic_controls(n_steps, wells):
-    """Генерация распределения добычи/нагнетания"""
-    n_injectors = len(wells) // 2
-    controls = []
-    for t in range(n_steps):
-        ctrls = []
-        for i, (wx, wy) in enumerate(wells):
-            if i < n_injectors:
-                # Нагнетательные скважины - закачка воды
-                rate = 1000.0 + np.sin(t/20) * 200
-                ctrls.append(WellControl(
-                    well_name=f"INJ_{i}",
-                    control_type="injection_rate",
-                    value=rate,
-                    location=(wx, wy)
-                ))
-            else:
-                # Добывающие скважины - добыча нефти
-                rate = -(800.0 + np.cos(t/15) * 150)  # Отрицательное значение для добычи
-                ctrls.append(WellControl(
-                    well_name=f"PROD_{i}",
-                    control_type="production_rate",
-                    value=rate,
-                    location=(wx, wy)
-                ))
-        controls.append(ctrls)
-    return controls
+```bash
+python examples/applications/brugge_field/run_brugge_enhanced.py
 ```
 
-#### 2. Улучшенная Proxy-модель
-Рассмотрите возможность перехода на `NeuralProxyModel` с большей емкостью:
-```python
-config = DigitalTwinConfig(
-    n_spatial_modes=30,  # Увеличить моды
-    n_temporal_modes=15,
-    n_sensors=100,       # Больше сенсоров
-    proxy_model_type='neural',  # Нейронная сеть
-    device='cpu'
-)
-```
+## Expected Inputs
 
-#### 3. Аугментация данных
-Используйте несколько геологических кейсов для обучения:
-```python
-# Объединение нескольких кейсов
-train_data_multi = torch.cat([
-    train_tensors_processed['case1'],
-    train_tensors_processed['case2'],
-    # ...
-], dim=-1)  # Конкатенация по времени
-```
+The script is dataset-specific and may require local files under `data/`. Verify the actual paths in the script before running it.
 
-### Продвинутые улучшения
+Typical inputs include:
 
-#### 4. Адаптивное размещение сенсоров
-Периодически переоптимизируйте расположение сенсоров на основе ошибок прогноза:
-```python
-if t % 10 == 0 and avg_error > threshold:
-    # Перезапуск оптимизации сенсоров
-    sensor_result = twin._optimize_sensor_placement(
-        recent_data, rejection_domain
-    )
-```
+- reservoir state tensors;
+- well coordinates or well-control metadata;
+- train/test split settings;
+- normalization parameters derived from training data only.
 
-#### 5. Онлайн-обучение (Online Learning)
-Реализуйте инкрементальные обновления модели:
-```python
-if status == 'critical':
-    # Обновление proxy-модели с недавними наблюдениями
-    twin.proxy_model.update_online(
-        states=[current_state],
-        controls=[next_ctrls],
-        observations=[reconstructed]
-    )
-```
+## Validation Checklist
 
-#### 6. Многофазный поток (Multi-Phase Flow)
-Если данные H5 содержат отдельные слои нефти/воды/газа:
-```python
-# Обработка каждой фазы отдельно
-oil_data = raw_data_np[..., 0, :]
-water_data = raw_data_np[..., 1, :]
+When running the workflow, record:
 
-# Создание многофазного двойника
-twin_oil = DigitalTwin(config)
-twin_water = DigitalTwin(config)
-```
+1. Dataset version and local file paths.
+2. Selected case or trajectory identifiers.
+3. Tensor shape and time-axis interpretation.
+4. Train/test split policy.
+5. Normalization method and whether statistics were fit on training data only.
+6. TBMD ranks, sensor count, and forecaster/proxy configuration.
+7. Reconstruction and forecast metrics.
+8. Any warnings about unrealistic well controls or mass imbalance.
 
-## Метрики производительности
+## Known Risks
 
-| Метрика | Значение | Цель | Статус |
-|---------|----------|------|--------|
-| Ошибка декомпозиции | 1.63% | <5% | ✅ Отлично |
-| Размещение сенсоров | 100% | 100% | ✅ Идеально |
-| Ошибка калибровки | 0.16% | <1% | ✅ Отлично |
-| **Ошибка прогноза** | **28.31%** | **<10%** | ⚠️ **Требует улучшения** |
+- Synthetic or placeholder well controls can make scenario-analysis metrics misleading.
+- A low decomposition reconstruction error does not guarantee accurate multi-step forecasts.
+- Dataset paths and formats may differ between local environments.
+- Generated figures and model artifacts should stay out of git unless they are intentionally curated documentation assets.
 
-## Следующие шаги
+## Recommended Reporting Format
 
-1. **Немедленно**: Обновить генерацию управлений скважинами, включив добывающие скважины
-2. **Краткосрочно**: Экспериментировать с нейронной proxy-моделью и увеличить количество мод
-3. **Среднесрочно**: Реализовать обучение на нескольких кейсах и онлайн-обучение
-4. **Долгосрочно**: Интегрировать реальные данные о добыче скважин, если доступны
+Use a neutral report table:
 
-## Оценка качества кода
+| Item | Value |
+| --- | --- |
+| Command | `python examples/applications/brugge_field/run_brugge_enhanced.py` |
+| Dataset | Not specified in the repository; record the local dataset version. |
+| Case | Not specified; record selected case or trajectory identifiers. |
+| Train/test split | Not specified; record the split policy. |
+| Configuration | Not specified; record ranks, sensors, forecaster, and proxy settings. |
+| Metrics | Not specified; record reconstruction and forecast metrics from the run. |
+| Limitations | Not specified; record data, model, and scenario limitations. |
 
-### Сильные стороны
-- ✅ Чистое разделение ответственности (данные, модель, симуляция)
-- ✅ Правильная обработка ошибок и логирование
-- ✅ Соответствует архитектуре TBMD из `new_tbmd.ipynb`
-- ✅ Модульный дизайн позволяет легко экспериментировать
-
-### Области для улучшения
-- ⚠️ Хардкод путей - рассмотрите использование config файла
-- ⚠️ Фиктивные управления - используйте реалистичные сценарии
-- ⚠️ Нет визуализации - добавьте графики для отладки
-- ⚠️ Нет чекпоинтинга - добавьте сохранение/загрузку модели
-
-## Заключение
-
-Реализация Цифрового Двойника **структурно надежна**, и все компоненты TBMD работают корректно. Высокая ошибка прогноза вызвана **нереалистичными управлениями скважинами** и **упрощенной физикой proxy-модели**, а не ошибками в коде. Внедрение рекомендованных улучшений значительно повысит точность.
+Do not publish accuracy, speed, or deployment-readiness claims without a reproducible command and dataset description.

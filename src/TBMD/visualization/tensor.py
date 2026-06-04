@@ -12,8 +12,8 @@ def visualize_tensor(
     show_colorbar=False,
     zmin=None,  # Add zmin parameter
     zmax=None,   # Add zmax parameter
-    wells=None,  # Скважины для отображения
-    frame_step=1  # Отображать каждый N-й кадр (по умолчанию каждый)
+    wells=None,  # Wells to display
+    frame_step=1  # Display every Nth frame
 ):
     """
     Visualizes a tensor of images. If the tensor is 3D (H, W, T), each (H, W) slice is 
@@ -33,11 +33,11 @@ def visualize_tensor(
                                 If None, calculated per frame as the minimum non-zero value.
       - zmax (float, optional): Maximum value for the color scale (vmax in imshow).
                                 If None, calculated per frame as the maximum value.
-      - wells (dict or list): Координаты скважин. Может быть:
-                             * dict с ключами = subject_name и значениями = списки координат [(x1, y1), ...]
-                             * dict с ключами = subject_name и значениями = вложенные словари {frame_idx: [(x1, y1), ...], ...}
-                             * простой список координат [(x1, y1), ...] для всех кадров
-      - frame_step (int): Шаг для отображения кадров. При frame_step=10 будет отображаться каждый 10-й кадр.
+      - wells (dict or list): Well coordinates. Supported formats:
+                             * dict with subject_name keys and coordinate-list values [(x1, y1), ...]
+                             * dict with subject_name keys and nested frame dictionaries {frame_idx: [(x1, y1), ...], ...}
+                             * simple coordinate list [(x1, y1), ...] used for all frames
+      - frame_step (int): Frame display step. frame_step=10 displays every 10th frame.
     """
     # Ensure tensor has either 3 or 4 dimensions.
     if tensor.ndim not in (3, 4):
@@ -54,14 +54,14 @@ def visualize_tensor(
     else:  # tensor.ndim == 4
         H, W, C, T = tensor.shape
 
-    # Выбираем кадры с заданным шагом
+    # Select frames with the requested step
     frame_indices = list(range(0, T, frame_step))
     selected_frames_count = len(frame_indices)
 
     # Determine the number of rows needed for the grid layout.
     rows = (selected_frames_count + cols - 1) // cols
 
-    # Увеличиваем размер фигуры для более крупных subplots
+    # Increase figure size for larger subplots
     fig, axes = plt.subplots(rows, cols, figsize=(6.5 * cols, 6.5 * rows))
     
     # Handle case where rows=1 or cols=1, making axes not 2D
@@ -71,7 +71,7 @@ def visualize_tensor(
 
     for display_idx, ax in enumerate(axes):
         if display_idx < selected_frames_count:
-            # Получаем реальный индекс кадра
+            # Get the actual frame index
             frame_idx = frame_indices[display_idx]
             
             # Extract the frame depending on tensor dimensions.
@@ -107,30 +107,30 @@ def visualize_tensor(
                 
             ax.set_title(f"Frame {frame_idx + 1}", fontsize=20)
             
-            # Отображение скважин
+            # Display wells
             if wells is not None:
                 wells_to_plot = None
-                # Определяем какие скважины отображать для данного subject/frame
+                # Determine which wells to display for this subject/frame
                 if subject_name is not None:
-                    # Проверяем разные форматы wells
+                    # Check supported well formats
                     if isinstance(wells, dict):
                         wells_to_plot = wells.get(subject_name)
-                        # Если wells[subject_name] - словарь с ключами-номерами кадров
+                        # wells[subject_name] is a dictionary keyed by frame number
                         if isinstance(wells_to_plot, dict):
                             wells_to_plot = wells_to_plot.get(frame_idx)
-                        # Проверяем альтернативный ключ subject_name_frame_idx
+                        # Check alternative subject_name_frame_idx key
                         elif wells_to_plot is None:
                             wells_to_plot = wells.get(f"{subject_name}_{frame_idx}")
                 else:
-                    # Если subject_name не указан, пытаемся использовать wells напрямую
+                    # If subject_name is not specified, try to use wells directly
                     if isinstance(wells, list) or (isinstance(wells, np.ndarray) and wells.ndim >= 2):
                         wells_to_plot = wells
                 
-                # Отображаем скважины, если нашли
+                # Display wells if found
                 if wells_to_plot is not None and len(wells_to_plot) > 0:
                     wells_array = np.array(wells_to_plot)
                     
-                    # Отображение скважин без масштабирования (координаты должны быть в пикселях)
+                    # Display wells without scaling; coordinates must be in pixels
                     ax.scatter(wells_array[:, 0], wells_array[:, 1], c='red', marker='o', s=80, label='Wells')
                     
                     ax.legend(loc='upper right', fontsize=18)
@@ -150,11 +150,11 @@ def visualize_tensor(
     if subject_name:
         fig.suptitle(f"Subject: {subject_name}", fontsize=40)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust rect to prevent title overlap
-        # Уменьшаем расстояние между изображениями для более компактного вида
+        # Reduce spacing for a more compact view
         plt.subplots_adjust(wspace=0.001, hspace=0.15)
     else:
         plt.tight_layout()
-        # Уменьшаем расстояние между изображениями для более компактного вида
+        # Reduce spacing for a more compact view
         plt.subplots_adjust(wspace=0.001, hspace=0.15)
 
     if save_path:

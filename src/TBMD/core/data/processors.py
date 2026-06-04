@@ -12,7 +12,7 @@ ArrayLike = Union[np.ndarray, torch.Tensor]
 
 class DataProcessor:
     """
-    Базовый класс для обработки данных
+    Base class for data processing.
     
     Examples:
         >>> processor = DataProcessor()
@@ -25,25 +25,25 @@ class DataProcessor:
     
     def process(self, data: torch.Tensor) -> torch.Tensor:
         """
-        Обработать данные (должен быть переопределен в подклассах)
+        Process data. Subclasses should override this method.
         
         Args:
-            data: Входные данные
+            data: Input data.
             
         Returns:
-            Обработанные данные
+            Processed data.
         """
         return data
 
 
 class Normalizer(DataProcessor):
     """
-    Нормализация данных
+    Data normalization.
     
-    Поддерживает разные типы нормализации:
-    - minmax: к диапазону [0, 1]
-    - zscore: стандартизация (mean=0, std=1)
-    - maxabs: к диапазону [-1, 1] по максимуму абсолютного значения
+    Supported normalization methods:
+    - minmax: scale to [0, 1]
+    - zscore: standardize to mean=0, std=1
+    - maxabs: scale to [-1, 1] by maximum absolute value
     
     Examples:
         >>> normalizer = Normalizer(method='minmax')
@@ -60,8 +60,8 @@ class Normalizer(DataProcessor):
     ):
         """
         Args:
-            method: Метод нормализации ('minmax', 'zscore', 'maxabs')
-            feature_range: Целевой диапазон для minmax
+            method: Normalization method ('minmax', 'zscore', 'maxabs')
+            feature_range: Target range for minmax scaling
             device: Torch device
             dtype: Torch dtype
         """
@@ -69,7 +69,7 @@ class Normalizer(DataProcessor):
         self.method = method
         self.feature_range = feature_range
         
-        # Параметры для денормализации
+        # Parameters used for denormalization
         self.params = {}
     
     def normalize(
@@ -78,14 +78,14 @@ class Normalizer(DataProcessor):
         dim: Optional[int] = None
     ) -> torch.Tensor:
         """
-        Нормализовать данные
+        Normalize data.
         
         Args:
-            data: Входные данные
-            dim: Размерность для вычисления статистик (None = все)
+            data: Input data.
+            dim: Dimension used to compute statistics; None means all values.
             
         Returns:
-            Нормализованные данные
+            Normalized data.
         """
         data = data.to(device=self.device, dtype=self.dtype)
         
@@ -103,7 +103,7 @@ class Normalizer(DataProcessor):
         data: torch.Tensor,
         dim: Optional[int] = None
     ) -> torch.Tensor:
-        """Min-max нормализация"""
+        """Min-max normalization."""
         if dim is None:
             min_val = data.min()
             max_val = data.max()
@@ -111,14 +111,14 @@ class Normalizer(DataProcessor):
             min_val = data.min(dim=dim, keepdim=True)[0]
             max_val = data.max(dim=dim, keepdim=True)[0]
         
-        # Сохранить параметры
+        # Store parameters
         self.params['min'] = min_val
         self.params['max'] = max_val
         
-        # Нормализовать
+        # Normalize
         data_norm = (data - min_val) / (max_val - min_val + 1e-8)
         
-        # Масштабировать к feature_range
+        # Scale to feature_range
         feat_min, feat_max = self.feature_range
         data_norm = data_norm * (feat_max - feat_min) + feat_min
         
@@ -129,7 +129,7 @@ class Normalizer(DataProcessor):
         data: torch.Tensor,
         dim: Optional[int] = None
     ) -> torch.Tensor:
-        """Z-score стандартизация"""
+        """Z-score standardization."""
         if dim is None:
             mean = data.mean()
             std = data.std()
@@ -137,11 +137,11 @@ class Normalizer(DataProcessor):
             mean = data.mean(dim=dim, keepdim=True)
             std = data.std(dim=dim, keepdim=True)
         
-        # Сохранить параметры
+        # Store parameters
         self.params['mean'] = mean
         self.params['std'] = std
         
-        # Стандартизовать
+        # Standardize
         data_norm = (data - mean) / (std + 1e-8)
         
         return data_norm
@@ -151,32 +151,32 @@ class Normalizer(DataProcessor):
         data: torch.Tensor,
         dim: Optional[int] = None
     ) -> torch.Tensor:
-        """Max-abs нормализация"""
+        """Max-abs normalization."""
         if dim is None:
             max_abs = torch.abs(data).max()
         else:
             max_abs = torch.abs(data).max(dim=dim, keepdim=True)[0]
         
-        # Сохранить параметры
+        # Store parameters
         self.params['max_abs'] = max_abs
         
-        # Нормализовать
+        # Normalize
         data_norm = data / (max_abs + 1e-8)
         
         return data_norm
     
     def denormalize(self, data: torch.Tensor) -> torch.Tensor:
         """
-        Денормализовать данные
+        Denormalize data.
         
         Args:
-            data: Нормализованные данные
+            data: Normalized data.
             
         Returns:
-            Оригинальные данные
+            Original-scale data.
         """
         if not self.params:
-            logger.warning("Параметры нормализации не найдены, возвращаю данные как есть")
+            logger.warning("Normalization parameters were not found; returning data unchanged")
             return data
         
         if self.method == 'minmax':
@@ -194,11 +194,11 @@ class Normalizer(DataProcessor):
     
     def fit(self, data: torch.Tensor, dim: Optional[int] = None):
         """
-        Вычислить параметры нормализации (без применения)
+        Compute normalization parameters without applying them.
         
         Args:
-            data: Входные данные
-            dim: Размерность для статистик
+            data: Input data.
+            dim: Dimension used for statistics.
         """
         data = data.to(device=self.device, dtype=self.dtype)
         
@@ -226,16 +226,16 @@ class Normalizer(DataProcessor):
     
     def transform(self, data: torch.Tensor) -> torch.Tensor:
         """
-        Применить ранее вычисленные параметры
+        Apply previously computed normalization parameters.
         
         Args:
-            data: Входные данные
+            data: Input data.
             
         Returns:
-            Нормализованные данные
+            Normalized data.
         """
         if not self.params:
-            raise ValueError("Сначала вызовите fit() или normalize()")
+            raise ValueError("Call fit() or normalize() before transform()")
         
         data = data.to(device=self.device, dtype=self.dtype)
         

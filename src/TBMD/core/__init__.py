@@ -1,10 +1,6 @@
-"""
-TBMD Core Package
+"""TBMD core algorithms with a modular v2.0 structure."""
 
-Ядро алгоритмов TBMD с модульной структурой v2.0
-"""
-
-# Импорты из подмодулей
+# Imports from submodules
 from .decomposition import (
     TuckerDecomposer,
     GeometryAwareTuckerDecomposer,

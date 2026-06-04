@@ -1,7 +1,7 @@
 """
-Tucker/HOSVD декомпозиция с улучшенной архитектурой
+Tucker/HOSVD decomposition with an improved architecture.
 
-Полная реализация Tucker decomposition с поддержкой:
+Full Tucker decomposition implementation with support for:
 - CPU/GPU processing strategies
 - Parallel processing
 - Memory management
@@ -97,7 +97,7 @@ class CPUStrategy(ProcessingStrategy):
     """A CPU-based parallel processing strategy."""
     
     def __init__(self, max_workers: Optional[int] = None):
-        # По умолчанию: min(8, cpu_count)
+        # Default: min(8, cpu_count)
         self.max_workers = max_workers or min(8, os.cpu_count() or 4)
     
     def process_decomposition(self, tensors: Dict[str, torch.Tensor], 
