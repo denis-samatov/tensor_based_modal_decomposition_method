@@ -36,6 +36,8 @@ tensor-based-modal-decomposition-method/
 └── results/               # Generated outputs; ignored by git
 ```
 
+Generated plots, sweep summaries, checkpoints, and model-evaluation outputs are produced under ignored paths such as `results/` and `scripts/plots/`. They are not part of the tracked source tree.
+
 ## Installation
 
 Use Python 3.10 or newer.
@@ -55,6 +57,8 @@ If editable installation is not needed, the pinned dependency file can be used i
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+See the [installation guide](docs/guides/installation.md) for verification commands and dependency notes.
 
 ## Configuration
 
@@ -125,9 +129,11 @@ Some experiment scripts require local datasets under `data/` and are not suitabl
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [Installation guide](docs/guides/installation.md)
 - [Quick start guide](docs/guides/quick_start.md)
 - [API reference](docs/api/api_reference.md)
 - [Configuration guide](docs/guides/configuration.md)
+- [Repository structure](docs/guides/repository_structure.md)
 - [Testing guide](docs/guides/testing.md)
 - [Model and data guide](docs/guides/data_and_models.md)
 

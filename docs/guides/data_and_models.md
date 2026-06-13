@@ -23,6 +23,8 @@ Generated figures, metrics, model checkpoints, and sweep outputs should stay und
 
 Commit generated artifacts only when they are intentionally curated documentation assets and are small enough for normal repository review.
 
+Experiment scripts may create files under `scripts/plots/models_eval/`. Those files are generated artifacts, not source files. Regenerate them by running the relevant script with the required local dataset and configuration.
+
 ## Model Artifacts
 
 Trained models, `.npz` checkpoints, and intermediate sweep outputs are local artifacts by default. Do not commit them unless the repository maintainers explicitly decide to version a small reproducible fixture.

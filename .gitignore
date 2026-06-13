@@ -1,9 +1,12 @@
 # Python bytecode and caches
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 .cache/
 
 # Virtual environments
@@ -16,12 +19,18 @@ ENV/
 .env
 .env.*
 !.env.example
+.envrc
+*.pem
+*.key
+*.crt
 
 # Python packaging
 *.egg-info/
+*.egg
 dist/
 build/
 wheelhouse/
+pip-wheel-metadata/
 
 # Local datasets and generated outputs
 data/
@@ -44,6 +53,10 @@ scripts/plots/
 *.pkl
 *.pickle
 *.joblib
+*.log
+logs/
+tmp/
+temp/
 
 # Theory and drafts
 theory/
@@ -56,6 +69,12 @@ theory/*.toc
 # Notebooks and checkpoints
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
+
+# Coverage and reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # System files
 .DS_Store

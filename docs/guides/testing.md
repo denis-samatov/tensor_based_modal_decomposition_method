@@ -14,6 +14,8 @@ pytest tests/audit -q
 pytest tests/unit/test_navier_stokes_pipeline.py -q
 ```
 
+The audit tests check repository hygiene, documentation entry points, tracked generated artifacts, and compatibility imports.
+
 ## Syntax and Import Smoke Check
 
 ```bash
@@ -30,3 +32,5 @@ When adding a dataset-dependent check, document:
 - expected command;
 - expected outputs;
 - whether the command is suitable for CI.
+
+Generated outputs from these checks should be written to ignored paths such as `results/` or `scripts/plots/`.

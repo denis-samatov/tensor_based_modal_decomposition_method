@@ -4,6 +4,7 @@ This directory contains user and developer documentation for the Tensor-Based Mo
 
 ## Start Here
 
+- [Installation](guides/installation.md): reproducible local setup and verification commands.
 - [Quick start](guides/quick_start.md): installation, minimal examples, and common commands.
 - [TBMD core guide](guides/tbmd_core.md): conceptual overview of the decomposition and reconstruction workflow.
 - [Digital twin guide](guides/digital_twin.md): how the digital twin orchestration layer is structured.
@@ -13,6 +14,7 @@ This directory contains user and developer documentation for the Tensor-Based Mo
 ## Guides
 
 - [Configuration](guides/configuration.md)
+- [Repository structure](guides/repository_structure.md)
 - [Testing](guides/testing.md)
 - [Model and data handling](guides/data_and_models.md)
 
@@ -36,7 +38,9 @@ docs/
 │   ├── data_and_models.md
 │   ├── digital_twin.md
 │   ├── geometry_aware_tbmd.md
+│   ├── installation.md
 │   ├── quick_start.md
+│   ├── repository_structure.md
 │   ├── tbmd_core.md
 │   └── testing.md
 └── tutorials/

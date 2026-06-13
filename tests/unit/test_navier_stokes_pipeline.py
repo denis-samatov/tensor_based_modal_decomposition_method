@@ -149,7 +149,12 @@ def test_split_trajectory_series_for_validation_keeps_trajectory_boundaries():
 def test_tuning_split_uses_train_trajectory_holdout_not_official_test():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "tune_navier_stokes_models.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_navier_stokes_models.py"
+    )
     spec = importlib.util.spec_from_file_location("tune_navier_stokes_models", script_path)
     tune_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tune_module)
@@ -167,7 +172,12 @@ def test_tuning_split_uses_train_trajectory_holdout_not_official_test():
 def test_tuning_candidates_support_feature_modes_and_residual_mixed_loss():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "tune_navier_stokes_models.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_navier_stokes_models.py"
+    )
     spec = importlib.util.spec_from_file_location("tune_navier_stokes_models", script_path)
     tune_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tune_module)
@@ -193,7 +203,12 @@ def test_tuning_candidates_support_feature_modes_and_residual_mixed_loss():
 def test_stage3_stable_dmd_candidate_grid_includes_unconstrained_and_damped_models():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "evaluate_stage3_stable_dmd.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "evaluation"
+        / "evaluate_stage3_stable_dmd.py"
+    )
     spec = importlib.util.spec_from_file_location("evaluate_stage3_stable_dmd", script_path)
     stage3_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(stage3_module)
@@ -217,7 +232,12 @@ def test_stage3_stable_dmd_candidate_grid_includes_unconstrained_and_damped_mode
 def test_stage3_stable_dmd_selects_candidate_by_dev_rollout_metric():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "evaluate_stage3_stable_dmd.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "evaluation"
+        / "evaluate_stage3_stable_dmd.py"
+    )
     spec = importlib.util.spec_from_file_location("evaluate_stage3_stable_dmd", script_path)
     stage3_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(stage3_module)
@@ -236,7 +256,12 @@ def test_stage3_stable_dmd_selects_candidate_by_dev_rollout_metric():
 def test_stage4_candidate_grid_covers_rank_correction_lstm_and_optional_spatial_sweeps():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "tune_stage4_rank_sweep.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_stage4_rank_sweep.py"
+    )
     spec = importlib.util.spec_from_file_location("tune_stage4_rank_sweep", script_path)
     stage4_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(stage4_module)
@@ -285,7 +310,12 @@ def test_stage4_candidate_grid_covers_rank_correction_lstm_and_optional_spatial_
 def test_stage4_selects_candidate_by_dev_rollout_metric():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "tune_stage4_rank_sweep.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_stage4_rank_sweep.py"
+    )
     spec = importlib.util.spec_from_file_location("tune_stage4_rank_sweep", script_path)
     stage4_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(stage4_module)
@@ -304,7 +334,12 @@ def test_stage4_selects_candidate_by_dev_rollout_metric():
 def test_cs_forecasting_sweep_candidate_grid_and_selection():
     import importlib.util
 
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "tune_cs_based_forecasting.py"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_cs_based_forecasting.py"
+    )
     spec = importlib.util.spec_from_file_location("tune_cs_based_forecasting", script_path)
     cs_sweep_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cs_sweep_module)
@@ -368,6 +403,7 @@ def test_cs_recovery_diagnostics_helpers_report_conditioning_and_sparsity():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "analysis"
         / "analyze_cs_recovery_diagnostics.py"
     )
     spec = importlib.util.spec_from_file_location("analyze_cs_recovery_diagnostics", script_path)
@@ -394,6 +430,7 @@ def test_temporal_regularized_recovery_smooths_noisy_sensor_coefficients():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "analysis"
         / "analyze_cs_recovery_diagnostics.py"
     )
     spec = importlib.util.spec_from_file_location("analyze_cs_recovery_diagnostics", script_path)
@@ -432,6 +469,7 @@ def test_windowed_tbmd_diagnostics_builds_causal_windows_and_dictionary():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "analysis"
         / "analyze_windowed_tbmd_qr_cs.py"
     )
     spec = importlib.util.spec_from_file_location("analyze_windowed_tbmd_qr_cs", script_path)
@@ -475,6 +513,7 @@ def test_windowed_tbmd_forecasting_predicts_next_from_history_coefficients():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -516,6 +555,7 @@ def test_windowed_tbmd_forecasting_ridge_corrector_learns_target_residual():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -558,6 +598,7 @@ def test_windowed_tbmd_forecasting_rollout_recurses_on_predicted_history():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -626,6 +667,7 @@ def test_windowed_tbmd_closed_loop_training_pairs_use_rollout_history():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -665,6 +707,7 @@ def test_windowed_tbmd_sensor_budget_sweep_selects_by_dev_corrected_r2():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_windowed_tbmd_qr_cs_sensor_budget.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -714,6 +757,7 @@ def test_hybrid_tbmd_qr_cs_blends_backbone_and_sensor_forecasts():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_hybrid_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -737,6 +781,7 @@ def test_hybrid_tbmd_qr_cs_selects_weight_by_dev_rollout():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_hybrid_tbmd_qr_cs_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -764,6 +809,7 @@ def test_fast_tplus1_extracts_fixed_spatial_history_measurements():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_fast_tplus1.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -800,6 +846,7 @@ def test_fast_tplus1_standardized_ridge_corrector_learns_sensor_residual():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_fast_tplus1.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -899,6 +946,210 @@ def test_fast_tplus1_weighted_residual_basis_stores_error_sensitive_weights():
     assert corrected.shape == target_frames.shape
 
 
+def test_fast_tplus1_highpass_residual_target_ignores_constant_bias():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_ridge_residual_corrector,
+        fft_highpass_frames,
+        fit_ridge_residual_corrector,
+    )
+
+    coeffs = np.linspace(0.0, 1.0, 4, dtype=np.float64).reshape(-1, 1)
+    base_predictions = np.zeros((4, 8, 8), dtype=np.float64)
+    constant_targets = np.ones_like(base_predictions) * 2.0
+    checker = (np.indices((8, 8)).sum(axis=0) % 2).astype(np.float64)
+    checker = 2.0 * checker - 1.0
+
+    constant_highpass = fft_highpass_frames(constant_targets, cutoff_fraction=0.4)
+    checker_highpass = fft_highpass_frames(checker[None], cutoff_fraction=0.4)
+    highpass_corrector = fit_ridge_residual_corrector(
+        constant_targets,
+        base_predictions,
+        coeffs,
+        alpha=1e-8,
+        residual_rank=None,
+        residual_target="highpass",
+        highpass_cutoff_fraction=0.4,
+    )
+    full_corrector = fit_ridge_residual_corrector(
+        constant_targets,
+        base_predictions,
+        coeffs,
+        alpha=1e-8,
+        residual_rank=None,
+    )
+    highpass_pred = apply_ridge_residual_corrector(
+        base_predictions,
+        coeffs,
+        highpass_corrector,
+        scale=1.0,
+    )
+    full_pred = apply_ridge_residual_corrector(
+        base_predictions,
+        coeffs,
+        full_corrector,
+        scale=1.0,
+    )
+
+    assert np.linalg.norm(constant_highpass) < 1e-8
+    assert np.linalg.norm(checker_highpass) > 0.9 * np.linalg.norm(checker)
+    assert np.max(np.abs(highpass_pred)) < 1e-6
+    assert np.mean(full_pred) == pytest.approx(2.0, abs=1e-4)
+    assert highpass_corrector["residual_target"] == "highpass"
+
+
+def test_fast_tplus1_highpass_energy_weighting_emphasizes_textured_region():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import fit_ridge_residual_corrector
+
+    checker = (np.indices((8, 8)).sum(axis=0) % 2).astype(np.float64)
+    checker = 2.0 * checker - 1.0
+    textured_half = np.zeros((8, 8), dtype=np.float64)
+    textured_half[:4] = checker[:4]
+    scales = np.array([0.5, 1.0, 1.5, 2.0], dtype=np.float64)
+    target_frames = scales[:, None, None] * textured_half[None]
+    base_predictions = np.zeros_like(target_frames)
+    coeffs = scales.reshape(-1, 1)
+
+    corrector = fit_ridge_residual_corrector(
+        target_frames,
+        base_predictions,
+        coeffs,
+        alpha=1e-8,
+        residual_rank=1,
+        residual_weighting="highpass_energy",
+        highpass_cutoff_fraction=0.35,
+    )
+    weights = corrector["residual_weights"].reshape(8, 8)
+
+    assert corrector["residual_weighting"] == "highpass_energy"
+    assert np.mean(weights[:4]) > np.mean(weights[4:])
+
+
+def test_fast_tplus1_composite_residual_corrector_combines_patch_and_hf_components():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_ridge_residual_corrector,
+        fit_composite_patch_hf_residual_corrector,
+    )
+
+    yy, xx = np.indices((8, 8))
+    smooth = np.sin(2 * np.pi * xx / 8.0)
+    checker = 2.0 * ((yy + xx) % 2).astype(np.float64) - 1.0
+    pattern = smooth + 0.25 * checker
+    coeffs = np.linspace(0.5, 2.0, 5, dtype=np.float64).reshape(-1, 1)
+    base_predictions = np.zeros((5, 8, 8), dtype=np.float64)
+    target_frames = coeffs[:, None] * pattern.reshape(1, -1)
+    target_frames = target_frames.reshape(5, 8, 8)
+
+    corrector = fit_composite_patch_hf_residual_corrector(
+        target_frames,
+        base_predictions,
+        coeffs,
+        alpha=1e-8,
+        patch_size=4,
+        patch_residual_rank=1,
+        hf_residual_rank=1,
+        patch_scale=1.0,
+        hf_scale=0.25,
+        highpass_cutoff_fraction=0.35,
+    )
+    pred = apply_ridge_residual_corrector(
+        base_predictions,
+        coeffs,
+        corrector,
+        scale=1.0,
+    )
+
+    assert corrector["mode"] == "composite_patch_hf_svd"
+    assert len(corrector["components"]) == 2
+    assert corrector["components"][0]["name"] == "patch"
+    assert corrector["components"][1]["name"] == "hfweighted"
+    assert pred.shape == target_frames.shape
+    assert np.mean((target_frames - pred) ** 2) < np.mean(target_frames**2)
+
+
+def test_fast_tplus1_hard_frame_sample_weighting_prioritizes_large_errors():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        compute_residual_sample_weights,
+        fit_ridge_residual_corrector,
+    )
+
+    base_predictions = np.zeros((4, 1, 1), dtype=np.float64)
+    target_frames = np.array([[[0.1]], [[0.2]], [[0.3]], [[4.0]]], dtype=np.float64)
+    coeffs = np.arange(4, dtype=np.float64).reshape(-1, 1)
+
+    sample_weights = compute_residual_sample_weights(
+        target_frames,
+        base_predictions,
+        weighting="hard_frame_rmse",
+        power=1.0,
+        floor=0.25,
+        clip=4.0,
+    )
+    corrector = fit_ridge_residual_corrector(
+        target_frames,
+        base_predictions,
+        coeffs,
+        alpha=1e-8,
+        residual_rank=1,
+        sample_weighting="hard_frame_rmse",
+        sample_weight_power=1.0,
+        sample_weight_floor=0.25,
+        sample_weight_clip=4.0,
+    )
+
+    assert sample_weights.shape == (4,)
+    assert np.mean(sample_weights) == pytest.approx(1.0)
+    assert sample_weights[-1] > sample_weights[0]
+    assert corrector["sample_weighting"] == "hard_frame_rmse"
+    assert corrector["sample_weight_max"] > corrector["sample_weight_min"]
+
+
+def test_fast_tplus1_sensor_innovation_gate_shrinks_inconsistent_correction():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_ridge_residual_corrector,
+        attach_coefficient_gate,
+    )
+
+    train_coeffs = np.array([[1.0], [1.0], [1.0]], dtype=np.float64)
+    train_measurements = np.array([[1.0], [1.2], [1.4]], dtype=np.float64)
+    decoder_payload = {"sensing_matrix": np.array([[1.0]], dtype=np.float64)}
+    corrector = {
+        "alpha": 0.0,
+        "weights": np.array([[1.0], [0.0]], dtype=np.float64),
+        "feature_dim": 1,
+        "coefficient_dim": 1,
+        "output_dim": 1,
+        "mode": "full",
+        "residual_rank": None,
+        "residual_weighting": "uniform",
+    }
+    gated = attach_coefficient_gate(
+        corrector,
+        train_coeffs,
+        gate_type="sensor_innovation_rms",
+        threshold=0.0,
+        strength=1.0,
+        gate_min=0.25,
+        measurements=train_measurements,
+        decoder_payload=decoder_payload,
+    )
+
+    base = np.zeros((2, 1, 1), dtype=np.float64)
+    coeffs = np.array([[1.0], [1.0]], dtype=np.float64)
+    measurements = np.array([[1.0], [4.0]], dtype=np.float64)
+    pred = apply_ridge_residual_corrector(
+        base,
+        coeffs,
+        gated,
+        scale=1.0,
+        measurements=measurements,
+        decoder_payload=decoder_payload,
+    )
+
+    assert gated["gate_type"] == "sensor_innovation_rms"
+    assert pred[0, 0, 0] > pred[1, 0, 0]
+    assert pred[1, 0, 0] >= 0.25
+
+
 def test_fast_tplus1_mlp_residual_corrector_learns_nonlinear_compressed_residual():
     from TBMD.experiments.navier_stokes_fast_tplus1 import (
         apply_ridge_residual_corrector,
@@ -940,6 +1191,7 @@ def test_fast_tplus1_predicts_next_from_sparse_history_measurements():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "evaluation"
         / "evaluate_windowed_tbmd_qr_cs_fast_tplus1.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1071,6 +1323,90 @@ def test_fast_windowed_tbmd_qr_cs_forecaster_save_load_roundtrip(tmp_path):
     assert loaded.get_metrics()["fit"]["n_train_segments"] == 6
 
 
+def test_fast_tplus1_delta_coefficient_calibrator_learns_conservative_latent_update():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        apply_coefficient_calibrator,
+        fit_coefficient_calibrator,
+    )
+
+    dictionary = np.zeros((2, 1, 2, 2), dtype=np.float64)
+    dictionary[-1, 0, 0, 0] = 1.0
+    dictionary[-1, 0, 1, 1] = 1.0
+    recovered = np.array([[0.0, 0.0], [1.0, 2.0], [2.0, 4.0]], dtype=np.float64)
+    target_coeffs = recovered + np.array([1.0, -0.5], dtype=np.float64)
+    target_frames = target_coeffs.reshape(target_coeffs.shape[0], 1, 2)
+
+    calibrator = fit_coefficient_calibrator(
+        recovered,
+        target_frames,
+        dictionary,
+        calibration_type="delta_ridge",
+        target="target",
+        alpha=1e-10,
+        blend=0.5,
+        rcond=1e-10,
+    )
+    corrected = apply_coefficient_calibrator(recovered, calibrator)
+
+    assert calibrator["type"] == "delta_ridge"
+    assert calibrator["feature_dim"] == recovered.shape[1]
+    np.testing.assert_allclose(corrected, recovered + 0.5 * (target_coeffs - recovered), atol=1e-6)
+
+
+def test_fast_windowed_tbmd_qr_cs_delta_coefficient_calibrator_save_load_roundtrip(tmp_path):
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        FastWindowedTBMDQRCSConfig,
+        FastWindowedTBMDQRCSForecaster,
+    )
+
+    pattern = np.array([[1.0, -0.5], [0.25, 0.75]], dtype=np.float64)
+    scales = np.array(
+        [
+            [1.0, 1.2, 1.44, 1.728],
+            [0.8, 0.96, 1.152, 1.3824],
+            [1.4, 1.68, 2.016, 2.4192],
+        ],
+        dtype=np.float64,
+    )
+    states = np.asarray([[scale * pattern for scale in traj] for traj in scales])
+
+    model = FastWindowedTBMDQRCSForecaster(
+        FastWindowedTBMDQRCSConfig(
+            history_length=2,
+            ranks=[3, 2, 2, 1],
+            n_spatial_sensors=2,
+            max_train_segments=None,
+            sensor_decoder="ridge",
+            decoder_ridge_lambda=1e-8,
+            coefficient_calibration_type="delta_ridge",
+            coefficient_calibration_alpha=1e-8,
+            coefficient_calibration_blend=0.25,
+            coefficient_calibration_innovation_rank=1,
+            coefficient_calibration_include_norms=True,
+            coefficient_temporal_smoothing_alpha=0.2,
+            correction_head_type="none",
+            sensor_rcond=1e-10,
+            random_state=0,
+        )
+    )
+    model.fit(states)
+    assert model.get_metrics()["fit"]["coefficient_temporal_smoothing_alpha"] == pytest.approx(0.2)
+    history = states[:1, :2]
+    pred_before = model.predict_next(history)
+
+    path = tmp_path / "fast_delta_coeff_predictor.npz"
+    model.save(path)
+    loaded = FastWindowedTBMDQRCSForecaster.load(path)
+    pred_after = loaded.predict_next(history)
+
+    np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
+    assert loaded.get_config()["coefficient_calibration_type"] == "delta_ridge"
+    assert loaded.get_config()["coefficient_calibration_blend"] == pytest.approx(0.25)
+    assert loaded.get_config()["coefficient_calibration_innovation_rank"] == 1
+    assert loaded.get_config()["coefficient_calibration_include_norms"]
+    assert loaded.get_config()["coefficient_temporal_smoothing_alpha"] == pytest.approx(0.2)
+
+
 def test_fast_windowed_tbmd_qr_cs_mlp_corrector_save_load_roundtrip(tmp_path):
     from TBMD.experiments.navier_stokes_fast_tplus1 import (
         FastWindowedTBMDQRCSConfig,
@@ -1165,6 +1501,115 @@ def test_fast_windowed_tbmd_qr_cs_patch_residual_save_load_roundtrip(tmp_path):
     assert loaded.get_config()["correction_patch_residual_rank"] == 1
 
 
+def test_fast_windowed_tbmd_qr_cs_composite_residual_save_load_roundtrip(tmp_path):
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        FastWindowedTBMDQRCSConfig,
+        FastWindowedTBMDQRCSForecaster,
+    )
+
+    x = np.linspace(-1.0, 1.0, 4)
+    xx, yy = np.meshgrid(x, x, indexing="ij")
+    smooth = xx + 0.5 * yy
+    texture = 0.1 * ((np.indices((4, 4)).sum(axis=0) % 2) * 2.0 - 1.0)
+    pattern = smooth + texture
+    scales = np.array(
+        [
+            [1.0, 1.1, 1.21, 1.331],
+            [0.8, 0.88, 0.968, 1.0648],
+            [1.3, 1.43, 1.573, 1.7303],
+            [0.6, 0.66, 0.726, 0.7986],
+        ],
+        dtype=np.float64,
+    )
+    states = np.asarray([[scale * pattern for scale in traj] for traj in scales])
+
+    model = FastWindowedTBMDQRCSForecaster(
+        FastWindowedTBMDQRCSConfig(
+            history_length=2,
+            ranks=[3, 2, 2, 2],
+            n_spatial_sensors=4,
+            max_train_segments=None,
+            sensor_decoder="ridge",
+            decoder_ridge_lambda=1e-8,
+            correction_head_type="composite_patch_hf_svd",
+            correction_patch_size=2,
+            correction_patch_residual_rank=1,
+            correction_residual_rank=1,
+            correction_scale=1.3,
+            correction_hf_scale=0.4,
+            correction_highpass_cutoff_fraction=0.45,
+            correction_alpha=1e-8,
+            sensor_rcond=1e-10,
+            random_state=0,
+        )
+    )
+    model.fit(states)
+    history = states[:1, :2]
+    pred_before = model.predict_next(history)
+
+    path = tmp_path / "fast_composite_predictor.npz"
+    model.save(path)
+    loaded = FastWindowedTBMDQRCSForecaster.load(path)
+    pred_after = loaded.predict_next(history)
+
+    np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
+    assert loaded.get_config()["correction_head_type"] == "composite_patch_hf_svd"
+    assert loaded.get_config()["correction_patch_residual_rank"] == 1
+    assert loaded.get_config()["correction_residual_rank"] == 1
+    assert loaded.get_config()["correction_hf_scale"] == pytest.approx(0.4)
+    assert loaded._coefficient_corrector["mode"] == "composite_patch_hf_svd"
+    assert [component["name"] for component in loaded._coefficient_corrector["components"]] == [
+        "patch",
+        "hfweighted",
+    ]
+
+
+def test_fast_windowed_tbmd_qr_cs_none_corrector_uses_base_prediction(tmp_path):
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        FastWindowedTBMDQRCSConfig,
+        FastWindowedTBMDQRCSForecaster,
+    )
+
+    pattern = np.array([[1.0, -0.5], [0.25, 0.75]], dtype=np.float64)
+    scales = np.array(
+        [
+            [1.0, 1.2, 1.44, 1.728],
+            [0.8, 0.96, 1.152, 1.3824],
+            [1.4, 1.68, 2.016, 2.4192],
+        ],
+        dtype=np.float64,
+    )
+    states = np.asarray([[scale * pattern for scale in traj] for traj in scales])
+
+    model = FastWindowedTBMDQRCSForecaster(
+        FastWindowedTBMDQRCSConfig(
+            history_length=2,
+            ranks=[3, 2, 2, 1],
+            n_spatial_sensors=2,
+            max_train_segments=None,
+            coefficient_calibration_type="ridge",
+            coefficient_calibration_blend=1.0,
+            correction_head_type="none",
+            sensor_rcond=1e-10,
+            random_state=0,
+        )
+    )
+    model.fit(states)
+    history = states[:1, :2]
+    pred_before = model.predict_next(history)
+
+    path = tmp_path / "fast_none_predictor.npz"
+    model.save(path)
+    loaded = FastWindowedTBMDQRCSForecaster.load(path)
+    pred_after = loaded.predict_next(history)
+
+    np.testing.assert_allclose(pred_before, pred_after, atol=1e-6)
+    assert loaded.get_config()["correction_head_type"] == "none"
+    assert loaded.get_metrics()["fit"]["train_base"]["r2"] == pytest.approx(
+        loaded.get_metrics()["fit"]["train_corrected"]["r2"]
+    )
+
+
 def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
     from TBMD.experiments.navier_stokes_model_registry import get_fast_tplus1_model_specs
     from TBMD.experiments.navier_stokes_fast_tplus1 import FastWindowedTBMDQRCSForecaster
@@ -1180,6 +1625,9 @@ def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
         "fast_tplus1_r300_s1000_residual_svd256_scale11",
         "fast_tplus1_r300_s1000_residual_svd256_scale13",
         "fast_tplus1_r300_s1000_patch16_svd32_scale13",
+        "fast_tplus1_r300_s1000_tempsmooth_patch16_svd32_a01_scale13",
+        "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04",
+        "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04_seg2048",
         "fast_tplus1_r300_s1000_residual_svd256_scale15",
     }
     assert specs["fast_tplus1_r300_s300"].notes["label"] == "practical"
@@ -1190,6 +1638,22 @@ def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
     assert specs["fast_tplus1_r300_s1000_residual_svd256_scale11"].notes["label"] == "sensor-overbudget-dev-candidate"
     assert specs["fast_tplus1_r300_s1000_residual_svd256_scale13"].notes["label"] == "sensor-overbudget-cached-multidev-candidate"
     assert specs["fast_tplus1_r300_s1000_patch16_svd32_scale13"].notes["label"] == "sensor-overbudget-patch-residual-multidev-candidate"
+    assert (
+        specs["fast_tplus1_r300_s1000_tempsmooth_patch16_svd32_a01_scale13"].notes["label"]
+        == "sensor-overbudget-temporal-patch-residual-multidev-candidate"
+    )
+    assert (
+        specs[
+            "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04"
+        ].notes["label"]
+        == "sensor-overbudget-composite-patch-hf-confirmed-candidate"
+    )
+    assert (
+        specs[
+            "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04_seg2048"
+        ].notes["label"]
+        == "sensor-overbudget-composite-patch-hf-selected-seg2048-candidate"
+    )
     assert specs["fast_tplus1_r300_s1000_residual_svd256_scale15"].notes["label"] == "sensor-overbudget-scale-dev-candidate"
     assert specs["fast_tplus1_r300_s300"].factory().config.ranks[-1] == 300
     assert specs["fast_tplus1_r300_s600"].factory().config.n_spatial_sensors == 600
@@ -1221,6 +1685,29 @@ def test_fast_tplus1_registry_exposes_practical_and_quality_presets():
     assert patch_config.correction_head_type == "patch_residual_svd"
     assert patch_config.correction_patch_size == 16
     assert patch_config.correction_patch_residual_rank == 32
+    temporal_patch_config = specs[
+        "fast_tplus1_r300_s1000_tempsmooth_patch16_svd32_a01_scale13"
+    ].factory().config
+    assert temporal_patch_config.correction_head_type == "patch_residual_svd"
+    assert temporal_patch_config.correction_patch_residual_rank == 32
+    assert temporal_patch_config.coefficient_temporal_smoothing_alpha == pytest.approx(0.1)
+    composite_config = specs[
+        "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04"
+    ].factory().config
+    assert composite_config.correction_head_type == "composite_patch_hf_svd"
+    assert composite_config.correction_patch_size == 16
+    assert composite_config.correction_patch_residual_rank == 24
+    assert composite_config.correction_residual_rank == 256
+    assert composite_config.correction_scale == pytest.approx(1.3)
+    assert composite_config.correction_hf_scale == pytest.approx(0.4)
+    assert composite_config.correction_highpass_cutoff_fraction == pytest.approx(0.45)
+    composite_seg_config = specs[
+        "fast_tplus1_r300_s1000_composite_patch24_hf256_scale13_hf04_seg2048"
+    ].factory().config
+    assert composite_seg_config.correction_head_type == "composite_patch_hf_svd"
+    assert composite_seg_config.max_train_segments == 2048
+    assert composite_seg_config.correction_patch_residual_rank == 24
+    assert composite_seg_config.correction_residual_rank == 256
     assert (
         specs["fast_tplus1_r300_s1000_residual_svd256_scale15"].factory().config.correction_scale
         == pytest.approx(1.5)
@@ -1234,6 +1721,7 @@ def test_fast_tplus1_accuracy_sweep_builds_candidates_and_selects_by_dev():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_fast_tplus1_accuracy.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1351,6 +1839,7 @@ def test_tbmd_qr_cs_next_step_script_exposes_fast_decoders_and_hybrid_plan():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_tbmd_qr_cs_next_step_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1375,6 +1864,7 @@ def test_tbmd_qr_cs_next_step_ridge_and_fista_decoders_are_batched():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_tbmd_qr_cs_next_step_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1411,6 +1901,7 @@ def test_tbmd_qr_cs_next_step_selection_uses_dev_and_tie_breakers():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_tbmd_qr_cs_next_step_forecasting.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1455,6 +1946,7 @@ def test_fast_tplus1_cached_residual_dev_blocks_hold_out_train_only():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_fast_tplus1_cached_residual.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1479,6 +1971,7 @@ def test_fast_tplus1_cached_residual_candidates_include_robust_variants():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_fast_tplus1_cached_residual.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1496,6 +1989,24 @@ def test_fast_tplus1_cached_residual_candidates_include_robust_variants():
     assert "gated_svd256_scale1.3_thr1_str1" in candidates
     assert "innovation_svd256_ir16_scale1.1" in candidates
     assert "coeffcal_svd256_blend0.5_scale1.1" in candidates
+    assert "coeffcal_base_blend1" in candidates
+    assert "coeffcal_svd128_blend1_scale0.25" in candidates
+    assert "hard_svd256_pow1_clip4_scale1.3" in candidates
+    assert "hard_patch16_rank32_pow1_clip4_scale1.3" in candidates
+    assert "innovgate_svd256_scale1.3_thr0_str1" in candidates
+    assert "innovgate_patch16_rank32_scale1.3_thr0_str1" in candidates
+    assert "highpass_svd256_cut0.35_scale0.75" in candidates
+    assert "highpass_patch16_rank32_cut0.35_scale0.75" in candidates
+    assert "hfweight_svd256_cut0.35_scale1.1" in candidates
+    assert "hfweight_patch16_rank32_cut0.35_scale1.1" in candidates
+    assert "composite_patch16_rank32_hf256_cut0.45_p1.3_hf0.25" in candidates
+    assert "coeffdelta_base_blend0.25" in candidates
+    assert "coeffdelta_base_ir16_blend0.25" in candidates
+    assert "coeffdelta_svd64_ir16_blend0.25_scale0.25" in candidates
+    assert "tempsmooth_base_a0.2" in candidates
+    assert "tempsmooth_svd256_a0.2_scale1.1" in candidates
+    assert "tempsmooth_coeffcal_svd128_a0.2_blend1_scale0.25" in candidates
+    assert "tempsmooth_patch16_rank32_a0.1_scale1.3" in candidates
     assert candidates["uniform_svd256_scale1.1"].residual_rank == 256
     assert candidates["energy_svd256_scale1.1"].residual_weighting == "residual_energy"
     assert candidates["patch16_rank16_scale1.1"].head_type == "patch_residual_svd"
@@ -1505,6 +2016,100 @@ def test_fast_tplus1_cached_residual_candidates_include_robust_variants():
     assert candidates["innovation_svd256_ir16_scale1.1"].innovation_include_norms
     assert candidates["coeffcal_svd256_blend0.5_scale1.1"].coefficient_calibration_type == "ridge"
     assert candidates["coeffcal_svd256_blend0.5_scale1.1"].coefficient_calibration_blend == pytest.approx(0.5)
+    assert candidates["coeffcal_base_blend1"].head_type == "none"
+    assert candidates["coeffcal_base_blend1"].coefficient_calibration_type == "ridge"
+    assert candidates["coeffcal_svd128_blend1_scale0.25"].scale == pytest.approx(0.25)
+    assert candidates["hard_svd256_pow1_clip4_scale1.3"].sample_weighting == "hard_frame_rmse"
+    assert candidates["hard_patch16_rank32_pow1_clip4_scale1.3"].head_type == "patch_residual_svd"
+    assert candidates["innovgate_svd256_scale1.3_thr0_str1"].gate_type == "sensor_innovation_rms"
+    assert candidates["highpass_svd256_cut0.35_scale0.75"].residual_target == "highpass"
+    assert candidates["highpass_patch16_rank32_cut0.35_scale0.75"].head_type == "patch_residual_svd"
+    assert candidates["hfweight_svd256_cut0.35_scale1.1"].residual_weighting == "highpass_energy"
+    assert candidates["hfweight_patch16_rank32_cut0.35_scale1.1"].residual_weighting == "highpass_energy"
+    assert candidates["composite_patch16_rank32_hf256_cut0.45_p1.3_hf0.25"].head_type == "composite_patch_hf_svd"
+    assert candidates["composite_patch16_rank32_hf256_cut0.45_p1.3_hf0.25"].hf_scale == pytest.approx(0.25)
+    assert candidates["coeffdelta_base_blend0.25"].coefficient_calibration_type == "delta_ridge"
+    assert candidates["coeffdelta_base_blend0.25"].head_type == "none"
+    assert candidates["coeffdelta_base_ir16_blend0.25"].coefficient_calibration_innovation_rank == 16
+    assert candidates["coeffdelta_base_ir16_blend0.25"].coefficient_calibration_include_norms
+    assert candidates["coeffdelta_svd64_ir16_blend0.25_scale0.25"].residual_rank == 64
+    assert candidates["tempsmooth_base_a0.2"].coefficient_temporal_smoothing_alpha == pytest.approx(0.2)
+    assert candidates["tempsmooth_base_a0.2"].head_type == "none"
+    assert candidates["tempsmooth_svd256_a0.2_scale1.1"].residual_rank == 256
+    assert candidates["tempsmooth_coeffcal_svd128_a0.2_blend1_scale0.25"].coefficient_calibration_type == "ridge"
+    assert candidates["tempsmooth_patch16_rank32_a0.1_scale1.3"].head_type == "patch_residual_svd"
+    assert candidates["tempsmooth_patch16_rank32_a0.1_scale1.3"].patch_residual_rank == 32
+
+
+def test_fast_tplus1_segment_refs_match_selected_window_order():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        build_forecast_segment_tensor_with_refs,
+    )
+
+    states = np.arange(2 * 5, dtype=np.float64).reshape(2, 5, 1, 1)
+
+    segments, refs = build_forecast_segment_tensor_with_refs(
+        states,
+        history_length=2,
+        stride=1,
+        max_segments=4,
+    )
+
+    np.testing.assert_array_equal(refs, np.array([[0, 0], [0, 1], [1, 0], [1, 2]]))
+    assert segments.shape == (3, 1, 1, 4)
+    np.testing.assert_array_equal(segments[:, 0, 0, 0], states[0, 0:3, 0, 0])
+    np.testing.assert_array_equal(segments[:, 0, 0, 1], states[0, 1:4, 0, 0])
+    np.testing.assert_array_equal(segments[:, 0, 0, 2], states[1, 0:3, 0, 0])
+    np.testing.assert_array_equal(segments[:, 0, 0, 3], states[1, 2:5, 0, 0])
+
+
+def test_fast_tplus1_temporal_coefficient_smoothing_is_causal_and_resets_on_gaps():
+    from TBMD.experiments.navier_stokes_fast_tplus1 import (
+        smooth_coefficients_by_segment_refs,
+    )
+
+    coeffs = np.array([[0.0], [10.0], [20.0], [100.0], [300.0]], dtype=np.float64)
+    refs = np.array([[0, 0], [0, 1], [0, 3], [1, 0], [1, 1]], dtype=np.int64)
+
+    smoothed = smooth_coefficients_by_segment_refs(
+        coeffs,
+        refs,
+        alpha=0.5,
+        reset_on_gap=True,
+    )
+
+    np.testing.assert_allclose(smoothed[:, 0], [0.0, 5.0, 20.0, 100.0, 200.0])
+
+
+def test_fast_tplus1_cached_residual_filter_can_target_candidate_names():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    selected = sweep_module.filter_candidates(
+        sweep_module.build_residual_candidates("fast"),
+        family="temporal",
+        candidate_names=[
+            "tempsmooth_base_a0.2",
+            "tempsmooth_svd256_a0.2_scale1.1",
+        ],
+    )
+
+    assert [candidate.name for candidate in selected] == [
+        "tempsmooth_base_a0.2",
+        "tempsmooth_svd256_a0.2_scale1.1",
+    ]
 
 
 def test_fast_tplus1_cached_residual_selection_uses_multi_dev_robust_score():
@@ -1513,6 +2118,7 @@ def test_fast_tplus1_cached_residual_selection_uses_multi_dev_robust_score():
     script_path = (
         Path(__file__).resolve().parents[2]
         / "scripts"
+        / "tuning"
         / "tune_fast_tplus1_cached_residual.py"
     )
     spec = importlib.util.spec_from_file_location(
@@ -1546,6 +2152,367 @@ def test_fast_tplus1_cached_residual_selection_uses_multi_dev_robust_score():
     )
 
     assert selected["candidate"] == "same_mean_higher_worst"
+
+
+def test_fast_tplus1_cached_residual_computes_hard_bucket_metrics_from_base_errors():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    target = np.arange(10, dtype=np.float64).reshape(10, 1, 1)
+    base = target.copy()
+    base[-2:] += 10.0
+    pred = target.copy()
+    pred[-2:] += 1.0
+
+    metrics = sweep_module.compute_hard_bucket_metrics(
+        target,
+        pred,
+        base,
+        hard_fraction=0.2,
+    )
+
+    assert metrics["dev_hard_count"] == 2
+    assert metrics["dev_easy_count"] == 2
+    assert metrics["dev_hard_rmse"] == pytest.approx(1.0)
+    assert metrics["dev_hard_base_rmse"] == pytest.approx(10.0)
+    assert metrics["dev_hard_delta_rmse"] == pytest.approx(-9.0)
+
+
+def test_fast_tplus1_cached_residual_hard_bucket_selection_uses_hard_cases_with_tolerance():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    selected = sweep_module.select_best_robust_result(
+        [
+            {
+                "candidate": "best_mean_weak_hard",
+                "mean_dev_r2": 0.800,
+                "worst_dev_r2": 0.790,
+                "mean_dev_rmse": 0.4,
+                "mean_dev_hard_r2": 0.40,
+                "worst_dev_hard_r2": 0.35,
+            },
+            {
+                "candidate": "near_mean_strong_hard",
+                "mean_dev_r2": 0.797,
+                "worst_dev_r2": 0.785,
+                "mean_dev_rmse": 0.41,
+                "mean_dev_hard_r2": 0.55,
+                "worst_dev_hard_r2": 0.50,
+            },
+            {
+                "candidate": "too_low_mean_strong_hard",
+                "mean_dev_r2": 0.760,
+                "worst_dev_r2": 0.755,
+                "mean_dev_rmse": 0.5,
+                "mean_dev_hard_r2": 0.90,
+                "worst_dev_hard_r2": 0.90,
+            },
+        ],
+        objective="hard_bucket",
+        mean_r2_tolerance=0.005,
+    )
+
+    assert selected["candidate"] == "near_mean_strong_hard"
+
+
+def test_fast_tplus1_cached_residual_aggregates_optional_structure_metrics():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    rows = [
+        {
+            "candidate": "a",
+            "residual_rank": 1,
+            "actual_residual_rank": 1,
+            "head_type": "global_residual_svd",
+            "patch_size": None,
+            "patch_residual_rank": None,
+            "actual_patch_residual_rank": None,
+            "gate_type": "none",
+            "gate_threshold": 0.0,
+            "gate_strength": 0.0,
+            "gate_min": 1.0,
+            "innovation_rank": 0,
+            "actual_innovation_rank": 0,
+            "innovation_include_norms": False,
+            "coefficient_calibration_type": "none",
+            "coefficient_calibration_blend": 1.0,
+            "coefficient_calibration_alpha": 1e-6,
+            "base_dev_r2": 0.5,
+            "base_dev_rmse": 1.0,
+            "scale": 1.0,
+            "alpha": 1e-8,
+            "residual_target": "highpass",
+            "highpass_cutoff_fraction": 0.35,
+            "residual_weighting": "uniform",
+            "sample_weighting": "uniform",
+            "sample_weight_power": 1.0,
+            "sample_weight_floor": 0.25,
+            "sample_weight_clip": 4.0,
+            "sample_weight_min": 1.0,
+            "sample_weight_max": 1.0,
+            "train_r2": 0.8,
+            "dev_r2": 0.7,
+            "dev_rmse": 0.4,
+            "dev_mae": 0.3,
+            "dev_structure_score": 0.6,
+            "dev_gradient_rel_frob_err": 0.8,
+            "dev_high_frequency_energy_rel_err": 0.9,
+            "correction_fit_eval_time_seconds": 0.1,
+        },
+        {
+            "candidate": "a",
+            "residual_rank": 1,
+            "actual_residual_rank": 1,
+            "head_type": "global_residual_svd",
+            "patch_size": None,
+            "patch_residual_rank": None,
+            "actual_patch_residual_rank": None,
+            "gate_type": "none",
+            "gate_threshold": 0.0,
+            "gate_strength": 0.0,
+            "gate_min": 1.0,
+            "innovation_rank": 0,
+            "actual_innovation_rank": 0,
+            "innovation_include_norms": False,
+            "coefficient_calibration_type": "none",
+            "coefficient_calibration_blend": 1.0,
+            "coefficient_calibration_alpha": 1e-6,
+            "base_dev_r2": 0.5,
+            "base_dev_rmse": 1.0,
+            "scale": 1.0,
+            "alpha": 1e-8,
+            "residual_target": "highpass",
+            "highpass_cutoff_fraction": 0.35,
+            "residual_weighting": "uniform",
+            "sample_weighting": "uniform",
+            "sample_weight_power": 1.0,
+            "sample_weight_floor": 0.25,
+            "sample_weight_clip": 4.0,
+            "sample_weight_min": 1.0,
+            "sample_weight_max": 1.0,
+            "train_r2": 0.9,
+            "dev_r2": 0.75,
+            "dev_rmse": 0.35,
+            "dev_mae": 0.25,
+            "dev_structure_score": 0.4,
+            "dev_gradient_rel_frob_err": 0.6,
+            "dev_high_frequency_energy_rel_err": 0.7,
+            "correction_fit_eval_time_seconds": 0.2,
+        },
+    ]
+
+    aggregated = sweep_module.aggregate_candidate_results(rows)
+
+    assert aggregated[0]["residual_target"] == "highpass"
+    assert aggregated[0]["mean_dev_structure_score"] == pytest.approx(0.5)
+    assert aggregated[0]["mean_dev_gradient_rel_frob_err"] == pytest.approx(0.7)
+    assert aggregated[0]["mean_dev_high_frequency_energy_rel_err"] == pytest.approx(0.8)
+
+
+def test_fast_tplus1_cached_residual_highpass_filter_keeps_controls_and_highpass():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "tuning"
+        / "tune_fast_tplus1_cached_residual.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "tune_fast_tplus1_cached_residual",
+        script_path,
+    )
+    sweep_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sweep_module)
+
+    candidates = sweep_module.filter_candidates(
+        sweep_module.build_residual_candidates("fast"),
+        family="highpass",
+    )
+    names = {candidate.name for candidate in candidates}
+
+    assert "uniform_svd256_scale1.1" in names
+    assert "patch16_rank32_scale1.3" in names
+    assert "highpass_svd256_cut0.35_scale0.75" in names
+    assert "highpass_patch16_rank32_cut0.35_scale0.75" in names
+    assert "hfweight_svd256_cut0.35_scale1.1" in names
+    assert "hfweight_patch16_rank32_cut0.35_scale1.1" in names
+    assert all(
+        "highpass" in name
+        or "hfweight" in name
+        or name in {"uniform_svd256_scale1.1", "patch16_rank32_scale1.3", "coeffcal_base_blend1"}
+        for name in names
+    )
+
+    hfweight_names = {
+        candidate.name
+        for candidate in sweep_module.filter_candidates(
+            sweep_module.build_residual_candidates("fast"),
+            family="hfweight",
+        )
+    }
+    assert "hfweight_svd256_cut0.35_scale1.1" in hfweight_names
+    assert "highpass_svd256_cut0.35_scale0.75" not in hfweight_names
+
+    composite_names = {
+        candidate.name
+        for candidate in sweep_module.filter_candidates(
+            sweep_module.build_residual_candidates("fast"),
+            family="composite",
+        )
+    }
+    assert "patch16_rank32_scale1.3" in composite_names
+    assert "hfweight_svd256_cut0.45_scale1.2" in composite_names
+    assert "composite_patch16_rank32_hf256_cut0.45_p1.3_hf0.25" in composite_names
+    assert "highpass_svd256_cut0.35_scale0.75" not in composite_names
+
+
+def test_fast_tplus1_visualization_metrics_are_single_frame_safe():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "evaluation"
+        / "visualize_fast_tplus1_prediction.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "visualize_fast_tplus1_prediction",
+        script_path,
+    )
+    viz_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(viz_module)
+
+    target = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    pred = np.array([[1.0, 1.0], [3.0, 5.0]], dtype=np.float64)
+    metrics = viz_module.compute_frame_metrics(target, pred)
+
+    assert metrics["rmse"] == pytest.approx(np.sqrt(0.5))
+    assert metrics["mae"] == pytest.approx(0.5)
+    assert metrics["r2"] == pytest.approx(0.6)
+
+
+def test_structure_metrics_capture_gradient_spectrum_and_high_frequency_loss():
+    from TBMD.experiments.navier_stokes_structure_metrics import (
+        compute_structure_metrics,
+        radial_power_spectrum,
+    )
+
+    checker = np.indices((8, 8)).sum(axis=0) % 2
+    target = (2.0 * checker - 1.0).astype(np.float64)[None]
+    smooth_pred = np.zeros_like(target)
+    perfect_metrics = compute_structure_metrics(target, target)
+    smooth_metrics = compute_structure_metrics(target, smooth_pred)
+    spectrum = radial_power_spectrum(target)
+
+    assert perfect_metrics["gradient_rel_frob_err"] == pytest.approx(0.0)
+    assert perfect_metrics["laplacian_rel_frob_err"] == pytest.approx(0.0)
+    assert perfect_metrics["radial_spectrum_rel_err"] == pytest.approx(0.0)
+    assert smooth_metrics["gradient_rel_frob_err"] > 0.9
+    assert smooth_metrics["high_frequency_energy_rel_err"] > 0.9
+    assert smooth_metrics["structure_score"] > perfect_metrics["structure_score"]
+    assert spectrum.ndim == 1
+    assert np.sum(spectrum) > 0.0
+
+
+def test_structure_metrics_script_aggregates_worst_frames_by_structure_score():
+    import importlib.util
+
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "evaluation"
+        / "evaluate_fast_tplus1_structure_metrics.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "evaluate_fast_tplus1_structure_metrics",
+        script_path,
+    )
+    structure_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(structure_module)
+
+    rows = [
+        {"trajectory_index": 0, "start_index": 0, "structure_score": 0.2, "r2": 0.9},
+        {"trajectory_index": 1, "start_index": 2, "structure_score": 0.8, "r2": 0.5},
+        {"trajectory_index": 2, "start_index": 1, "structure_score": 0.4, "r2": 0.7},
+    ]
+    selected = structure_module.select_representative_frames(rows)
+
+    assert selected["worst"]["trajectory_index"] == 1
+    assert selected["best"]["trajectory_index"] == 0
+    assert selected["median"]["trajectory_index"] == 2
+
+
+def test_structure_metrics_aggregate_worst_uses_largest_error_values():
+    from TBMD.experiments.navier_stokes_structure_metrics import aggregate_structure_rows
+
+    rows = [
+        {
+            "trajectory_index": 0,
+            "start_index": 0,
+            "target_index": 7,
+            "mse": 0.1,
+            "gradient_rmse": 0.2,
+            "laplacian_rmse": 0.3,
+            "r2": 0.9,
+            "structure_score": 0.4,
+        },
+        {
+            "trajectory_index": 1,
+            "start_index": 1,
+            "target_index": 8,
+            "mse": 0.5,
+            "gradient_rmse": 0.7,
+            "laplacian_rmse": 0.8,
+            "r2": 0.6,
+            "structure_score": 0.9,
+        },
+    ]
+
+    aggregate = aggregate_structure_rows(rows)
+
+    assert aggregate["mse_worst"] == pytest.approx(0.5)
+    assert aggregate["gradient_rmse_worst"] == pytest.approx(0.7)
+    assert aggregate["laplacian_rmse_worst"] == pytest.approx(0.8)
+    assert aggregate["r2_worst"] == pytest.approx(0.6)
 
 
 def test_latent_standardization_roundtrip_restores_original_values():
