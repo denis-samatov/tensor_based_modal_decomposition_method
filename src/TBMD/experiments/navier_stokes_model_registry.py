@@ -11,16 +11,16 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from TBMD.config import LatentModalForecasterConfig, MultiResolutionTBMDConfig
+from TBMD.experiments.navier_stokes_fast_tplus1 import (
+    FastWindowedTBMDQRCSConfig,
+    FastWindowedTBMDQRCSForecaster,
+)
 from TBMD.experiments.navier_stokes_forecasting import (
     TrajectoryAwareDMDForecaster,
     TrajectoryAwareLatentForecaster,
     TrajectoryAwareMultiResolutionForecaster,
     TrajectoryAwarePersistenceForecaster,
     TrajectoryAwareResidualCorrectedForecaster,
-)
-from TBMD.experiments.navier_stokes_fast_tplus1 import (
-    FastWindowedTBMDQRCSConfig,
-    FastWindowedTBMDQRCSForecaster,
 )
 
 DEFAULT_NAVIER_STOKES_RANKS = [64, 64, 15]

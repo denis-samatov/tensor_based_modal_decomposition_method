@@ -1,6 +1,9 @@
 import unittest
+
 import torch
-from TBMD.core.decomposition.hosvd import TensorValidator, ValidationError, InvalidRankError
+
+from TBMD.core.decomposition.hosvd import InvalidRankError, TensorValidator, ValidationError
+
 
 class TestTensorValidator(unittest.TestCase):
     """Test cases for the TensorValidator class."""
@@ -105,6 +108,7 @@ class TestTensorValidator(unittest.TestCase):
         with self.assertRaises(ValidationError) as cm:
             TensorValidator.validate_epsilon(-0.5)
         self.assertIn("must be positive", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -220,16 +220,22 @@ def _predict_next_sensor_lstsq(
     history_dictionary, target_dictionary = _history_and_target(dictionary)
     history = segments[:-1]
     height_width = int(np.prod(history_dictionary.shape[1:3]))
-    flat_history_dictionary = history_dictionary.reshape(history_dictionary.shape[0], height_width, -1)
+    flat_history_dictionary = history_dictionary.reshape(
+        history_dictionary.shape[0], height_width, -1
+    )
     sensor_dictionary = flat_history_dictionary[:, spatial_sensor_indices, :].reshape(
         -1,
         history_dictionary.shape[-1],
     )
     flat_history = history.reshape(history.shape[0], height_width, history.shape[-1])
-    measurements = flat_history[:, spatial_sensor_indices, :].reshape(
-        -1,
-        history.shape[-1],
-    ).T
+    measurements = (
+        flat_history[:, spatial_sensor_indices, :]
+        .reshape(
+            -1,
+            history.shape[-1],
+        )
+        .T
+    )
     coeffs = measurements @ np.linalg.pinv(sensor_dictionary, rcond=rcond).T
     predictions = coeffs @ target_dictionary.reshape(-1, target_dictionary.shape[-1]).T
     return predictions.reshape(coeffs.shape[0], *target_dictionary.shape[:-1]), coeffs
@@ -247,7 +253,9 @@ def _predict_from_history_sensor_lstsq(
     if history.shape[1:] != history_dictionary.shape[:-1]:
         raise ValueError("history shape must match dictionary history slices")
     height_width = int(np.prod(history_dictionary.shape[1:3]))
-    flat_history_dictionary = history_dictionary.reshape(history_dictionary.shape[0], height_width, -1)
+    flat_history_dictionary = history_dictionary.reshape(
+        history_dictionary.shape[0], height_width, -1
+    )
     sensor_dictionary = flat_history_dictionary[:, spatial_sensor_indices, :].reshape(
         -1,
         history_dictionary.shape[-1],
@@ -257,10 +265,14 @@ def _predict_from_history_sensor_lstsq(
         height_width,
         history.shape[0],
     )
-    measurements = flat_history[:, spatial_sensor_indices, :].reshape(
-        -1,
-        history.shape[0],
-    ).T
+    measurements = (
+        flat_history[:, spatial_sensor_indices, :]
+        .reshape(
+            -1,
+            history.shape[0],
+        )
+        .T
+    )
     coeffs = measurements @ np.linalg.pinv(sensor_dictionary, rcond=rcond).T
     predictions = coeffs @ target_dictionary.reshape(-1, target_dictionary.shape[-1]).T
     return predictions.reshape(coeffs.shape[0], *target_dictionary.shape[:-1]), coeffs
@@ -372,10 +384,14 @@ def _fit_ridge_residual_corrector(
     if alpha < 0:
         raise ValueError("alpha must be non-negative")
     target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
-    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(
+        base_predictions.shape[0], -1
+    )
     coeffs = np.asarray(coeffs, dtype=np.float64)
     if target_flat.shape != base_flat.shape:
-        raise ValueError("target_frames and base_predictions must have matching sample/output shapes")
+        raise ValueError(
+            "target_frames and base_predictions must have matching sample/output shapes"
+        )
     if coeffs.shape[0] != target_flat.shape[0]:
         raise ValueError("coeffs and predictions must contain the same number of samples")
 
@@ -407,7 +423,9 @@ def _apply_ridge_residual_corrector(
     *,
     scale: float = 1.0,
 ) -> np.ndarray:
-    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(
+        base_predictions.shape[0], -1
+    )
     coeffs = np.asarray(coeffs, dtype=np.float64)
     features = np.concatenate(
         [coeffs, np.ones((coeffs.shape[0], 1), dtype=np.float64)],
@@ -601,15 +619,9 @@ def _evaluate_recursive_rollout(
         "coefficients": np.concatenate(coeffs_per_step, axis=0),
     }
     if cs_metrics:
-        payload["cs_mean_iterations"] = float(
-            np.mean([m["iterations"] for m in cs_metrics])
-        )
-        payload["cs_convergence_rate"] = float(
-            np.mean([m["converged"] for m in cs_metrics])
-        )
-        payload["cs_mean_objective"] = float(
-            np.mean([m["objective"] for m in cs_metrics])
-        )
+        payload["cs_mean_iterations"] = float(np.mean([m["iterations"] for m in cs_metrics]))
+        payload["cs_convergence_rate"] = float(np.mean([m["converged"] for m in cs_metrics]))
+        payload["cs_mean_objective"] = float(np.mean([m["objective"] for m in cs_metrics]))
     return payload
 
 
@@ -794,9 +806,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
 
     all_train_states, official_test_states = _load_data(
         args.n_train_trajectories,
@@ -939,36 +949,26 @@ def main() -> None:
             selected_ridge_summary["selection_metric"] = (
                 "dev strict autoregressive rollout spatial_r2"
             )
-            selected_ridge_summary["dev_rollout_selection_metrics"] = (
-                rollout_selection_metrics
-            )
+            selected_ridge_summary["dev_rollout_selection_metrics"] = rollout_selection_metrics
 
     if args.closed_loop_correction:
         history_corrector = (
-            ridge_correctors[selected_ridge_label]
-            if selected_ridge_label is not None
-            else None
+            ridge_correctors[selected_ridge_label] if selected_ridge_label is not None else None
         )
-        closed_targets, closed_base_pred, closed_coeffs = (
-            _collect_closed_loop_residual_pairs(
-                centered_train,
-                dictionary,
-                spatial_mask=spatial_mask,
-                spatial_sensor_indices=spatial_sensor_indices,
-                sensor_rcond=args.sensor_rcond,
-                cs_max_iter=args.cs_max_iter,
-                cs_tol=args.cs_tol,
-                cs_epsilon_l1=args.cs_epsilon_l1,
-                history_corrector=history_corrector,
-                history_correction_scale=selected_ridge_scale,
-                recovery_source=args.closed_loop_recovery_source,
-            )
+        closed_targets, closed_base_pred, closed_coeffs = _collect_closed_loop_residual_pairs(
+            centered_train,
+            dictionary,
+            spatial_mask=spatial_mask,
+            spatial_sensor_indices=spatial_sensor_indices,
+            sensor_rcond=args.sensor_rcond,
+            cs_max_iter=args.cs_max_iter,
+            cs_tol=args.cs_tol,
+            cs_epsilon_l1=args.cs_epsilon_l1,
+            history_corrector=history_corrector,
+            history_correction_scale=selected_ridge_scale,
+            recovery_source=args.closed_loop_recovery_source,
         )
-        closed_loop_alphas = (
-            args.closed_loop_ridge_alphas
-            or args.ridge_correction_alphas
-            or [1e-6]
-        )
+        closed_loop_alphas = args.closed_loop_ridge_alphas or args.ridge_correction_alphas or [1e-6]
         closed_loop_correctors = {}
         closed_loop_train_metrics = {}
         for alpha in closed_loop_alphas:
@@ -1083,9 +1083,7 @@ def main() -> None:
     rollout_result = None
     if args.evaluate_rollout:
         rollout_corrector = (
-            ridge_correctors[selected_ridge_label]
-            if selected_ridge_label is not None
-            else None
+            ridge_correctors[selected_ridge_label] if selected_ridge_label is not None else None
         )
         rollout_result = {
             "protocol": (

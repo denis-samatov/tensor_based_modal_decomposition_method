@@ -50,7 +50,6 @@ from TBMD.experiments.navier_stokes_fast_tplus1 import (
 from TBMD.experiments.navier_stokes_forecasting import _compute_regression_metrics
 from TBMD.experiments.navier_stokes_model_registry import DEFAULT_N_TRAIN_TRAJECTORIES
 
-
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 OUTPUT_PATH = (
     PROJECT_ROOT
@@ -494,7 +493,9 @@ def _predict_target_from_coeffs(coeffs: np.ndarray, dictionary: np.ndarray) -> n
     return pred.reshape(coeffs.shape[0], *target_dictionary.shape[:-1])
 
 
-def _lstsq_coefficients(measurements: np.ndarray, matrix: np.ndarray, rcond: float = 1e-8) -> np.ndarray:
+def _lstsq_coefficients(
+    measurements: np.ndarray, matrix: np.ndarray, rcond: float = 1e-8
+) -> np.ndarray:
     return measurements @ np.linalg.pinv(matrix, rcond=rcond).T
 
 
@@ -518,10 +519,7 @@ def _coefficient_diagnostics(
         ),
         "mean_active_coefficients_rel_1e_3": float(np.mean(np.sum(active, axis=1))),
         "mean_l1_l2_ratio": float(
-            np.mean(
-                np.sum(coeff_abs, axis=1)
-                / np.maximum(np.linalg.norm(coeffs, axis=1), 1e-12)
-            )
+            np.mean(np.sum(coeff_abs, axis=1) / np.maximum(np.linalg.norm(coeffs, axis=1), 1e-12))
         ),
     }
 
@@ -813,7 +811,10 @@ def evaluate_sensor_conditioned_latent_candidate(
         centered_eval,
         history_length=history_length,
     )
-    if limits["max_train_segments"] is not None and train_history.shape[0] > limits["max_train_segments"]:
+    if (
+        limits["max_train_segments"] is not None
+        and train_history.shape[0] > limits["max_train_segments"]
+    ):
         selected = np.linspace(
             0,
             train_history.shape[0] - 1,
@@ -822,7 +823,10 @@ def evaluate_sensor_conditioned_latent_candidate(
         )
         train_history = train_history[selected]
         train_target = train_target[selected]
-    if limits["max_eval_segments"] is not None and eval_history.shape[0] > limits["max_eval_segments"]:
+    if (
+        limits["max_eval_segments"] is not None
+        and eval_history.shape[0] > limits["max_eval_segments"]
+    ):
         selected = np.linspace(
             0,
             eval_history.shape[0] - 1,
@@ -832,7 +836,9 @@ def evaluate_sensor_conditioned_latent_candidate(
         eval_history = eval_history[selected]
         eval_target = eval_target[selected]
 
-    flat_train_snapshots = centered_train.reshape(-1, centered_train.shape[2] * centered_train.shape[3])
+    flat_train_snapshots = centered_train.reshape(
+        -1, centered_train.shape[2] * centered_train.shape[3]
+    )
     latent_rank = min(
         int(candidate["latent_rank"]),
         flat_train_snapshots.shape[0],
@@ -844,12 +850,12 @@ def evaluate_sensor_conditioned_latent_candidate(
         random_state=random_state,
     )
 
-    train_latent_history = (
-        train_history.reshape(-1, basis.shape[1]) @ basis.T
-    ).reshape(train_history.shape[0], history_length, latent_rank)
-    eval_latent_history = (
-        eval_history.reshape(-1, basis.shape[1]) @ basis.T
-    ).reshape(eval_history.shape[0], history_length, latent_rank)
+    train_latent_history = (train_history.reshape(-1, basis.shape[1]) @ basis.T).reshape(
+        train_history.shape[0], history_length, latent_rank
+    )
+    eval_latent_history = (eval_history.reshape(-1, basis.shape[1]) @ basis.T).reshape(
+        eval_history.shape[0], history_length, latent_rank
+    )
     train_target_latent = train_target.reshape(train_target.shape[0], -1) @ basis.T
 
     train_latent_features = train_latent_history.reshape(train_latent_history.shape[0], -1)
@@ -920,7 +926,9 @@ def _load_protocol_data(limits: dict[str, Any]) -> tuple[np.ndarray, np.ndarray,
     official_test = None
     if limits["evaluate_official_test"]:
         n_test = limits["n_test_trajectories"]
-        official_test = dataset.test_states if n_test is None else dataset.test_states[: int(n_test)]
+        official_test = (
+            dataset.test_states if n_test is None else dataset.test_states[: int(n_test)]
+        )
     return tuning_train, tuning_dev, official_test
 
 
@@ -997,7 +1005,11 @@ def main() -> None:
 
     selected = select_best_result(results)
     final_test_result = None
-    if limits["evaluate_official_test"] and official_test is not None and args.max_candidates is None:
+    if (
+        limits["evaluate_official_test"]
+        and official_test is not None
+        and args.max_candidates is None
+    ):
         dataset = load_navier_stokes_trajectory_dataset(DATA_ROOT)
         all_train = dataset.train_states[: int(limits["n_train_trajectories"])]
         final_limits = dict(limits)

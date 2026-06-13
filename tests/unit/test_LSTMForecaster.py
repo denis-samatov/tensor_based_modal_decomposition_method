@@ -1,11 +1,13 @@
-import unittest
-import numpy as np
-import torch
 import os
 import tempfile
+import unittest
 from unittest.mock import patch
 
-from TBMD.core.forecasting.LSTMForecaster import LSTMModel, LSTMForecaster
+import numpy as np
+import torch
+
+from TBMD.core.forecasting.LSTMForecaster import LSTMForecaster, LSTMModel
+
 
 class TestLSTMModel(unittest.TestCase):
     def test_init_and_forward(self):
@@ -19,6 +21,7 @@ class TestLSTMModel(unittest.TestCase):
 
         out = model(x)
         self.assertEqual(out.shape, (batch_size, out_dim))
+
 
 class TestLSTMForecaster(unittest.TestCase):
     def setUp(self):
@@ -35,7 +38,7 @@ class TestLSTMForecaster(unittest.TestCase):
             seq_length=self.seq_length,
             hidden_dim=8,
             num_layers=1,
-            device='cpu' # Force CPU for deterministic test environments without assuming GPU
+            device="cpu",  # Force CPU for deterministic test environments without assuming GPU
         )
 
     def test_init(self):
@@ -53,17 +56,23 @@ class TestLSTMForecaster(unittest.TestCase):
 
     def test_prepare_data(self):
         # With validation split
-        train_loader, val_loader = self.forecaster.prepare_data(self.x_history, val_split=0.2, batch_size=8)
+        train_loader, val_loader = self.forecaster.prepare_data(
+            self.x_history, val_split=0.2, batch_size=8
+        )
         self.assertIsNotNone(train_loader)
         self.assertIsNotNone(val_loader)
 
         # Without validation split
-        train_loader_only, val_loader_none = self.forecaster.prepare_data(self.x_history, val_split=0.0, batch_size=8)
+        train_loader_only, val_loader_none = self.forecaster.prepare_data(
+            self.x_history, val_split=0.0, batch_size=8
+        )
         self.assertIsNotNone(train_loader_only)
         self.assertIsNone(val_loader_none)
 
     def test_train_epoch_and_validate(self):
-        train_loader, val_loader = self.forecaster.prepare_data(self.x_history, val_split=0.2, batch_size=8)
+        train_loader, val_loader = self.forecaster.prepare_data(
+            self.x_history, val_split=0.2, batch_size=8
+        )
 
         train_loss = self.forecaster.train_epoch(train_loader)
         self.assertIsInstance(train_loss, float)
@@ -80,32 +89,32 @@ class TestLSTMForecaster(unittest.TestCase):
             batch_size=8,
             val_split=0.2,
             verbose=False,
-            save_best=False
+            save_best=False,
         )
-        self.assertIn('train_loss', history)
-        self.assertIn('val_loss', history)
-        self.assertEqual(len(history['train_loss']), 2)
-        self.assertEqual(len(history['val_loss']), 2)
+        self.assertIn("train_loss", history)
+        self.assertIn("val_loss", history)
+        self.assertEqual(len(history["train_loss"]), 2)
+        self.assertEqual(len(history["val_loss"]), 2)
 
     def test_predict_next(self):
         # Input shape (seq_length, W)
-        x_window = self.x_history[:self.seq_length]
+        x_window = self.x_history[: self.seq_length]
         pred = self.forecaster.predict_next(x_window)
         self.assertEqual(pred.shape, (self.out_dim,))
 
         # Test incorrect sequence length
         with self.assertRaises(ValueError):
-            self.forecaster.predict_next(self.x_history[:self.seq_length - 1])
+            self.forecaster.predict_next(self.x_history[: self.seq_length - 1])
 
     def test_predict_sequence(self):
-        x_start = self.x_history[:self.seq_length]
+        x_start = self.x_history[: self.seq_length]
         n_steps = 4
         seq_pred = self.forecaster.predict_sequence(x_start, n_steps=n_steps)
         self.assertEqual(seq_pred.shape, (n_steps, self.out_dim))
 
         # Test incorrect sequence length
         with self.assertRaises(ValueError):
-            self.forecaster.predict_sequence(self.x_history[:self.seq_length - 1], n_steps=n_steps)
+            self.forecaster.predict_sequence(self.x_history[: self.seq_length - 1], n_steps=n_steps)
 
     def test_save_and_load_model(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -118,33 +127,41 @@ class TestLSTMForecaster(unittest.TestCase):
             self.assertTrue(os.path.exists(model_path))
 
             # Create a new instance and load
-            new_forecaster = LSTMForecaster(in_dim=self.in_dim, out_dim=self.out_dim, seq_length=self.seq_length, hidden_dim=8, num_layers=1, device='cpu')
+            new_forecaster = LSTMForecaster(
+                in_dim=self.in_dim,
+                out_dim=self.out_dim,
+                seq_length=self.seq_length,
+                hidden_dim=8,
+                num_layers=1,
+                device="cpu",
+            )
             new_forecaster.load_model(model_path)
 
             self.assertAlmostEqual(new_forecaster.best_val_loss, 0.42)
 
             # Check model weights are somewhat identical
             # by comparing prediction on identical input
-            x_window = self.x_history[:self.seq_length]
+            x_window = self.x_history[: self.seq_length]
             pred_orig = self.forecaster.predict_next(x_window)
             pred_loaded = new_forecaster.predict_next(x_window)
             np.testing.assert_array_almost_equal(pred_orig, pred_loaded)
 
     def test_evaluate(self):
         metrics = self.forecaster.evaluate(self.x_history)
-        self.assertIn('mse', metrics)
-        self.assertIn('rmse', metrics)
-        self.assertIn('r2', metrics)
-        self.assertIn('rel_frob_err', metrics)
+        self.assertIn("mse", metrics)
+        self.assertIn("rmse", metrics)
+        self.assertIn("r2", metrics)
+        self.assertIn("rel_frob_err", metrics)
 
-    @patch('matplotlib.pyplot.show')
+    @patch("matplotlib.pyplot.show")
     def test_plot_training_history(self, mock_show):
         self.forecaster.training_history = {
-            'train_loss': [0.5, 0.4, 0.3],
-            'val_loss': [0.6, 0.5, 0.4]
+            "train_loss": [0.5, 0.4, 0.3],
+            "val_loss": [0.6, 0.5, 0.4],
         }
         self.forecaster.plot_training_history()
         mock_show.assert_called_once()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

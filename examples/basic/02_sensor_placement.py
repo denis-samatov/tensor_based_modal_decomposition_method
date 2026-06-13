@@ -4,11 +4,12 @@ Sensor Placement Example
 
 Sensor placement with Tensor Tube QR.
 """
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
 
-from TBMD.config import SensorPlacementConfig, DecompositionConfig
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from TBMD.config import DecompositionConfig, SensorPlacementConfig
 from TBMD.core.decomposition import TuckerDecomposer
 from TBMD.core.sensor_placement import TensorTubeQRDecomposition
 
@@ -19,8 +20,8 @@ print("=" * 60)
 # 1. Create synthetic data.
 print("\n1. Creating synthetic data...")
 I = 200  # Spatial points
-J = 2    # Variables, for example pressure and saturation
-T = 40   # Time steps
+J = 2  # Variables, for example pressure and saturation
+T = 40  # Time steps
 
 np.random.seed(42)
 torch.manual_seed(42)
@@ -55,10 +56,7 @@ print(f"   Range: [{data.min():.2f}, {data.max():.2f}]")
 
 # 2. Tucker decomposition to obtain modes.
 print("\n2. Tucker decomposition...")
-decomp_config = DecompositionConfig(
-    ranks=[10, 8],
-    verbose=False
-)
+decomp_config = DecompositionConfig(ranks=[10, 8], verbose=False)
 
 decomposer = TuckerDecomposer(decomp_config)
 result = decomposer.decompose(data)
@@ -73,18 +71,17 @@ sensor_counts = [10, 20, 50, 100]
 placements = {}
 
 for n_sensors in sensor_counts:
-    config = SensorPlacementConfig(
-        n_sensors=n_sensors,
-        verbose=False
-    )
-    
+    config = SensorPlacementConfig(n_sensors=n_sensors, verbose=False)
+
     placer = TensorTubeQRDecomposition(config)
     placement = placer.place_sensors(result.spatial_modes)
-    
+
     placements[n_sensors] = placement
-    
-    print(f"   N={n_sensors}: placed {len(placement.sensor_indices)} sensors, "
-          f"coverage={placement.coverage_score:.4f}")
+
+    print(
+        f"   N={n_sensors}: placed {len(placement.sensor_indices)} sensors, "
+        f"coverage={placement.coverage_score:.4f}"
+    )
 
 # 4. Coverage analysis.
 print("\n4. Spatial coverage analysis...")
@@ -108,17 +105,15 @@ print("\n5. Placement quality assessment...")
 # Estimate condition number for each sensor count.
 for n_sensors in sensor_counts:
     placement = placements[n_sensors]
-    
+
     # Measurement matrix condition number
     M = placement.measurement_matrix
     try:
         cond = torch.linalg.cond(M @ result.spatial_modes).item()
     except:
-        cond = float('inf')
-    
-    print(f"   N={n_sensors}: "
-          f"coverage={placement.coverage_score:.4f}, "
-          f"condition={cond:.2e}")
+        cond = float("inf")
+
+    print(f"   N={n_sensors}: coverage={placement.coverage_score:.4f}, condition={cond:.2e}")
 
 # 6. Reconstruction test.
 print("\n6. Reconstruction test with sensors...")
@@ -147,79 +142,81 @@ reconstructed = reconstructed_flat.reshape(I, J)
 # Error.
 error = torch.norm(test_field - reconstructed) / torch.norm(test_field)
 print(f"   Reconstruction error: {error:.4f}")
-print(f"   Measurements used: {len(sensor_indices)} of {I * J} = {len(sensor_indices) / (I * J):.1%}")
+print(
+    f"   Measurements used: {len(sensor_indices)} of {I * J} = {len(sensor_indices) / (I * J):.1%}"
+)
 
 # 7. Visualization.
 print("\n7. Creating visualization...")
 try:
     fig = plt.figure(figsize=(16, 10))
-    
+
     # Layout: 3x3
     gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
-    
+
     # Row 1: spatial modes.
     for i in range(3):
         ax = fig.add_subplot(gs[0, i])
         mode = result.spatial_modes[:, i].reshape(I, J).mean(dim=1)
         ax.plot(x.numpy(), mode.numpy(), linewidth=2)
-        ax.set_title(f'Spatial Mode {i+1}')
-        ax.set_xlabel('X')
+        ax.set_title(f"Spatial Mode {i + 1}")
+        ax.set_xlabel("X")
         ax.grid(True, alpha=0.3)
-    
+
     # Row 2: sensor placement.
     ax1 = fig.add_subplot(gs[1, 0])
-    ax1.scatter(x[sensor_i].numpy(), sensor_j.numpy(), c='red', s=50, alpha=0.7)
-    ax1.set_xlabel('X')
-    ax1.set_ylabel('Variable Index')
-    ax1.set_title(f'Sensor Placement (N={n_selected})')
+    ax1.scatter(x[sensor_i].numpy(), sensor_j.numpy(), c="red", s=50, alpha=0.7)
+    ax1.set_xlabel("X")
+    ax1.set_ylabel("Variable Index")
+    ax1.set_title(f"Sensor Placement (N={n_selected})")
     ax1.grid(True, alpha=0.3)
     ax1.set_ylim(-0.5, J - 0.5)
-    
+
     # Coverage vs N sensors
     ax2 = fig.add_subplot(gs[1, 1])
     n_list = sorted(sensor_counts)
     coverage_list = [placements[n].coverage_score for n in n_list]
-    ax2.plot(n_list, coverage_list, 'o-', linewidth=2, markersize=8)
-    ax2.set_xlabel('Number of Sensors')
-    ax2.set_ylabel('Coverage Score')
-    ax2.set_title('Coverage vs Number of Sensors')
+    ax2.plot(n_list, coverage_list, "o-", linewidth=2, markersize=8)
+    ax2.set_xlabel("Number of Sensors")
+    ax2.set_ylabel("Coverage Score")
+    ax2.set_title("Coverage vs Number of Sensors")
     ax2.grid(True, alpha=0.3)
-    
+
     # Spatial distribution histogram
     ax3 = fig.add_subplot(gs[1, 2])
-    ax3.hist(x[sensor_i].numpy(), bins=20, alpha=0.7, edgecolor='black')
-    ax3.set_xlabel('X Position')
-    ax3.set_ylabel('Number of Sensors')
-    ax3.set_title('Spatial Distribution of Sensors')
+    ax3.hist(x[sensor_i].numpy(), bins=20, alpha=0.7, edgecolor="black")
+    ax3.set_xlabel("X Position")
+    ax3.set_ylabel("Number of Sensors")
+    ax3.set_title("Spatial Distribution of Sensors")
     ax3.grid(True, alpha=0.3)
-    
+
     # Row 3: reconstruction.
     ax4 = fig.add_subplot(gs[2, 0])
-    im1 = ax4.imshow(test_field.numpy(), aspect='auto', cmap='viridis')
-    ax4.set_title('Original Field')
-    ax4.set_xlabel('Variable')
-    ax4.set_ylabel('Spatial Points')
+    im1 = ax4.imshow(test_field.numpy(), aspect="auto", cmap="viridis")
+    ax4.set_title("Original Field")
+    ax4.set_xlabel("Variable")
+    ax4.set_ylabel("Spatial Points")
     plt.colorbar(im1, ax=ax4)
-    
+
     ax5 = fig.add_subplot(gs[2, 1])
-    im2 = ax5.imshow(reconstructed.numpy(), aspect='auto', cmap='viridis')
-    ax5.set_title(f'Reconstructed (N={n_selected} sensors)')
-    ax5.set_xlabel('Variable')
-    ax5.set_ylabel('Spatial Points')
+    im2 = ax5.imshow(reconstructed.numpy(), aspect="auto", cmap="viridis")
+    ax5.set_title(f"Reconstructed (N={n_selected} sensors)")
+    ax5.set_xlabel("Variable")
+    ax5.set_ylabel("Spatial Points")
     plt.colorbar(im2, ax=ax5)
-    
+
     ax6 = fig.add_subplot(gs[2, 2])
     error_field = torch.abs(test_field - reconstructed)
-    im3 = ax6.imshow(error_field.numpy(), aspect='auto', cmap='Reds')
-    ax6.set_title(f'Absolute Error (Rel: {error:.2%})')
-    ax6.set_xlabel('Variable')
-    ax6.set_ylabel('Spatial Points')
+    im3 = ax6.imshow(error_field.numpy(), aspect="auto", cmap="Reds")
+    ax6.set_title(f"Absolute Error (Rel: {error:.2%})")
+    ax6.set_xlabel("Variable")
+    ax6.set_ylabel("Spatial Points")
     plt.colorbar(im3, ax=ax6)
-    
-    plt.suptitle('Tensor-Based Sensor Placement Results', fontsize=16, y=0.995)
-    plt.savefig('sensor_placement_results.png', dpi=150, bbox_inches='tight')
+
+    plt.suptitle("Tensor-Based Sensor Placement Results", fontsize=16, y=0.995)
+    plt.savefig("sensor_placement_results.png", dpi=150, bbox_inches="tight")
     print("   Visualization saved: sensor_placement_results.png")
-    
+
 except Exception as e:
     print(f"   Visualization skipped: {e}")
 
@@ -228,6 +225,8 @@ print("Sensor Placement Example completed successfully.")
 print("=" * 60)
 print("\nKey takeaways:")
 print("  - QR factorization provides an information-driven placement strategy.")
-print(f"  - {n_selected} sensors ({n_selected / (I * J) * 100:.1f}%) are used in this reconstruction test.")
+print(
+    f"  - {n_selected} sensors ({n_selected / (I * J) * 100:.1f}%) are used in this reconstruction test."
+)
 print(f"  - Reconstruction error: {error:.2%}")
 print("  - Sensors are placed in high-information regions for this synthetic example.")

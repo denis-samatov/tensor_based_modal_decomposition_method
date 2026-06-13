@@ -1,11 +1,12 @@
 import os
+from typing import Dict, List, Optional, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-import matplotlib.pyplot as plt
-from typing import Optional, Dict, Tuple, Union, List, Any
 
 # Import config
 try:
@@ -29,8 +30,14 @@ class LSTMModel(nn.Module):
             Applied only if `num_layers` > 1. Defaults to 0.0.
     """
 
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 1,
-                 dropout_rate: float = 0.0):
+    def __init__(
+        self,
+        in_dim: int,
+        hidden_dim: int,
+        out_dim: int,
+        num_layers: int = 1,
+        dropout_rate: float = 0.0,
+    ):
         super().__init__()
 
         self.lstm = nn.LSTM(
@@ -38,7 +45,7 @@ class LSTMModel(nn.Module):
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
-            dropout=dropout_rate if num_layers > 1 else 0.0
+            dropout=dropout_rate if num_layers > 1 else 0.0,
         )
 
         self.fc = nn.Linear(hidden_dim, out_dim)
@@ -89,17 +96,19 @@ class LSTMForecaster:
             'cuda', or 'mps'). If None, the device is automatically selected.
     """
 
-    def __init__(self,
-                 in_dim: Optional[int] = None,
-                 out_dim: Optional[int] = None,
-                 seq_length: int = 5,
-                 hidden_dim: int = 64,
-                 num_layers: int = 1,
-                 dropout_rate: float = 0.0,
-                 lr: float = 1e-3,
-                 weight_decay: float = 1e-5,
-                 device: str = None,
-                 config: Optional[LSTMForecasterConfig] = None):
+    def __init__(
+        self,
+        in_dim: Optional[int] = None,
+        out_dim: Optional[int] = None,
+        seq_length: int = 5,
+        hidden_dim: int = 64,
+        num_layers: int = 1,
+        dropout_rate: float = 0.0,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-5,
+        device: str = None,
+        config: Optional[LSTMForecasterConfig] = None,
+    ):
         """Initializes the LSTMForecaster.
 
         Args:
@@ -142,13 +151,16 @@ class LSTMForecaster:
                 dropout=dropout_rate if dropout_rate is not None else 0.0,
                 learning_rate=lr if lr is not None else 1e-3,
                 weight_decay=weight_decay if weight_decay is not None else 1e-5,
-                device=device
+                device=device,
             )
 
         # Set device from config
         if self.config.device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else
-                                      ('mps' if torch.backends.mps.is_available() else 'cpu'))
+            self.device = torch.device(
+                "cuda"
+                if torch.cuda.is_available()
+                else ("mps" if torch.backends.mps.is_available() else "cpu")
+            )
         else:
             self.device = torch.device(self.config.device)
 
@@ -166,31 +178,28 @@ class LSTMForecaster:
             hidden_dim=self.config.hidden_size,
             out_dim=self.out_dim,
             num_layers=self.config.num_layers,
-            dropout_rate=self.config.dropout
+            dropout_rate=self.config.dropout,
         ).to(self.device)
 
         # Initialize optimizer
         self.optimizer = optim.Adam(
             self.model.parameters(),
             lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay
+            weight_decay=self.config.weight_decay,
         )
 
         # Initialize loss function
         self.loss_fn = nn.MSELoss()
 
         # Training history
-        self.training_history = {
-            'train_loss': [],
-            'val_loss': []
-        }
+        self.training_history = {"train_loss": [], "val_loss": []}
 
         # Best model tracking
-        self.best_val_loss = float('inf')
+        self.best_val_loss = float("inf")
 
-    def make_lagged_dataset(self,
-                           x_history: np.ndarray,
-                           seq_length: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
+    def make_lagged_dataset(
+        self, x_history: np.ndarray, seq_length: Optional[int] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Creates a lagged dataset from a time series.
 
         Args:
@@ -209,29 +218,35 @@ class LSTMForecaster:
             seq_length = self.seq_length
 
         T = x_history.shape[0]
-        W = x_history.shape[1]
+        x_history.shape[1]
 
         # Check if we have enough data
         if T <= seq_length:
-            raise ValueError(f"Not enough time steps ({T}) to create sequences of length {seq_length}")
+            raise ValueError(
+                f"Not enough time steps ({T}) to create sequences of length {seq_length}"
+            )
 
         # Create sequences and targets efficiently using sliding window views
         from numpy.lib.stride_tricks import sliding_window_view
 
         # Input sequences: all but the last time step for the windows
         # sliding_window_view gives shape (N, W, seq_length), so we transpose to (N, seq_length, W)
-        X_seq = sliding_window_view(x_history[:-1], window_shape=seq_length, axis=0).transpose(0, 2, 1)
+        X_seq = sliding_window_view(x_history[:-1], window_shape=seq_length, axis=0).transpose(
+            0, 2, 1
+        )
 
         # Target x(t): from t=seq_length to T-1
         Y_seq = x_history[seq_length:]
 
         return X_seq, Y_seq
 
-    def prepare_data(self,
-                    x_history: np.ndarray,
-                    val_split: float = 0.2,
-                    batch_size: int = 32,
-                    shuffle: bool = True) -> Tuple[DataLoader, Optional[DataLoader]]:
+    def prepare_data(
+        self,
+        x_history: np.ndarray,
+        val_split: float = 0.2,
+        batch_size: int = 32,
+        shuffle: bool = True,
+    ) -> Tuple[DataLoader, Optional[DataLoader]]:
         """Prepares the training and validation data loaders.
 
         Args:
@@ -274,17 +289,9 @@ class LSTMForecaster:
             val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
 
             # Create data loaders
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=shuffle
-            )
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
-            val_loader = DataLoader(
-                val_dataset,
-                batch_size=batch_size,
-                shuffle=False
-            )
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
             return train_loader, val_loader
         else:
@@ -294,11 +301,7 @@ class LSTMForecaster:
 
             # Create dataset and loader
             train_dataset = TensorDataset(X_tensor, y_tensor)
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=shuffle
-            )
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
             return train_loader, None
 
@@ -362,15 +365,17 @@ class LSTMForecaster:
         avg_loss = total_loss / len(val_loader.dataset)
         return avg_loss
 
-    def train(self,
-             x_history: np.ndarray,
-             num_epochs: Optional[int] = None,
-             batch_size: Optional[int] = None,
-             val_split: Optional[float] = None,
-             early_stopping_patience: Optional[int] = None,
-             verbose: Optional[bool] = None,
-             save_best: bool = True,
-             model_path: str = None) -> Dict[str, List[float]]:
+    def train(
+        self,
+        x_history: np.ndarray,
+        num_epochs: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        val_split: Optional[float] = None,
+        early_stopping_patience: Optional[int] = None,
+        verbose: Optional[bool] = None,
+        save_best: bool = True,
+        model_path: str = None,
+    ) -> Dict[str, List[float]]:
         """Trains the model.
 
         Args:
@@ -396,15 +401,16 @@ class LSTMForecaster:
         num_epochs = num_epochs if num_epochs is not None else self.config.num_epochs
         batch_size = batch_size if batch_size is not None else self.config.batch_size
         val_split = val_split if val_split is not None else self.config.val_split
-        early_stopping_patience = early_stopping_patience if early_stopping_patience is not None else self.config.early_stopping_patience
+        early_stopping_patience = (
+            early_stopping_patience
+            if early_stopping_patience is not None
+            else self.config.early_stopping_patience
+        )
         verbose = verbose if verbose is not None else self.config.verbose
 
         # Prepare data
         train_loader, val_loader = self.prepare_data(
-            x_history,
-            val_split=val_split,
-            batch_size=batch_size,
-            shuffle=self.config.shuffle
+            x_history, val_split=val_split, batch_size=batch_size, shuffle=self.config.shuffle
         )
 
         # Initialize early stopping counter
@@ -414,12 +420,12 @@ class LSTMForecaster:
         for epoch in range(num_epochs):
             # Train
             train_loss = self.train_epoch(train_loader, epoch=epoch)
-            self.training_history['train_loss'].append(train_loss)
+            self.training_history["train_loss"].append(train_loss)
 
             # Validate if validation data is available
             if val_loader is not None:
                 val_loss = self.validate(val_loader)
-                self.training_history['val_loss'].append(val_loss)
+                self.training_history["val_loss"].append(val_loss)
 
                 # Save best model
                 if val_loss < self.best_val_loss:
@@ -431,16 +437,18 @@ class LSTMForecaster:
                     patience_counter += 1
 
                 if verbose and (epoch + 1) % 50 == 0:
-                    print(f"Epoch {epoch+1}/{num_epochs} - Train loss: {train_loss:.6f} - Val loss: {val_loss:.6f}")
+                    print(
+                        f"Epoch {epoch + 1}/{num_epochs} - Train loss: {train_loss:.6f} - Val loss: {val_loss:.6f}"
+                    )
 
                 # Early stopping
                 if patience_counter >= early_stopping_patience:
                     if verbose:
-                        print(f"Early stopping triggered after {epoch+1} epochs.")
+                        print(f"Early stopping triggered after {epoch + 1} epochs.")
                     break
             else:
                 if verbose and (epoch + 1) % 50 == 0:
-                    print(f"Epoch {epoch+1}/{num_epochs} - Train loss: {train_loss:.6f}")
+                    print(f"Epoch {epoch + 1}/{num_epochs} - Train loss: {train_loss:.6f}")
 
         if verbose:
             print("Training complete!")
@@ -466,7 +474,9 @@ class LSTMForecaster:
 
         # Check sequence length
         if x_window.shape[1] != self.seq_length:
-            raise ValueError(f"Input window has sequence length {x_window.shape[1]}, expected {self.seq_length}")
+            raise ValueError(
+                f"Input window has sequence length {x_window.shape[1]}, expected {self.seq_length}"
+            )
 
         # Convert to tensor and move to device
         x_tensor = torch.tensor(x_window, dtype=torch.float32).to(self.device)
@@ -479,7 +489,7 @@ class LSTMForecaster:
         y_pred = x_next.detach().cpu().numpy()[0]  # Remove batch dimension
 
         # If delta mode, prediction is Δc; true c_{t+1} = c_t + Δc
-        if getattr(self.config, 'delta_forecast', False):
+        if getattr(self.config, "delta_forecast", False):
             y_pred = x_window[0, -1, :] + y_pred
 
         return y_pred
@@ -499,24 +509,28 @@ class LSTMForecaster:
 
         # Check input shape
         if x_start_window.shape[0] != self.seq_length:
-            raise ValueError(f"Input window has sequence length {x_start_window.shape[0]}, expected {self.seq_length}")
+            raise ValueError(
+                f"Input window has sequence length {x_start_window.shape[0]}, expected {self.seq_length}"
+            )
 
         # Initialize input window on device
         # (seq_length, W) -> (1, seq_length, W)
-        input_window_tensor = torch.tensor(x_start_window, dtype=torch.float32, device=self.device).unsqueeze(0)
+        input_window_tensor = torch.tensor(
+            x_start_window, dtype=torch.float32, device=self.device
+        ).unsqueeze(0)
 
         # Pre-allocate sequence tensor on device
         sequence_tensor = torch.zeros((n_steps, self.out_dim), device=self.device)
 
         # Check if delta mode is active
-        is_delta = getattr(self.config, 'delta_forecast', False)
+        is_delta = getattr(self.config, "delta_forecast", False)
 
         # Generate predictions iteratively
         with torch.no_grad():
             for i in range(n_steps):
                 # Predict next step
                 # input_window_tensor shape: (1, seq_length, W)
-                raw_output = self.model(input_window_tensor) # (1, out_dim)
+                raw_output = self.model(input_window_tensor)  # (1, out_dim)
 
                 # If delta mode, model outputs Δc; compute absolute: c_{t+1} = c_t + Δc
                 if is_delta:
@@ -531,16 +545,11 @@ class LSTMForecaster:
                 # Update window by removing oldest step and adding the absolute state
                 # input_window_tensor[:, 1:, :] is (1, seq_length-1, W)
                 # next_step_tensor.unsqueeze(1) is (1, 1, out_dim)
-                input_window_tensor = torch.cat([
-                    input_window_tensor[:, 1:, :],
-                    next_step_tensor.unsqueeze(1)
-                ], dim=1)
+                input_window_tensor = torch.cat(
+                    [input_window_tensor[:, 1:, :], next_step_tensor.unsqueeze(1)], dim=1
+                )
 
         return sequence_tensor.cpu().numpy()
-
-
-
-
 
     def save_model(self, path: str) -> None:
         """Saves the model.
@@ -553,15 +562,18 @@ class LSTMForecaster:
             os.makedirs(dir_path, exist_ok=True)
 
         # Save model and metadata
-        torch.save({
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'in_dim': self.in_dim,
-            'out_dim': self.out_dim,
-            'seq_length': self.seq_length,
-            'training_history': self.training_history,
-            'best_val_loss': self.best_val_loss
-        }, path)
+        torch.save(
+            {
+                "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "in_dim": self.in_dim,
+                "out_dim": self.out_dim,
+                "seq_length": self.seq_length,
+                "training_history": self.training_history,
+                "best_val_loss": self.best_val_loss,
+            },
+            path,
+        )
 
     def load_model(self, path: str) -> None:
         """Loads the model.
@@ -573,15 +585,15 @@ class LSTMForecaster:
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
 
         # Load model and optimizer states
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # Load metadata
-        self.in_dim = checkpoint.get('in_dim', self.in_dim)
-        self.out_dim = checkpoint.get('out_dim', self.out_dim)
-        self.seq_length = checkpoint.get('seq_length', self.seq_length)
-        self.training_history = checkpoint.get('training_history', self.training_history)
-        self.best_val_loss = checkpoint.get('best_val_loss', self.best_val_loss)
+        self.in_dim = checkpoint.get("in_dim", self.in_dim)
+        self.out_dim = checkpoint.get("out_dim", self.out_dim)
+        self.seq_length = checkpoint.get("seq_length", self.seq_length)
+        self.training_history = checkpoint.get("training_history", self.training_history)
+        self.best_val_loss = checkpoint.get("best_val_loss", self.best_val_loss)
 
     def plot_training_history(self, figsize: Tuple[int, int] = (10, 6)) -> None:
         """Plots the training history.
@@ -591,16 +603,16 @@ class LSTMForecaster:
                 (10, 6).
         """
         plt.figure(figsize=figsize)
-        epochs = range(1, len(self.training_history['train_loss']) + 1)
+        epochs = range(1, len(self.training_history["train_loss"]) + 1)
 
-        plt.plot(epochs, self.training_history['train_loss'], 'b-', label='Training Loss')
+        plt.plot(epochs, self.training_history["train_loss"], "b-", label="Training Loss")
 
-        if self.training_history['val_loss']:
-            plt.plot(epochs, self.training_history['val_loss'], 'r-', label='Validation Loss')
+        if self.training_history["val_loss"]:
+            plt.plot(epochs, self.training_history["val_loss"], "r-", label="Validation Loss")
 
-        plt.title('Training and Validation Loss')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
+        plt.title("Training and Validation Loss")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
         plt.legend()
 
         plt.grid(True)
@@ -640,11 +652,6 @@ class LSTMForecaster:
         r2 = 1 - ss_res / ss_tot
 
         # Relative Frobenius error
-        rel_frob_err = torch.norm(y_pred - y_tensor, p='fro') / torch.norm(y_tensor, p='fro')
+        rel_frob_err = torch.norm(y_pred - y_tensor, p="fro") / torch.norm(y_tensor, p="fro")
 
-        return {
-            'mse': mse_loss,
-            'rmse': rmse,
-            'r2': r2.item(),
-            'rel_frob_err': rel_frob_err.item()
-        }
+        return {"mse": mse_loss, "rmse": rmse, "r2": r2.item(), "rel_frob_err": rel_frob_err.item()}

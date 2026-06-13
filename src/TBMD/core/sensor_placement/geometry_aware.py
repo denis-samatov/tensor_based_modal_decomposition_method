@@ -39,25 +39,25 @@ References
 - Manohar et al. (2018): Data-driven sparse sensor placement
 """
 
-import numpy as np
-import torch
-import tensorly as tl
 import logging
-from typing import Union, Optional, Tuple, Dict, List
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
 
-from .tensor_qr_factorization import (
-    TensorTubeQRDecomposition,
-    TensorValidator,
-    NumericallyStableOperations,
-)
+import numpy as np
+import tensorly as tl
+import torch
+
 from TBMD.config import SensorPlacementConfig
-from ..utils.misc import to_torch_tensor, get_torch_device
+
 from ..geometry.graph import (
-    MeshGeometry,
-    MeshGraphBuilder,
     GeometricWeightComputer,
-    estimate_characteristic_length
+    MeshGeometry,
+    estimate_characteristic_length,
+)
+from ..utils.misc import get_torch_device, to_torch_tensor
+from .tensor_qr_factorization import (
+    NumericallyStableOperations,
+    TensorValidator,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,18 +86,19 @@ class GeometricQRConfig(SensorPlacementConfig):
         use_graph_distance (bool): If `True`, uses graph geodesic distance;
             otherwise, uses Euclidean distance. Defaults to `False`.
     """
+
     # Geometry-specific weights
     gradient_weight: float = 0.5
     proximity_weight: float = 1.0
     distribution_weight: float = 0.5
     amplitude_weight: float = 1.0  # NEW: prioritize high-amplitude regions
-    energy_weight: float = 0.5      # NEW: local energy importance
+    energy_weight: float = 0.5  # NEW: local energy importance
 
     # Sensor spacing
     min_distance_factor: float = 2.0
 
     # Methods
-    gradient_method: str = 'graph'
+    gradient_method: str = "graph"
     adaptive_weights: bool = True
     use_graph_distance: bool = False
 
@@ -118,12 +119,14 @@ class GeometryAwarePivotSelector:
         dtype (torch.dtype): The data type.
     """
 
-    def __init__(self,
-                 config: GeometricQRConfig,
-                 mesh: MeshGeometry,
-                 field_data: Optional[torch.Tensor],
-                 device: torch.device,
-                 dtype: torch.dtype):
+    def __init__(
+        self,
+        config: GeometricQRConfig,
+        mesh: MeshGeometry,
+        field_data: Optional[torch.Tensor],
+        device: torch.device,
+        dtype: torch.dtype,
+    ):
         self.config = config
         self.mesh = mesh
         self.device = device
@@ -142,8 +145,10 @@ class GeometryAwarePivotSelector:
         self.h_char = estimate_characteristic_length(mesh)
         self.min_distance = config.min_distance_factor * self.h_char
 
-        logger.info(f"GeometryAwarePivotSelector: h_char={self.h_char:.4f}, "
-                   f"min_distance={self.min_distance:.4f}")
+        logger.info(
+            f"GeometryAwarePivotSelector: h_char={self.h_char:.4f}, "
+            f"min_distance={self.min_distance:.4f}"
+        )
 
         # Track placed sensors
         self.placed_sensors: List[int] = []
@@ -169,7 +174,7 @@ class GeometryAwarePivotSelector:
         elif field_np.ndim == 2 and field_np.shape[0] != N_cells:
             # Check if it is a single snapshot (spatial_1, spatial_2)
             if np.prod(field_np.shape) == N_cells:
-                 field_np = field_np.reshape(N_cells, 1)
+                field_np = field_np.reshape(N_cells, 1)
 
         # Ensure 2D: (N_cells, N_time)
         if field_np.ndim == 1:
@@ -180,8 +185,7 @@ class GeometryAwarePivotSelector:
 
         # Compute gradient magnitude
         grad_mag = self.geo_computer.compute_gradient_weights(
-            field_np,
-            method=self.config.gradient_method
+            field_np, method=self.config.gradient_method
         )
 
         # Normalize to [0, 1]
@@ -189,12 +193,12 @@ class GeometryAwarePivotSelector:
             grad_mag = grad_mag / grad_mag.max()
 
         # Convert to torch
-        self.gradient_weights = torch.from_numpy(grad_mag).to(
-            device=self.device, dtype=self.dtype
-        )
+        self.gradient_weights = torch.from_numpy(grad_mag).to(device=self.device, dtype=self.dtype)
 
-        logger.info(f"Computed gradient weights: min={grad_mag.min():.4f}, "
-                   f"max={grad_mag.max():.4f}, mean={grad_mag.mean():.4f}")
+        logger.info(
+            f"Computed gradient weights: min={grad_mag.min():.4f}, "
+            f"max={grad_mag.max():.4f}, mean={grad_mag.mean():.4f}"
+        )
 
     def _compute_amplitude_weights(self, field_data: torch.Tensor) -> torch.Tensor:
         """
@@ -220,14 +224,16 @@ class GeometryAwarePivotSelector:
         else:
             # RMS over time: sqrt(mean(field^2))
             # Use dim=-1 to handle both (N_cells, T) and (Nx, Ny, Nz, T)
-            amplitude = torch.sqrt(torch.mean(field_data ** 2, dim=-1))
+            amplitude = torch.sqrt(torch.mean(field_data**2, dim=-1))
 
         # Normalize to [0, 1]
         if amplitude.max() > 0:
             amplitude = amplitude / amplitude.max()
 
-        logger.info(f"Computed amplitude weights: min={amplitude.min():.4f}, "
-                   f"max={amplitude.max():.4f}, mean={amplitude.mean():.4f}")
+        logger.info(
+            f"Computed amplitude weights: min={amplitude.min():.4f}, "
+            f"max={amplitude.max():.4f}, mean={amplitude.mean():.4f}"
+        )
 
         return amplitude
 
@@ -255,10 +261,10 @@ class GeometryAwarePivotSelector:
 
         # Compute local energy
         if field_np.ndim == 1:
-            field_energy = field_np ** 2
+            field_energy = field_np**2
         else:
             # Mean energy over time
-            field_energy = np.mean(field_np ** 2, axis=-1)
+            field_energy = np.mean(field_np**2, axis=-1)
 
         # Flatten if necessary for matrix multiplication
         if field_energy.ndim > 1:
@@ -276,20 +282,22 @@ class GeometryAwarePivotSelector:
             total_energy = total_energy / total_energy.max()
 
         # Convert to torch
-        energy_weights = torch.from_numpy(total_energy).to(
-            device=self.device, dtype=self.dtype
-        )
+        energy_weights = torch.from_numpy(total_energy).to(device=self.device, dtype=self.dtype)
 
-        logger.info(f"Computed energy weights: min={total_energy.min():.4f}, "
-                   f"max={total_energy.max():.4f}, mean={total_energy.mean():.4f}")
+        logger.info(
+            f"Computed energy weights: min={total_energy.min():.4f}, "
+            f"max={total_energy.max():.4f}, mean={total_energy.mean():.4f}"
+        )
 
         return energy_weights
 
-    def select_pivot(self,
-                    R: torch.Tensor,
-                    d: int,
-                    available: torch.Tensor,
-                    distribution_state: Optional[Dict] = None) -> Tuple[int, ...]:
+    def select_pivot(
+        self,
+        R: torch.Tensor,
+        d: int,
+        available: torch.Tensor,
+        distribution_state: Optional[Dict] = None,
+    ) -> Tuple[int, ...]:
         """Selects a pivot with geometric enhancements.
 
         Args:
@@ -307,9 +315,7 @@ class GeometryAwarePivotSelector:
 
         # 2. Apply availability mask
         norms = torch.where(
-            available,
-            norms,
-            torch.tensor(float('-inf'), device=self.device, dtype=self.dtype)
+            available, norms, torch.tensor(float("-inf"), device=self.device, dtype=self.dtype)
         )
 
         # 3. Add geometric gradient weights
@@ -408,22 +414,17 @@ class GeometryAwarePivotSelector:
 
         # Fallback (should not be reached if reset() is called)
         sensor_positions = np.array(self.placed_sensors)
-        penalty = self.geo_computer.compute_proximity_penalty(
-            sensor_positions,
-            self.min_distance
-        )
+        penalty = self.geo_computer.compute_proximity_penalty(sensor_positions, self.min_distance)
         return torch.from_numpy(penalty).to(device=self.device, dtype=self.dtype)
 
-    def _compute_distribution_penalties(self,
-                                       norms: torch.Tensor,
-                                       state: Dict) -> torch.Tensor:
+    def _compute_distribution_penalties(self, norms: torch.Tensor, state: Dict) -> torch.Tensor:
         """Compute distribution balance penalties (existing logic)."""
         penalties = torch.zeros_like(norms)
         max_norm = torch.max(norms)
 
         # Slice balance penalty
-        if 'slice_counts' in state and len(norms.shape) >= 3:
-            slice_counts = state['slice_counts']
+        if "slice_counts" in state and len(norms.shape) >= 3:
+            slice_counts = state["slice_counts"]
             total_sensors = sum(slice_counts.values())
 
             if total_sensors > 0:
@@ -472,17 +473,19 @@ class GeometryAwareTensorQR:
             parameters.
     """
 
-    def __init__(self,
-                 tensor: Union[np.ndarray, torch.Tensor, tl.tensor],
-                 mesh: MeshGeometry,
-                 N: int,
-                 field_data: Optional[Union[np.ndarray, torch.Tensor]] = None,
-                 rejection_domain: Optional[Union[np.ndarray, torch.Tensor]] = None,
-                 random_state: Optional[int] = None,
-                 check_orthogonality: bool = False,
-                 device: str = "cpu",
-                 dtype: torch.dtype = torch.float32,
-                 config: Optional[GeometricQRConfig] = None):
+    def __init__(
+        self,
+        tensor: Union[np.ndarray, torch.Tensor, tl.tensor],
+        mesh: MeshGeometry,
+        N: int,
+        field_data: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        rejection_domain: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        random_state: Optional[int] = None,
+        check_orthogonality: bool = False,
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
+        config: Optional[GeometricQRConfig] = None,
+    ):
         """Initializes the GeometryAwareTensorQR."""
         self.config = config or GeometricQRConfig()
         self.mesh = mesh
@@ -523,11 +526,17 @@ class GeometryAwareTensorQR:
         if rejection_domain is None:
             if self.tensor.ndim == 2:
                 # 2D tensor: availability mask is 1D
-                self.available = torch.ones(self.tensor.shape[0], dtype=torch.bool, device=self.device)
+                self.available = torch.ones(
+                    self.tensor.shape[0], dtype=torch.bool, device=self.device
+                )
             else:
-                self.available = torch.ones(self.spatial_shape, dtype=torch.bool, device=self.device)
+                self.available = torch.ones(
+                    self.spatial_shape, dtype=torch.bool, device=self.device
+                )
         else:
-            rejection_tensor = to_torch_tensor(rejection_domain, dtype=torch.bool, device=self.device)
+            rejection_tensor = to_torch_tensor(
+                rejection_domain, dtype=torch.bool, device=self.device
+            )
             TensorValidator.validate_rejection_domain(rejection_tensor, self.spatial_shape)
             # Invert: rejection_domain marks FORBIDDEN cells, available marks ALLOWED cells
             self.available = ~rejection_tensor
@@ -550,13 +559,11 @@ class GeometryAwareTensorQR:
             mesh=mesh,
             field_data=field_data,
             device=self.device,
-            dtype=self.dtype
+            dtype=self.dtype,
         )
 
         # Initialize numerical operations (from base class)
-        self.numerical_ops = NumericallyStableOperations(
-            self.config, self.device, self.dtype
-        )
+        self.numerical_ops = NumericallyStableOperations(self.config, self.device, self.dtype)
 
         # Algorithm state
         self.check_orthogonality = check_orthogonality
@@ -695,7 +702,9 @@ class GeometryAwareTensorQR:
         sensor_indices = torch.nonzero(self.P.flatten(), as_tuple=False).cpu().numpy().flatten()
         return self.mesh.coordinates[sensor_indices]
 
-    def visualize_with_geometry(self, show_mesh: bool = True, figsize: Tuple[int, int] = (12, 6)) -> None:
+    def visualize_with_geometry(
+        self, show_mesh: bool = True, figsize: Tuple[int, int] = (12, 6)
+    ) -> None:
         """Visualizes sensor placement with a mesh overlay.
 
         Args:
@@ -713,8 +722,8 @@ class GeometryAwareTensorQR:
 
         if is_3d:
             fig = plt.figure(figsize=figsize)
-            ax1 = fig.add_subplot(121, projection='3d')
-            ax2 = fig.add_subplot(122, projection='3d')
+            ax1 = fig.add_subplot(121, projection="3d")
+            ax2 = fig.add_subplot(122, projection="3d")
         else:
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
@@ -725,25 +734,38 @@ class GeometryAwareTensorQR:
         if is_3d:
             # 3D Scatter plot
             if len(sensor_pos) > 0:
-                ax1.scatter(sensor_pos[:, 0], sensor_pos[:, 1], sensor_pos[:, 2],
-                           c='blue', s=50, marker='x', label='Sensors')
+                ax1.scatter(
+                    sensor_pos[:, 0],
+                    sensor_pos[:, 1],
+                    sensor_pos[:, 2],
+                    c="blue",
+                    s=50,
+                    marker="x",
+                    label="Sensors",
+                )
 
                 # Optional: Plot mesh boundary or points for context
                 # This can be heavy for large meshes, so maybe just bounding box
-                ax1.set_xlabel('X')
-                ax1.set_ylabel('Y')
-                ax1.set_zlabel('Z')
+                ax1.set_xlabel("X")
+                ax1.set_ylabel("Y")
+                ax1.set_zlabel("Z")
         elif P_np.ndim == 2:
             # 2D Image plot
-            ax1.imshow(P_np, cmap='Reds', alpha=0.6, origin='lower')
+            ax1.imshow(P_np, cmap="Reds", alpha=0.6, origin="lower")
             if len(sensor_pos) > 0:
-                ax1.scatter(sensor_pos[:, 1], sensor_pos[:, 0],
-                           c='blue', s=100, marker='x', linewidths=2,
-                           label='Sensors')
-            ax1.set_xlabel('X')
-            ax1.set_ylabel('Y')
+                ax1.scatter(
+                    sensor_pos[:, 1],
+                    sensor_pos[:, 0],
+                    c="blue",
+                    s=100,
+                    marker="x",
+                    linewidths=2,
+                    label="Sensors",
+                )
+            ax1.set_xlabel("X")
+            ax1.set_ylabel("Y")
 
-        ax1.set_title(f'Geometry-Aware Sensor Placement (N={torch.sum(self.P).item()})')
+        ax1.set_title(f"Geometry-Aware Sensor Placement (N={torch.sum(self.P).item()})")
         ax1.legend()
 
         # Plot 2: Gradient weights if available
@@ -759,35 +781,55 @@ class GeometryAwareTensorQR:
                 high_grad_indices = np.argwhere(grad_weights > threshold)
 
                 if len(high_grad_indices) > 0:
-                    p = ax2.scatter(high_grad_indices[:, 0], high_grad_indices[:, 1], high_grad_indices[:, 2],
-                                   c=grad_weights[grad_weights > threshold], cmap='viridis', alpha=0.1)
-                    plt.colorbar(p, ax=ax2, label='Gradient Magnitude (>95%)')
+                    p = ax2.scatter(
+                        high_grad_indices[:, 0],
+                        high_grad_indices[:, 1],
+                        high_grad_indices[:, 2],
+                        c=grad_weights[grad_weights > threshold],
+                        cmap="viridis",
+                        alpha=0.1,
+                    )
+                    plt.colorbar(p, ax=ax2, label="Gradient Magnitude (>95%)")
 
                 # Overlay sensors
                 if len(sensor_pos) > 0:
-                    ax2.scatter(sensor_pos[:, 0], sensor_pos[:, 1], sensor_pos[:, 2],
-                               c='red', s=50, marker='x', label='Sensors')
+                    ax2.scatter(
+                        sensor_pos[:, 0],
+                        sensor_pos[:, 1],
+                        sensor_pos[:, 2],
+                        c="red",
+                        s=50,
+                        marker="x",
+                        label="Sensors",
+                    )
 
             elif len(self.spatial_shape) == 2:
                 grad_weights = grad_weights.reshape(self.spatial_shape)
-                im = ax2.imshow(grad_weights, cmap='viridis', origin='lower')
-                plt.colorbar(im, ax=ax2, label='Gradient Magnitude')
+                im = ax2.imshow(grad_weights, cmap="viridis", origin="lower")
+                plt.colorbar(im, ax=ax2, label="Gradient Magnitude")
 
                 # Overlay sensors
                 if len(sensor_pos) > 0:
-                    ax2.scatter(sensor_pos[:, 1], sensor_pos[:, 0],
-                               c='red', s=100, marker='x', linewidths=2,
-                               label='Sensors')
+                    ax2.scatter(
+                        sensor_pos[:, 1],
+                        sensor_pos[:, 0],
+                        c="red",
+                        s=100,
+                        marker="x",
+                        linewidths=2,
+                        label="Sensors",
+                    )
 
-            ax2.set_title('Spatial Gradient Weights')
+            ax2.set_title("Spatial Gradient Weights")
             if is_3d:
-                ax2.set_xlabel('X')
-                ax2.set_ylabel('Y')
-                ax2.set_zlabel('Z')
+                ax2.set_xlabel("X")
+                ax2.set_ylabel("Y")
+                ax2.set_zlabel("Z")
         else:
-            ax2.text(0.5, 0.5, 'No gradient data',
-                    ha='center', va='center', transform=ax2.transAxes)
-            ax2.set_title('Gradient Weights (N/A)')
+            ax2.text(
+                0.5, 0.5, "No gradient data", ha="center", va="center", transform=ax2.transAxes
+            )
+            ax2.set_title("Gradient Weights (N/A)")
 
         plt.tight_layout()
         plt.show()

@@ -1,18 +1,19 @@
+import os
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
+
 import numpy as np
 import torch
-import os
-import tempfile
-import sys
 
 # Ensure algorithm directory is in sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from TBMD.core.forecasting.MLPForecaster import MLPModel, MLPForecaster
+from TBMD.core.forecasting.MLPForecaster import MLPForecaster, MLPModel
+
 
 class TestMLPForecaster(unittest.TestCase):
-
     def setUp(self):
         """Set up a simple testing environment."""
         self.in_dim = 5
@@ -24,7 +25,7 @@ class TestMLPForecaster(unittest.TestCase):
         self.x_history = np.zeros((self.t_steps, self.in_dim))
         self.x_history[0] = np.random.rand(self.in_dim)
         for i in range(1, self.t_steps):
-            self.x_history[i] = self.x_history[i-1] * 0.9 + 0.1
+            self.x_history[i] = self.x_history[i - 1] * 0.9 + 0.1
 
     def test_mlpmodel_initialization(self):
         """Test the underlying PyTorch MLPModel initialization."""
@@ -45,12 +46,12 @@ class TestMLPForecaster(unittest.TestCase):
         self.assertEqual(forecaster_auto.out_dim, self.out_dim)
 
         # Explicit CPU device
-        forecaster_cpu = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
-        self.assertEqual(forecaster_cpu.device.type, 'cpu')
+        forecaster_cpu = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
+        self.assertEqual(forecaster_cpu.device.type, "cpu")
 
     def test_prepare_data(self):
         """Test data preparation output shapes and types."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         train_loader, val_loader = forecaster.prepare_data(
             self.x_history, val_split=0.2, batch_size=4, shuffle=False
         )
@@ -69,19 +70,19 @@ class TestMLPForecaster(unittest.TestCase):
 
     def test_train(self):
         """Test the training loop metrics."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         history = forecaster.train(
             self.x_history, num_epochs=5, batch_size=4, val_split=0.2, verbose=False
         )
 
-        self.assertIn('train_loss', history)
-        self.assertIn('val_loss', history)
-        self.assertEqual(len(history['train_loss']), 5)
-        self.assertEqual(len(history['val_loss']), 5)
+        self.assertIn("train_loss", history)
+        self.assertIn("val_loss", history)
+        self.assertEqual(len(history["train_loss"]), 5)
+        self.assertEqual(len(history["val_loss"]), 5)
 
     def test_predict_next(self):
         """Test predicting the next time step."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         forecaster.train(self.x_history, num_epochs=2, verbose=False)
 
         x_curr = self.x_history[-1]
@@ -92,7 +93,7 @@ class TestMLPForecaster(unittest.TestCase):
 
     def test_predict_sequence(self):
         """Test sequence prediction logic."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         forecaster.train(self.x_history, num_epochs=2, verbose=False)
 
         n_steps = 7
@@ -104,33 +105,35 @@ class TestMLPForecaster(unittest.TestCase):
 
     def test_evaluate(self):
         """Test evaluation metrics dictionary structure and types."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         forecaster.train(self.x_history, num_epochs=2, verbose=False)
 
         metrics = forecaster.evaluate(self.x_history)
 
-        self.assertIn('mse', metrics)
-        self.assertIn('rmse', metrics)
-        self.assertIn('r2', metrics)
-        self.assertIn('rel_frob_err', metrics)
+        self.assertIn("mse", metrics)
+        self.assertIn("rmse", metrics)
+        self.assertIn("r2", metrics)
+        self.assertIn("rel_frob_err", metrics)
 
-        self.assertIsInstance(metrics['mse'], float)
-        self.assertIsInstance(metrics['rmse'], float)
-        self.assertIsInstance(metrics['r2'], float)
-        self.assertIsInstance(metrics['rel_frob_err'], float)
+        self.assertIsInstance(metrics["mse"], float)
+        self.assertIsInstance(metrics["rmse"], float)
+        self.assertIsInstance(metrics["r2"], float)
+        self.assertIsInstance(metrics["rel_frob_err"], float)
 
     def test_save_load_model(self):
         """Test saving and loading the model weights and state."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         forecaster.train(self.x_history, num_epochs=3, verbose=False)
 
-        with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
             forecaster.save_model(tmp_path)
 
-            loaded_forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+            loaded_forecaster = MLPForecaster(
+                in_dim=self.in_dim, out_dim=self.out_dim, device="cpu"
+            )
             loaded_forecaster.load_model(tmp_path)
 
             # Predict with both to ensure outputs match
@@ -140,17 +143,19 @@ class TestMLPForecaster(unittest.TestCase):
 
             np.testing.assert_allclose(pred_orig, pred_loaded, atol=1e-5)
             self.assertEqual(forecaster.best_val_loss, loaded_forecaster.best_val_loss)
-            self.assertEqual(len(forecaster.training_history['train_loss']),
-                             len(loaded_forecaster.training_history['train_loss']))
+            self.assertEqual(
+                len(forecaster.training_history["train_loss"]),
+                len(loaded_forecaster.training_history["train_loss"]),
+            )
 
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-    @patch('matplotlib.pyplot.show')
+    @patch("matplotlib.pyplot.show")
     def test_plot_training_history(self, mock_show):
         """Test plotting training history does not crash."""
-        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device='cpu')
+        forecaster = MLPForecaster(in_dim=self.in_dim, out_dim=self.out_dim, device="cpu")
         forecaster.train(self.x_history, num_epochs=2, verbose=False)
 
         try:
@@ -158,5 +163,6 @@ class TestMLPForecaster(unittest.TestCase):
         except Exception as e:
             self.fail(f"plot_training_history raised {type(e).__name__} unexpectedly!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

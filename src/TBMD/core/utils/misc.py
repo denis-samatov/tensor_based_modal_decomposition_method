@@ -1,23 +1,20 @@
 """Centralized helper functions for the TBMD project."""
-import logging
 
-logger = logging.getLogger(__name__)
+import concurrent.futures
+import logging
+import random
+import re
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Dict, Optional, Union
 
 import numpy as np
 import tensorly as tl
-import re
 import torch
-import concurrent.futures
-
-from pathlib import Path
-from typing import Union, Optional, Dict
-from collections import defaultdict
-import torch
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
-
+logger = logging.getLogger(__name__)
 
 
 def extract_step_number(filename: str) -> int:
@@ -37,8 +34,11 @@ def extract_step_number(filename: str) -> int:
         return int(match.group(1))
     return 0
 
-def auto_select_mode(tensor: Union[np.ndarray, 'tl.tensor', torch.Tensor],
-                     x_hat: Union[np.ndarray, 'tl.tensor', torch.Tensor]) -> int:
+
+def auto_select_mode(
+    tensor: Union[np.ndarray, "tl.tensor", torch.Tensor],
+    x_hat: Union[np.ndarray, "tl.tensor", torch.Tensor],
+) -> int:
     """Automatically selects the mode of a tensor that matches a vector's size.
 
     This function supports NumPy arrays, PyTorch tensors, and TensorLy tensors.
@@ -63,14 +63,18 @@ def auto_select_mode(tensor: Union[np.ndarray, 'tl.tensor', torch.Tensor],
     is_tl_tensor = tl.backend.is_tensor(tensor)
 
     if not (is_numpy_tensor or is_torch_tensor or is_tl_tensor):
-        raise TypeError("The input 'tensor' must be a NumPy array, a PyTorch tensor, or a TensorLy-recognized tensor.")
+        raise TypeError(
+            "The input 'tensor' must be a NumPy array, a PyTorch tensor, or a TensorLy-recognized tensor."
+        )
 
     x_hat_is_numpy = isinstance(x_hat, np.ndarray)
     x_hat_is_torch = torch.is_tensor(x_hat)
     x_hat_is_tl = tl.backend.is_tensor(x_hat)
 
     if not (x_hat_is_numpy or x_hat_is_torch or x_hat_is_tl):
-        raise TypeError("x_hat must be a NumPy array, a PyTorch tensor, or a TensorLy-recognized tensor.")
+        raise TypeError(
+            "x_hat must be a NumPy array, a PyTorch tensor, or a TensorLy-recognized tensor."
+        )
 
     if x_hat_is_numpy:
         if x_hat.ndim != 1:
@@ -92,12 +96,13 @@ def auto_select_mode(tensor: Union[np.ndarray, 'tl.tensor', torch.Tensor],
         "Ensure x_hat matches one of the tensor dimensions."
     )
 
+
 def generate_noisy_datasets(
     data,
     noise_level: float = 0.1,
     num_noisy_datasets: int = 5,
     output_dir: str = None,
-    experiment_id: str = None
+    experiment_id: str = None,
 ) -> dict:
     """Generates multiple datasets by adding Gaussian noise to the input data.
 
@@ -121,17 +126,17 @@ def generate_noisy_datasets(
     """
     # Initialize the datasets dictionary using defaultdict
     datasets = defaultdict(lambda: None)
-    
+
     # Extract the tensor from the input if data is a dict (use the first key's value)
     if isinstance(data, dict):
         key = next(iter(data))
         tensor = data[key]
     else:
         tensor = data
-    
+
     # Add the original data as the first dataset
     datasets["noisy_dataset_1"] = tensor
-    
+
     # Helper function to add noise based on the data type
     def add_noise(item):
         if isinstance(item, torch.Tensor):
@@ -144,17 +149,19 @@ def generate_noisy_datasets(
             return item + noise
         else:
             raise TypeError("Unsupported data type. Expected torch.Tensor or numpy.ndarray.")
-    
+
     # Generate additional noisy datasets in parallel
     if num_noisy_datasets >= 2:
         with ThreadPoolExecutor() as executor:
             # Submit tasks
-            futures = {executor.submit(add_noise, tensor): idx for idx in range(2, num_noisy_datasets + 1)}
+            futures = {
+                executor.submit(add_noise, tensor): idx for idx in range(2, num_noisy_datasets + 1)
+            }
 
             # Retrieve results
             for future, idx in futures.items():
                 datasets[f"noisy_dataset_{idx}"] = future.result()
-    
+
     # Save datasets to disk if an output directory is provided
     if output_dir is not None:
         base_path = Path(output_dir)
@@ -162,22 +169,22 @@ def generate_noisy_datasets(
         if experiment_id:
             noisy_datasets_folder = noisy_datasets_folder / f"experiment_{experiment_id}"
         noisy_datasets_folder.mkdir(parents=True, exist_ok=True)
-        
+
         # Save each dataset
         for key, dataset in tqdm(datasets.items(), desc="Saving datasets", total=len(datasets)):
             dataset_folder = noisy_datasets_folder / key
             dataset_folder.mkdir(parents=True, exist_ok=True)
             file_path = dataset_folder / "data.pt"
             torch.save(dataset, file_path)
-    
+
     return datasets
 
 
 def reconstruct_tensor(
     A_tensor: Union[torch.Tensor, np.ndarray],
-    x_hat:   Union[torch.Tensor, np.ndarray],
+    x_hat: Union[torch.Tensor, np.ndarray],
     zero_threshold: float = 1e-4,
-    decimals: int = 3
+    decimals: int = 3,
 ) -> Optional[torch.Tensor | np.ndarray]:
     """Reconstructs a tensor and rounds the result to a specified precision.
 
@@ -218,7 +225,7 @@ def reconstruct_tensor(
             X_rec = X_rec.clone()
             X_rec[torch.abs(X_rec) < zero_threshold] = 0
             # Round to the desired precision
-            factor = 10 ** decimals
+            factor = 10**decimals
             X_rec = torch.round(X_rec * factor) / factor
         else:  # NumPy array
             X_rec = X_rec.copy()
@@ -232,7 +239,10 @@ def reconstruct_tensor(
         print(f"Reconstruction error: {err}")
         return None
 
-def to_torch_tensor(arr: Union[np.ndarray, torch.Tensor], device: torch.device, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+
+def to_torch_tensor(
+    arr: Union[np.ndarray, torch.Tensor], device: torch.device, dtype: torch.dtype = torch.float32
+) -> torch.Tensor:
     """Converts a NumPy array or PyTorch tensor to a TensorLy tensor.
 
     If the input is already a `torch.Tensor`, it is moved to the specified
@@ -258,7 +268,8 @@ def to_torch_tensor(arr: Union[np.ndarray, torch.Tensor], device: torch.device, 
         except Exception as e:
             raise TypeError("Input must be a NumPy array or a PyTorch tensor.") from e
 
-def get_torch_device(device: str = 'cpu') -> torch.device:
+
+def get_torch_device(device: str = "cpu") -> torch.device:
     """Converts a device string into a `torch.device`.
 
     Args:
@@ -273,27 +284,30 @@ def get_torch_device(device: str = 'cpu') -> torch.device:
     """
     # Decide on the device
     device = device.lower()
-    if device == 'cuda':
+    if device == "cuda":
         # Only works if you installed PyTorch with CUDA support + have an Nvidia GPU
-        tl.set_backend('pytorch')
-        device = torch.device('cuda')
-    elif device == 'mps':
+        tl.set_backend("pytorch")
+        device = torch.device("cuda")
+    elif device == "mps":
         # Only valid if you have a Mac with Apple Silicon + PyTorch 1.12+ with MPS support
         if not torch.backends.mps.is_available():
             raise ValueError("MPS not available on this system or with current PyTorch.")
-        tl.set_backend('pytorch')
-        device = torch.device('mps')
+        tl.set_backend("pytorch")
+        device = torch.device("mps")
     else:
         # CPU fallback
         # You can also do tl.set_backend('numpy') if you prefer to revert to the classic backend
-        tl.set_backend('pytorch')  # or 'numpy'
-        device = torch.device('cpu')
+        tl.set_backend("pytorch")  # or 'numpy'
+        device = torch.device("cpu")
 
     return device
 
-def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
-                     P: Union[np.ndarray, torch.Tensor, Dict[str, torch.Tensor]],
-                     device: str = "cpu") -> Dict[str, torch.Tensor]:
+
+def build_Y_matrices(
+    tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+    P: Union[np.ndarray, torch.Tensor, Dict[str, torch.Tensor]],
+    device: str = "cpu",
+) -> Dict[str, torch.Tensor]:
     """Applies sensor masks to test tensors to generate Y matrices.
 
     Args:
@@ -308,6 +322,7 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
     Returns:
         Dict[str, torch.Tensor]: A dictionary of the generated Y matrices.
     """
+
     # Helper: convert mask to torch once
     def _to_mask(mask):
         return to_torch_tensor(mask, device=device, dtype=torch.int32)
@@ -318,7 +333,7 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
     P_tensor_global = None
     if not multiple_masks:
         P_tensor_global = _to_mask(P)
-    
+
     def _process_subject(item):
         subject, tensor = item
         try:
@@ -348,7 +363,9 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
     # Use ThreadPoolExecutor for parallel processing
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Submit all tasks
-        future_to_subject = {executor.submit(_process_subject, item): item[0] for item in tensors.items()}
+        future_to_subject = {
+            executor.submit(_process_subject, item): item[0] for item in tensors.items()
+        }
 
         for future in concurrent.futures.as_completed(future_to_subject):
             try:
@@ -360,7 +377,8 @@ def build_Y_matrices(tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
 
     return Y_matrices
 
-def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
+
+def build_wells_matrix(wells_dict, tensor_shape, device="cpu"):
     """Creates a binary sensor-mask matrix from well coordinates.
 
     Args:
@@ -400,23 +418,23 @@ def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
 
         # Ensure we have a 2D tensor of shape (N, 2)
         if coords.dim() != 2 or coords.shape[1] != 2:
-             logger.warning(
-                 f"Unexpected coordinate shape {coords.shape} for subject '{subject}'. "
-                 "Expected shape (N, 2). Attempting to reshape to (-1, 2)."
-             )
-             try:
-                 coords = coords.view(-1, 2)
-             except RuntimeError as e:
-                 logger.error(
-                     f"Failed to reshape coordinates for subject '{subject}': {e}. "
-                     "Skipping."
-                 )
-                 wells_matrices[subject] = P
-                 continue
+            logger.warning(
+                f"Unexpected coordinate shape {coords.shape} for subject '{subject}'. "
+                "Expected shape (N, 2). Attempting to reshape to (-1, 2)."
+            )
+            try:
+                coords = coords.view(-1, 2)
+            except RuntimeError as e:
+                logger.error(
+                    f"Failed to reshape coordinates for subject '{subject}': {e}. Skipping."
+                )
+                wells_matrices[subject] = P
+                continue
 
         # Check bounds
-        valid_mask = (coords[:, 0] >= 0) & (coords[:, 0] < H) & \
-                     (coords[:, 1] >= 0) & (coords[:, 1] < W)
+        valid_mask = (
+            (coords[:, 0] >= 0) & (coords[:, 0] < H) & (coords[:, 1] >= 0) & (coords[:, 1] < W)
+        )
 
         valid_coords = coords[valid_mask]
 
@@ -431,13 +449,13 @@ def build_wells_matrix(wells_dict, tensor_shape, device='cpu'):
 def set_seed(seed: int) -> None:
     """
     Set seeds for reproducible results.
-    
+
     Sets seeds for:
     - NumPy
     - PyTorch (CPU and CUDA)
     - Python random
     - TensorLy
-    
+
     Parameters
     ----------
     seed : int
@@ -446,11 +464,11 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
-    
+
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-    
+
     # TensorLy seed
     try:
         tl.set_random_state(seed)
@@ -460,23 +478,23 @@ def set_seed(seed: int) -> None:
 
 def compute_reconstruction_metrics(
     true_field: Union[np.ndarray, torch.Tensor],
-    reconstructed_field: Union[np.ndarray, torch.Tensor]
+    reconstructed_field: Union[np.ndarray, torch.Tensor],
 ) -> Dict[str, float]:
     """
     Compute reconstruction quality metrics.
-    
+
     Computes:
     - RMSE (Root Mean Square Error)
     - SSIM (Structural Similarity Index)
     - Relative Error (normalized error)
-    
+
     Parameters
     ----------
     true_field : array_like
         Reference field.
     reconstructed_field : array_like
         Reconstructed field.
-        
+
     Returns
     -------
     Dict[str, float]
@@ -492,52 +510,57 @@ def compute_reconstruction_metrics(
     except ImportError:
         # Fallback: simple implementation without SSIM
         true_t = torch.from_numpy(true_field) if isinstance(true_field, np.ndarray) else true_field
-        recon_t = torch.from_numpy(reconstructed_field) if isinstance(reconstructed_field, np.ndarray) else reconstructed_field
-        
+        recon_t = (
+            torch.from_numpy(reconstructed_field)
+            if isinstance(reconstructed_field, np.ndarray)
+            else reconstructed_field
+        )
+
         # Ensure CPU NumPy arrays for compatibility
         if isinstance(true_t, torch.Tensor):
             true_np = true_t.cpu().numpy()
         else:
             true_np = true_t
-            
+
         if isinstance(recon_t, torch.Tensor):
             recon_np = recon_t.cpu().numpy()
         else:
             recon_np = recon_t
-        
+
         # Align shapes
         true_flat = true_np.flatten()
         recon_flat = recon_np.flatten()
-        
+
         mse = float(np.mean((true_flat - recon_flat) ** 2))
         rmse = float(np.sqrt(mse))
         relative_error = float(np.linalg.norm(true_flat - recon_flat) / np.linalg.norm(true_flat))
-        
+
         # Simple SSIM approximation
         ssim = 1.0 - min(relative_error, 1.0)
-        
-        return {
-            'rmse': rmse,
-            'mse': mse,
-            'ssim': ssim,
-            'relative_error': relative_error
-        }
-    
+
+        return {"rmse": rmse, "mse": mse, "ssim": ssim, "relative_error": relative_error}
+
     # Use the full implementation from metrics.py
-    true_np = true_field.cpu().numpy() if isinstance(true_field, torch.Tensor) else np.asarray(true_field)
-    recon_np = reconstructed_field.cpu().numpy() if isinstance(reconstructed_field, torch.Tensor) else np.asarray(reconstructed_field)
-    
+    true_np = (
+        true_field.cpu().numpy() if isinstance(true_field, torch.Tensor) else np.asarray(true_field)
+    )
+    recon_np = (
+        reconstructed_field.cpu().numpy()
+        if isinstance(reconstructed_field, torch.Tensor)
+        else np.asarray(reconstructed_field)
+    )
+
     err_norm, mse, ssim_val, psnr = compute_metrics(true_np, recon_np)
-    
+
     # Compute RMSE
     rmse = float(np.sqrt(mse))
-    
+
     return {
-        'rmse': rmse,
-        'mse': float(mse),
-        'ssim': float(ssim_val),
-        'relative_error': float(err_norm),
-        'psnr': float(psnr)
+        "rmse": rmse,
+        "mse": float(mse),
+        "ssim": float(ssim_val),
+        "relative_error": float(err_norm),
+        "psnr": float(psnr),
     }
 
 

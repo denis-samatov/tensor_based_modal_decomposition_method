@@ -12,6 +12,7 @@ MPL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CACHE_DIR))
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -47,7 +48,9 @@ def fit_forecaster(forecaster, train_states, test_states):
     return forecaster
 
 
-def save_benchmark_frames(model_name, model_slug, rollout, test_states, out_dir, common_warmup_steps):
+def save_benchmark_frames(
+    model_name, model_slug, rollout, test_states, out_dir, common_warmup_steps
+):
     model_dir = out_dir / model_slug
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -105,7 +108,9 @@ def run_model(spec, train_states, test_states, out_dir, common_warmup_steps):
     logger.info("  Rollout R2 (raw):            %.4f", rollout["spatial_r2"])
     logger.info("  Rollout R2 (warmup=%d):      %.4f", common_warmup_steps, rollout_common["r2"])
     logger.info("  Rollout RMSE (warmup=%d):    %.4f", common_warmup_steps, rollout_common["rmse"])
-    logger.info("  Rollout Frob (warmup=%d):    %.4f", common_warmup_steps, rollout_common["rel_frob"])
+    logger.info(
+        "  Rollout Frob (warmup=%d):    %.4f", common_warmup_steps, rollout_common["rel_frob"]
+    )
     logger.info("  Time:         %.1fs", elapsed)
 
     return {

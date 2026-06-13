@@ -30,8 +30,8 @@ from TBMD.experiments.navier_stokes_forecasting import (
     _compute_regression_metrics,
 )
 from TBMD.experiments.navier_stokes_model_registry import (
-    DEFAULT_NAVIER_STOKES_RANKS,
     DEFAULT_N_TRAIN_TRAJECTORIES,
+    DEFAULT_NAVIER_STOKES_RANKS,
 )
 
 WINDOWED_SCRIPT = Path(__file__).with_name("evaluate_windowed_tbmd_qr_cs_forecasting.py")
@@ -405,7 +405,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sensor-r-y", type=int, default=32)
     parser.add_argument("--sensor-r-segment", type=int, default=120)
     parser.add_argument("--n-spatial-sensors", type=int, default=160)
-    parser.add_argument("--sensor-recovery-source", choices=("sensor_cs", "sensor_lstsq"), default="sensor_cs")
+    parser.add_argument(
+        "--sensor-recovery-source", choices=("sensor_cs", "sensor_lstsq"), default="sensor_cs"
+    )
     parser.add_argument("--sensor-rcond", type=float, default=1e-6)
     parser.add_argument("--cs-max-iter", type=int, default=100)
     parser.add_argument("--cs-tol", type=float, default=1e-4)
@@ -417,7 +419,9 @@ def parse_args() -> argparse.Namespace:
         help="Set a negative value to disable the TBMD/QR/CS ridge residual head.",
     )
     parser.add_argument("--sensor-ridge-scale", type=float, default=1.5)
-    parser.add_argument("--beta-grid", type=float, nargs="*", default=[0.0, 0.1, 0.25, 0.5, 0.75, 1.0])
+    parser.add_argument(
+        "--beta-grid", type=float, nargs="*", default=[0.0, 0.1, 0.25, 0.5, 0.75, 1.0]
+    )
     parser.add_argument("--random-state", type=int, default=0)
     parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
     return parser.parse_args()
@@ -426,9 +430,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
 
     all_train_states, official_test_states = _load_data(
         args.n_train_trajectories,

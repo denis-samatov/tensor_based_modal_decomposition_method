@@ -34,7 +34,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(m
 logger = logging.getLogger("tune_cs_forecasting")
 
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
-OUTPUT_PATH = PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "cs_forecasting_sweep_summary.json"
+OUTPUT_PATH = (
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "cs_forecasting_sweep_summary.json"
+)
 TUNING_DEV_SPLIT = 0.2
 SELECTION_METRIC = "rollout_r2_common"
 
@@ -561,9 +563,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
 
     all_train_states, official_test_states = load_data(
         args.n_train_trajectories,

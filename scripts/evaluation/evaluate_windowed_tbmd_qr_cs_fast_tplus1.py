@@ -79,10 +79,14 @@ def _fit_standardized_ridge_residual_corrector(
     if alpha < 0:
         raise ValueError("alpha must be non-negative")
     target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
-    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(
+        base_predictions.shape[0], -1
+    )
     features = np.asarray(features, dtype=np.float64)
     if target_flat.shape != base_flat.shape:
-        raise ValueError("target_frames and base_predictions must have matching sample/output shapes")
+        raise ValueError(
+            "target_frames and base_predictions must have matching sample/output shapes"
+        )
     if features.shape[0] != target_flat.shape[0]:
         raise ValueError("features and predictions must contain the same number of samples")
 
@@ -120,7 +124,9 @@ def _apply_standardized_ridge_residual_corrector(
     *,
     scale: float = 1.0,
 ) -> np.ndarray:
-    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(
+        base_predictions.shape[0], -1
+    )
     features = np.asarray(features, dtype=np.float64)
     standardized = (
         features - np.asarray(corrector["feature_mean"], dtype=np.float64)
@@ -142,7 +148,7 @@ def _predict_fast_next_from_history(
     spatial_mean = np.asarray(model["spatial_mean"], dtype=np.float64)
     spatial_sensor_indices = np.asarray(model["spatial_sensor_indices"], dtype=int)
     history = np.asarray(history_states, dtype=np.float64)
-    history_length = dictionary.shape[0] - 1
+    dictionary.shape[0] - 1
     if history.ndim != 4:
         raise ValueError("history_states must have shape `(B,L,H,W)`")
     if history.shape[1:] != dictionary[:-1].shape[:-1]:
@@ -360,9 +366,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
 
     all_train_states, official_test_states = _load_data(
         args.n_train_trajectories,
@@ -480,9 +484,13 @@ def main() -> None:
     selected_coefficient_correctors = {}
     selected_measurement_correctors = {}
     if selected["family"] == "coefficient_ridge":
-        selected_coefficient_correctors[selected["label"]] = coefficient_correctors[selected["label"]]
+        selected_coefficient_correctors[selected["label"]] = coefficient_correctors[
+            selected["label"]
+        ]
     elif selected["family"] == "measurement_ridge":
-        selected_measurement_correctors[selected["label"]] = measurement_correctors[selected["label"]]
+        selected_measurement_correctors[selected["label"]] = measurement_correctors[
+            selected["label"]
+        ]
     test_result = _evaluate_fast_tplus1(
         test_segments,
         dictionary,
@@ -547,7 +555,9 @@ def main() -> None:
             "mode": "fixed_spatial_repeated_over_history",
             "requested_spatial_sensors": args.n_spatial_sensors,
             "actual_spatial_sensors": int(spatial_mask.sum()),
-            "total_history_measurements_per_prediction": int(spatial_mask.sum() * args.history_length),
+            "total_history_measurements_per_prediction": int(
+                spatial_mask.sum() * args.history_length
+            ),
             "sensor_indices": spatial_sensor_indices.astype(int).tolist(),
         },
         "fast_predictor_summary": {

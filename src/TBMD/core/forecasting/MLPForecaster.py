@@ -1,11 +1,12 @@
 import os
+from typing import Dict, List, Optional, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-import matplotlib.pyplot as plt
-from typing import Optional, Dict, Tuple, Union, List, Any
 
 # Import config
 try:
@@ -27,8 +28,14 @@ class MLPModel(nn.Module):
         num_layers (int, optional): The number of hidden layers. Defaults to 2.
     """
 
-    def __init__(self, in_dim: int, out_dim: int, hidden_dim: int = 256,
-                 dropout_rate: float = 0.3, num_layers: int = 2):
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        hidden_dim: int = 256,
+        dropout_rate: float = 0.3,
+        num_layers: int = 2,
+    ):
         super().__init__()
 
         # Input layer, Hidden layers, Output layer
@@ -42,10 +49,10 @@ class MLPModel(nn.Module):
                 for layer in (
                     nn.Linear(hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Dropout(dropout_rate)
+                    nn.Dropout(dropout_rate),
                 )
             ],
-            nn.Linear(hidden_dim, out_dim)
+            nn.Linear(hidden_dim, out_dim),
         ]
 
         self.net = nn.Sequential(*layers)
@@ -79,16 +86,18 @@ class MLPForecaster:
             'cuda', or 'mps'). If `None`, the device is automatically selected.
     """
 
-    def __init__(self,
-                 in_dim: Optional[int] = None,
-                 out_dim: Optional[int] = None,
-                 hidden_dim: int = 256,
-                 dropout_rate: float = 0.3,
-                 num_layers: int = 2,
-                 lr: float = 1e-3,
-                 weight_decay: float = 1e-5,
-                 device: str = None,
-                 config: Optional[MLPForecasterConfig] = None):
+    def __init__(
+        self,
+        in_dim: Optional[int] = None,
+        out_dim: Optional[int] = None,
+        hidden_dim: int = 256,
+        dropout_rate: float = 0.3,
+        num_layers: int = 2,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-5,
+        device: str = None,
+        config: Optional[MLPForecasterConfig] = None,
+    ):
         """Initializes the MLPForecaster.
 
         Args:
@@ -127,13 +136,16 @@ class MLPForecaster:
                 num_layers=num_layers if num_layers is not None else 2,
                 learning_rate=lr if lr is not None else 1e-3,
                 weight_decay=weight_decay if weight_decay is not None else 1e-5,
-                device=device
+                device=device,
             )
 
         # Set device from config
         if self.config.device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else
-                                      ('mps' if torch.backends.mps.is_available() else 'cpu'))
+            self.device = torch.device(
+                "cuda"
+                if torch.cuda.is_available()
+                else ("mps" if torch.backends.mps.is_available() else "cpu")
+            )
         else:
             self.device = torch.device(self.config.device)
 
@@ -150,27 +162,26 @@ class MLPForecaster:
             out_dim=self.out_dim,
             hidden_dim=self.config.hidden_size,
             dropout_rate=self.config.dropout,
-            num_layers=self.config.num_layers
+            num_layers=self.config.num_layers,
         ).to(self.device)
 
         self.optimizer = optim.Adam(
             self.model.parameters(),
             lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay
+            weight_decay=self.config.weight_decay,
         )
 
         self.loss_fn = nn.MSELoss()
-        self.training_history = {
-            'train_loss': [],
-            'val_loss': []
-        }
-        self.best_val_loss = float('inf')
+        self.training_history = {"train_loss": [], "val_loss": []}
+        self.best_val_loss = float("inf")
 
-    def prepare_data(self,
-                     x_history: np.ndarray,
-                     val_split: float = 0.2,
-                     batch_size: int = 32,
-                     shuffle: bool = True) -> Tuple[DataLoader, Optional[DataLoader]]:
+    def prepare_data(
+        self,
+        x_history: np.ndarray,
+        val_split: float = 0.2,
+        batch_size: int = 32,
+        shuffle: bool = True,
+    ) -> Tuple[DataLoader, Optional[DataLoader]]:
         """Prepares the training and validation data loaders.
 
         Args:
@@ -187,12 +198,12 @@ class MLPForecaster:
             `None` if `val_split` is 0.
         """
         # Create input-output pairs
-        X_input = x_history[:-1, :]   # (T-1, W)
+        X_input = x_history[:-1, :]  # (T-1, W)
 
-        if getattr(self.config, 'delta_forecast', False):
+        if getattr(self.config, "delta_forecast", False):
             X_target = x_history[1:, :] - X_input
         else:
-            X_target = x_history[1:, :]   # (T-1, W)
+            X_target = x_history[1:, :]  # (T-1, W)
 
         if val_split > 0:
             num_samples = len(X_input)
@@ -217,17 +228,9 @@ class MLPForecaster:
             val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
 
             # Create data loaders
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=shuffle
-            )
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
-            val_loader = DataLoader(
-                val_dataset,
-                batch_size=batch_size,
-                shuffle=False
-            )
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
             return train_loader, val_loader
         else:
@@ -237,11 +240,7 @@ class MLPForecaster:
 
             # Create dataset and loader
             train_dataset = TensorDataset(X_tensor, y_tensor)
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=shuffle
-            )
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
 
             return train_loader, None
 
@@ -303,15 +302,17 @@ class MLPForecaster:
         avg_loss = total_loss / len(val_loader.dataset)
         return avg_loss
 
-    def train(self,
-              x_history: np.ndarray,
-              num_epochs: Optional[int] = None,
-              batch_size: Optional[int] = None,
-              val_split: Optional[float] = None,
-              early_stopping_patience: Optional[int] = None,
-              verbose: Optional[bool] = None,
-              save_best: bool = True,
-              model_path: str = None) -> Dict[str, List[float]]:
+    def train(
+        self,
+        x_history: np.ndarray,
+        num_epochs: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        val_split: Optional[float] = None,
+        early_stopping_patience: Optional[int] = None,
+        verbose: Optional[bool] = None,
+        save_best: bool = True,
+        model_path: str = None,
+    ) -> Dict[str, List[float]]:
         """Trains the model.
 
         Args:
@@ -337,15 +338,16 @@ class MLPForecaster:
         num_epochs = num_epochs if num_epochs is not None else self.config.num_epochs
         batch_size = batch_size if batch_size is not None else self.config.batch_size
         val_split = val_split if val_split is not None else self.config.val_split
-        early_stopping_patience = early_stopping_patience if early_stopping_patience is not None else self.config.early_stopping_patience
+        early_stopping_patience = (
+            early_stopping_patience
+            if early_stopping_patience is not None
+            else self.config.early_stopping_patience
+        )
         verbose = verbose if verbose is not None else self.config.verbose
 
         # Prepare data
         train_loader, val_loader = self.prepare_data(
-            x_history,
-            val_split=val_split,
-            batch_size=batch_size,
-            shuffle=self.config.shuffle
+            x_history, val_split=val_split, batch_size=batch_size, shuffle=self.config.shuffle
         )
 
         # Initialize early stopping counter
@@ -355,12 +357,12 @@ class MLPForecaster:
         for epoch in range(num_epochs):
             # Train
             train_loss = self.train_epoch(train_loader)
-            self.training_history['train_loss'].append(train_loss)
+            self.training_history["train_loss"].append(train_loss)
 
             # Validate if validation data is available
             if val_loader is not None:
                 val_loss = self.validate(val_loader)
-                self.training_history['val_loss'].append(val_loss)
+                self.training_history["val_loss"].append(val_loss)
 
                 # Save best model
                 if val_loss < self.best_val_loss:
@@ -372,16 +374,18 @@ class MLPForecaster:
                     patience_counter += 1
 
                 if verbose and (epoch + 1) % 50 == 0:
-                    print(f"Epoch {epoch+1}/{num_epochs} - Train loss: {train_loss:.6f} - Val loss: {val_loss:.6f}")
+                    print(
+                        f"Epoch {epoch + 1}/{num_epochs} - Train loss: {train_loss:.6f} - Val loss: {val_loss:.6f}"
+                    )
 
                 # Early stopping
                 if patience_counter >= early_stopping_patience:
                     if verbose:
-                        print(f"Early stopping triggered after {epoch+1} epochs.")
+                        print(f"Early stopping triggered after {epoch + 1} epochs.")
                     break
             else:
                 if verbose and (epoch + 1) % 50 == 0:
-                    print(f"Epoch {epoch+1}/{num_epochs} - Train loss: {train_loss:.6f}")
+                    print(f"Epoch {epoch + 1}/{num_epochs} - Train loss: {train_loss:.6f}")
 
         if verbose:
             print("Training complete!")
@@ -409,7 +413,7 @@ class MLPForecaster:
         # Convert back to numpy
         y_pred = x_next.detach().cpu().numpy()
 
-        if getattr(self.config, 'delta_forecast', False):
+        if getattr(self.config, "delta_forecast", False):
             y_pred = x_current + y_pred
 
         return y_pred
@@ -434,7 +438,7 @@ class MLPForecaster:
         x_current = x_start
         for i in range(n_steps):
             x_next = self.predict_next(x_current)
-            sequence[i+1] = x_next
+            sequence[i + 1] = x_next
             x_current = x_next
 
         return sequence[1:, :]  # Remove the starting state
@@ -450,14 +454,17 @@ class MLPForecaster:
             os.makedirs(dir_path, exist_ok=True)
 
         # Save model and metadata
-        torch.save({
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'in_dim': self.in_dim,
-            'out_dim': self.out_dim,
-            'training_history': self.training_history,
-            'best_val_loss': self.best_val_loss
-        }, path)
+        torch.save(
+            {
+                "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "in_dim": self.in_dim,
+                "out_dim": self.out_dim,
+                "training_history": self.training_history,
+                "best_val_loss": self.best_val_loss,
+            },
+            path,
+        )
 
     def load_model(self, path: str) -> None:
         """Loads the model.
@@ -469,14 +476,14 @@ class MLPForecaster:
         checkpoint = torch.load(path, map_location=self.device)
 
         # Load model and optimizer states
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # Load metadata
-        self.in_dim = checkpoint.get('in_dim', self.in_dim)
-        self.out_dim = checkpoint.get('out_dim', self.out_dim)
-        self.training_history = checkpoint.get('training_history', self.training_history)
-        self.best_val_loss = checkpoint.get('best_val_loss', self.best_val_loss)
+        self.in_dim = checkpoint.get("in_dim", self.in_dim)
+        self.out_dim = checkpoint.get("out_dim", self.out_dim)
+        self.training_history = checkpoint.get("training_history", self.training_history)
+        self.best_val_loss = checkpoint.get("best_val_loss", self.best_val_loss)
 
     def plot_training_history(self, figsize: Tuple[int, int] = (10, 6)) -> None:
         """Plots the training history.
@@ -486,16 +493,16 @@ class MLPForecaster:
                 (10, 6).
         """
         plt.figure(figsize=figsize)
-        epochs = range(1, len(self.training_history['train_loss']) + 1)
+        epochs = range(1, len(self.training_history["train_loss"]) + 1)
 
-        plt.plot(epochs, self.training_history['train_loss'], 'b-', label='Training Loss')
+        plt.plot(epochs, self.training_history["train_loss"], "b-", label="Training Loss")
 
-        if self.training_history['val_loss']:
-            plt.plot(epochs, self.training_history['val_loss'], 'r-', label='Validation Loss')
+        if self.training_history["val_loss"]:
+            plt.plot(epochs, self.training_history["val_loss"], "r-", label="Validation Loss")
 
-        plt.title('Training and Validation Loss')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
+        plt.title("Training and Validation Loss")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
         plt.legend()
 
         plt.grid(True)
@@ -514,12 +521,12 @@ class MLPForecaster:
         self.model.eval()
 
         # Create input-output pairs
-        X_input = x_history[:-1, :]   # (T-1, W)
+        X_input = x_history[:-1, :]  # (T-1, W)
 
-        if getattr(self.config, 'delta_forecast', False):
+        if getattr(self.config, "delta_forecast", False):
             X_target = x_history[1:, :] - X_input
         else:
-            X_target = x_history[1:, :]   # (T-1, W)
+            X_target = x_history[1:, :]  # (T-1, W)
 
         # Convert to tensors
         X_tensor = torch.tensor(X_input, dtype=torch.float32).to(self.device)
@@ -540,11 +547,6 @@ class MLPForecaster:
         r2 = 1 - ss_res / ss_tot
 
         # Relative Frobenius error
-        rel_frob_err = torch.norm(y_pred - y_tensor, p='fro') / torch.norm(y_tensor, p='fro')
+        rel_frob_err = torch.norm(y_pred - y_tensor, p="fro") / torch.norm(y_tensor, p="fro")
 
-        return {
-            'mse': mse_loss,
-            'rmse': rmse,
-            'r2': r2.item(),
-            'rel_frob_err': rel_frob_err.item()
-        }
+        return {"mse": mse_loss, "rmse": rmse, "r2": r2.item(), "rel_frob_err": rel_frob_err.item()}

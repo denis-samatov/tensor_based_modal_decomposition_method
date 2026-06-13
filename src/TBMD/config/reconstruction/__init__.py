@@ -10,9 +10,12 @@ References:
 - Algorithm 3: TBMD-CS (formulas 32-36)
 - Boyd et al. (2011): Distributed Optimization and Statistical Learning via ADMM
 """
+
 from dataclasses import dataclass, field
-from typing import Literal, Optional, List, Union
+from typing import List, Literal, Optional, Union
+
 import torch
+
 from ..base import BaseConfig
 
 
@@ -24,10 +27,10 @@ def _resolve_dtype(dtype: Union[str, torch.dtype, None]) -> torch.dtype:
         return dtype
     if isinstance(dtype, str):
         dtype_map = {
-            'float32': torch.float32,
-            'float64': torch.float64,
-            'float16': torch.float16,
-            'bfloat16': torch.bfloat16,
+            "float32": torch.float32,
+            "float64": torch.float64,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
         }
         if dtype in dtype_map:
             return dtype_map[dtype]
@@ -39,9 +42,9 @@ def _resolve_dtype(dtype: Union[str, torch.dtype, None]) -> torch.dtype:
 class CompressiveSensingConfig:
     """
     Core hyperparameters of the TBMD-CS algorithm.
-    
+
     This is the primary config for Algorithm 3 (ADMM-based compressive sensing).
-    
+
     Parameters
     ----------
     max_iter : int, default=1000
@@ -60,21 +63,22 @@ class CompressiveSensingConfig:
         Torch device string (e.g., "cpu", "cuda:0").
     dtype : torch.dtype or str, default=torch.float32
         Torch dtype used for tensors. Accepts both torch.dtype and string ('float32', 'float64').
-    
+
     Examples
     --------
     >>> config = CompressiveSensingConfig(max_iter=500, tol=1e-5)
     >>> cs = TensorCompressiveSensing(A, P, Y, core_cfg=config)
-    
+
     >>> # Using string dtype
     >>> config = CompressiveSensingConfig(dtype='float64')
     """
+
     max_iter: int = 1000
-    tol: float = 1e-4                 # stop criterion on max(primal, dual)
-    epsilon_l1: float = 1e-2          # ε in (28)
-    delta_init: float = 1.0           # δ₀
-    delta_max: float = 1.0            # δ_max (36)
-    relax_lambda: float = 0.95        # mixing x and d
+    tol: float = 1e-4  # stop criterion on max(primal, dual)
+    epsilon_l1: float = 1e-2  # ε in (28)
+    delta_init: float = 1.0  # δ₀
+    delta_max: float = 1.0  # δ_max (36)
+    relax_lambda: float = 0.95  # mixing x and d
     device: str = "cpu"
     dtype: Union[torch.dtype, str] = torch.float32
 
@@ -82,7 +86,7 @@ class CompressiveSensingConfig:
         """Validate parameter ranges right after dataclass construction."""
         # Convert string dtype to torch.dtype
         self.dtype = _resolve_dtype(self.dtype)
-        
+
         if not (0 < self.relax_lambda < 1):
             raise ValueError("relax_lambda must be in (0, 1)")
         if self.max_iter <= 0:
@@ -97,7 +101,7 @@ class CompressiveSensingConfig:
 class ExtensionCompressiveSensingConfig:
     """
     Convenience switches for features outside the strict TBMD-CS core.
-    
+
     Parameters
     ----------
     solver : {"cholesky", "direct", "svd"}, default="cholesky"
@@ -114,24 +118,25 @@ class ExtensionCompressiveSensingConfig:
         Required relative decrease within relative_window iterations.
     collect_history : bool, default=True
         Whether to store residual history for diagnostics and plotting.
-    
+
     Examples
     --------
     >>> ext_cfg = ExtensionCompressiveSensingConfig(solver="svd", collect_history=True)
     >>> cs = TensorCompressiveSensing(A, P, Y, ext_cfg=ext_cfg)
     """
+
     # Linear solver
     solver: Literal["cholesky", "direct", "svd"] = "cholesky"
-    reg: float = 1e-8                  # diagonal regularization
-    
+    reg: float = 1e-8  # diagonal regularization
+
     # δ policy
     delta_policy: Literal["boyd", "cap_only"] = "boyd"
-    
+
     # Stop conditions
     stop_policy: Literal["residual", "relative", "both"] = "residual"
-    relative_window: int = 5           # window for relative criterion
-    relative_drop: float = 1e-3        # required relative drop
-    
+    relative_window: int = 5  # window for relative criterion
+    relative_drop: float = 1e-3  # required relative drop
+
     # Metrics/logging
     collect_history: bool = True
 
@@ -140,57 +145,58 @@ class ExtensionCompressiveSensingConfig:
 # Legacy configs for backward compatibility
 # =============================================================================
 
+
 @dataclass
 class ReconstructionConfig(BaseConfig):
     """
     Legacy configuration for compressive sensing.
-    
+
     DEPRECATED: use CompressiveSensingConfig + ExtensionCompressiveSensingConfig.
     This class is kept for backward compatibility.
     """
-    
+
     # Solver
-    solver: Literal['admm', 'ista', 'fista', 'least_squares'] = 'admm'
-    
+    solver: Literal["admm", "ista", "fista", "least_squares"] = "admm"
+
     # Optimization parameters
     max_iterations: int = 100
     convergence_eps: float = 1e-2
-    
+
     # ADMM parameters
     damping_factor: float = 0.95  # ρ (rho)
     over_relaxation: float = 1.0
-    
+
     # Regularization
     l1_lambda: float = 0.01
     l2_lambda: float = 0.0
-    
+
     # Adaptive step
     adaptive_step_size: bool = True
     initial_step_size: float = 1.0
     max_step_size: float = 1.0
-    
+
     # Warm start
     warm_start: bool = False
-    initial_guess: Optional[Literal['zero', 'least_squares', 'previous']] = None
-    
+    initial_guess: Optional[Literal["zero", "least_squares", "previous"]] = None
+
     def __post_init__(self):
         super().__post_init__()
         self._validate()
-    
+
     def _validate(self):
         """Validate parameter ranges."""
         if self.max_iterations <= 0:
             raise ValueError("max_iterations must be positive")
-        
+
         if self.convergence_eps <= 0:
             raise ValueError("convergence_eps must be positive")
-        
+
         if not 0 < self.damping_factor <= 1:
             raise ValueError("damping_factor must be in (0, 1]")
-        
+
         if self.l1_lambda < 0 or self.l2_lambda < 0:
             raise ValueError("lambda parameters must be non-negative")
-    
+
     def to_core_config(self) -> CompressiveSensingConfig:
         """Convert to new CompressiveSensingConfig format."""
         return CompressiveSensingConfig(
@@ -201,36 +207,36 @@ class ReconstructionConfig(BaseConfig):
             delta_max=self.max_step_size,
             relax_lambda=self.damping_factor,
             device=self.device or "cpu",
-            dtype=torch.float64 if self.dtype == 'float64' else torch.float32
+            dtype=torch.float64 if self.dtype == "float64" else torch.float32,
         )
 
 
 @dataclass
 class GeometryAwareReconstructionConfig(ReconstructionConfig):
     """Configuration for geometry-aware reconstruction."""
-    
+
     # Geometry regularization
     geometric_lambda: float = 0.1
     adaptive_lambda: bool = False
-    
+
     # Laplacian parameters
-    laplacian_type: Literal['unnormalized', 'symmetric', 'random_walk'] = 'symmetric'
+    laplacian_type: Literal["unnormalized", "symmetric", "random_walk"] = "symmetric"
     laplacian_power: int = 1
-    
+
     # Local smoothness
     enforce_local_smoothness: bool = True
     smoothness_weight: float = 0.5
-    
+
     def _validate(self):
         """Validate geometry-aware parameters."""
         super()._validate()
-        
+
         if self.geometric_lambda < 0:
             raise ValueError("geometric_lambda must be non-negative")
-        
+
         if self.laplacian_power < 1:
             raise ValueError("laplacian_power must be >= 1")
-        
+
         if not 0 <= self.smoothness_weight <= 1:
             raise ValueError("smoothness_weight must be in the range [0, 1]")
 

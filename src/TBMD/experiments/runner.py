@@ -1,18 +1,25 @@
+from typing import Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 import torch
-from typing import Union, Dict, List, Tuple, Optional
+from tqdm import tqdm
 
-from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
-from TBMD.core.reconstruction.tensor_compressive_sensing import (
-    TensorCompressiveSensing,
-    CompressiveSensingMetrics,
-)
 from TBMD.config import CompressiveSensingConfig, ExtensionCompressiveSensingConfig
-from TBMD.core.metrics.metrics import compute_metrics
-from TBMD.core.utils.misc import reconstruct_tensor, to_torch_tensor, build_Y_matrices, build_wells_matrix
 from TBMD.config.experiments import ExperimentConfig
+from TBMD.core.metrics.metrics import compute_metrics
+from TBMD.core.reconstruction.tensor_compressive_sensing import (
+    CompressiveSensingMetrics,
+    TensorCompressiveSensing,
+)
+from TBMD.core.sensor_placement.tensor_qr_factorization import TensorTubeQRDecomposition
+from TBMD.core.utils.misc import (
+    build_wells_matrix,
+    build_Y_matrices,
+    reconstruct_tensor,
+    to_torch_tensor,
+)
 
 
 class ExperimentRunner:
@@ -36,14 +43,11 @@ class ExperimentRunner:
 
     def _setup_confidence_intervals(self):
         """Set up z-scores for confidence interval calculations."""
-        self.z_scores = {
-            0.90: 1.645,
-            0.95: 1.96,
-            0.99: 2.576
-        }
+        self.z_scores = {0.90: 1.645, 0.95: 1.96, 0.99: 2.576}
 
-    def _compute_confidence_intervals(self, means: List[float], stds: List[float],
-                                    num_samples: int) -> Tuple[List[float], List[float]]:
+    def _compute_confidence_intervals(
+        self, means: List[float], stds: List[float], num_samples: int
+    ) -> Tuple[List[float], List[float]]:
         """Computes confidence intervals for a given set of sample statistics.
 
         Args:
@@ -66,8 +70,9 @@ class ExperimentRunner:
 
         return lower, upper
 
-    def _perform_qr_decomposition(self, A_tensor: torch.Tensor,
-                                 number_sensors: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _perform_qr_decomposition(
+        self, A_tensor: torch.Tensor, number_sensors: int
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Performs QR decomposition for sensor placement.
 
         Args:
@@ -79,7 +84,7 @@ class ExperimentRunner:
             tensors from the decomposition.
         """
         # Ensure number_sensors is Python int (not numpy int)
-        if hasattr(number_sensors, 'item'):
+        if hasattr(number_sensors, "item"):
             number_sensors = number_sensors.item()
         number_sensors = int(number_sensors)
 
@@ -90,12 +95,13 @@ class ExperimentRunner:
             check_orthogonality=False,
             uniform_distribution=False,
             device=self.config.device,
-            random_state=self.config.seed
+            random_state=self.config.seed,
         )
         return qr_decomp.factorize()
 
-    def _solve_compressive_sensing(self, A_tensor: torch.Tensor, P: torch.Tensor,
-                                  Y: torch.Tensor) -> Tuple[torch.Tensor, CompressiveSensingMetrics]:
+    def _solve_compressive_sensing(
+        self, A_tensor: torch.Tensor, P: torch.Tensor, Y: torch.Tensor
+    ) -> Tuple[torch.Tensor, CompressiveSensingMetrics]:
         """Solves the compressive sensing problem.
 
         Args:
@@ -113,13 +119,10 @@ class ExperimentRunner:
             delta_init=self.config.delta_0,
             delta_max=self.config.delta_max,
             relax_lambda=self.config.lambd,
-            device=self.config.device
+            device=self.config.device,
         )
         ext_cfg = ExtensionCompressiveSensingConfig(
-            solver="cholesky",
-            delta_policy="boyd",
-            stop_policy="residual",
-            collect_history=False
+            solver="cholesky", delta_policy="boyd", stop_policy="residual", collect_history=False
         )
         cs_solver = TensorCompressiveSensing(A_tensor, P, Y, core_cfg, ext_cfg)
         return cs_solver.solve()
@@ -150,10 +153,12 @@ class ExperimentRunner:
             return noisy_Y
         return Y
 
-    def run_full_dataset_experiments(self,
-                                   A_tensor: Union[np.ndarray, torch.Tensor],
-                                   test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
-                                   sensor_values: List[int]) -> pd.DataFrame:
+    def run_full_dataset_experiments(
+        self,
+        A_tensor: Union[np.ndarray, torch.Tensor],
+        test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+        sensor_values: List[int],
+    ) -> pd.DataFrame:
         """Runs experiments across the full dataset with all subjects and slices.
 
         Args:
@@ -175,7 +180,7 @@ class ExperimentRunner:
         }
 
         results = []
-        num_total_samples = 1 + self.config.num_noise_samples
+        1 + self.config.num_noise_samples
 
         for number_sensors in tqdm(sensor_values, desc="Full dataset experiments"):
             P, Q, R = self._perform_qr_decomposition(A_tensor, number_sensors)
@@ -221,35 +226,45 @@ class ExperimentRunner:
             psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
 
             # Confidence intervals
-            error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(all_errors))
-            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals([ssim_mean], [ssim_std], len(all_ssims))
-            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals([psnr_mean], [psnr_std], len(all_psnrs))
+            error_ci_lower, error_ci_upper = self._compute_confidence_intervals(
+                [error_mean], [error_std], len(all_errors)
+            )
+            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals(
+                [ssim_mean], [ssim_std], len(all_ssims)
+            )
+            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals(
+                [psnr_mean], [psnr_std], len(all_psnrs)
+            )
 
-            results.append({
-                'sensors': number_sensors,
-                'error_mean': error_mean,
-                'error_std': error_std,
-                'ssim_mean': ssim_mean,
-                'ssim_std': ssim_std,
-                'psnr_mean': psnr_mean,
-                'psnr_std': psnr_std,
-                'error_ci_lower': error_ci_lower[0],
-                'error_ci_upper': error_ci_upper[0],
-                'ssim_ci_lower': ssim_ci_lower[0],
-                'ssim_ci_upper': ssim_ci_upper[0],
-                'psnr_ci_lower': psnr_ci_lower[0],
-                'psnr_ci_upper': psnr_ci_upper[0],
-                'num_samples': len(all_errors)
-            })
+            results.append(
+                {
+                    "sensors": number_sensors,
+                    "error_mean": error_mean,
+                    "error_std": error_std,
+                    "ssim_mean": ssim_mean,
+                    "ssim_std": ssim_std,
+                    "psnr_mean": psnr_mean,
+                    "psnr_std": psnr_std,
+                    "error_ci_lower": error_ci_lower[0],
+                    "error_ci_upper": error_ci_upper[0],
+                    "ssim_ci_lower": ssim_ci_lower[0],
+                    "ssim_ci_upper": ssim_ci_upper[0],
+                    "psnr_ci_lower": psnr_ci_lower[0],
+                    "psnr_ci_upper": psnr_ci_upper[0],
+                    "num_samples": len(all_errors),
+                }
+            )
 
         return pd.DataFrame(results)
 
-    def run_single_slice_experiments(self,
-                                   A_tensor: Union[np.ndarray, torch.Tensor],
-                                   test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
-                                   subject_name: str,
-                                   slice_idx: int,
-                                   sensor_values: List[int]) -> pd.DataFrame:
+    def run_single_slice_experiments(
+        self,
+        A_tensor: Union[np.ndarray, torch.Tensor],
+        test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+        subject_name: str,
+        slice_idx: int,
+        sensor_values: List[int],
+    ) -> pd.DataFrame:
         """Runs experiments for a specific slice of a specific subject.
 
         Args:
@@ -266,11 +281,13 @@ class ExperimentRunner:
             intervals.
         """
         A_tensor = to_torch_tensor(A_tensor, device=self.config.device, dtype=torch.float32)
-        test_data = to_torch_tensor(test_tensors[subject_name], device=self.config.device, dtype=torch.float32)
+        test_data = to_torch_tensor(
+            test_tensors[subject_name], device=self.config.device, dtype=torch.float32
+        )
         X_slice = test_data[..., slice_idx]
 
         results = []
-        num_total_samples = 1 + self.config.num_noise_samples
+        1 + self.config.num_noise_samples
 
         # Convert all test tensors once at the beginning
         test_tensors_torch = {
@@ -278,7 +295,9 @@ class ExperimentRunner:
             for subject, tensor in test_tensors.items()
         }
 
-        for number_sensors in tqdm(sensor_values, desc=f"Single slice experiments (slice {slice_idx})"):
+        for number_sensors in tqdm(
+            sensor_values, desc=f"Single slice experiments (slice {slice_idx})"
+        ):
             P, Q, R = self._perform_qr_decomposition(A_tensor, number_sensors)
             Y_mats = build_Y_matrices(test_tensors_torch, P, device=self.config.device)
             Y_subject = Y_mats[subject_name]
@@ -316,37 +335,47 @@ class ExperimentRunner:
             psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
 
             # Confidence intervals
-            error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(slice_errors))
-            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals([ssim_mean], [ssim_std], len(slice_ssims))
-            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals([psnr_mean], [psnr_std], len(slice_psnrs))
+            error_ci_lower, error_ci_upper = self._compute_confidence_intervals(
+                [error_mean], [error_std], len(slice_errors)
+            )
+            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals(
+                [ssim_mean], [ssim_std], len(slice_ssims)
+            )
+            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals(
+                [psnr_mean], [psnr_std], len(slice_psnrs)
+            )
 
-            results.append({
-                'sensors': number_sensors,
-                'subject': subject_name,
-                'slice_idx': slice_idx,
-                'error_mean': error_mean,
-                'error_std': error_std,
-                'ssim_mean': ssim_mean,
-                'ssim_std': ssim_std,
-                'psnr_mean': psnr_mean,
-                'psnr_std': psnr_std,
-                'error_ci_lower': error_ci_lower[0],
-                'error_ci_upper': error_ci_upper[0],
-                'ssim_ci_lower': ssim_ci_lower[0],
-                'ssim_ci_upper': ssim_ci_upper[0],
-                'psnr_ci_lower': psnr_ci_lower[0],
-                'psnr_ci_upper': psnr_ci_upper[0],
-                'num_samples': len(slice_errors)
-            })
+            results.append(
+                {
+                    "sensors": number_sensors,
+                    "subject": subject_name,
+                    "slice_idx": slice_idx,
+                    "error_mean": error_mean,
+                    "error_std": error_std,
+                    "ssim_mean": ssim_mean,
+                    "ssim_std": ssim_std,
+                    "psnr_mean": psnr_mean,
+                    "psnr_std": psnr_std,
+                    "error_ci_lower": error_ci_lower[0],
+                    "error_ci_upper": error_ci_upper[0],
+                    "ssim_ci_lower": ssim_ci_lower[0],
+                    "ssim_ci_upper": ssim_ci_upper[0],
+                    "psnr_ci_lower": psnr_ci_lower[0],
+                    "psnr_ci_upper": psnr_ci_upper[0],
+                    "num_samples": len(slice_errors),
+                }
+            )
 
         return pd.DataFrame(results)
 
-    def run_single_slice_wells_experiments(self,
-                                         A_tensor: Union[np.ndarray, torch.Tensor],
-                                         test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
-                                         subject_name: str,
-                                         slice_idx: int,
-                                         sensor_values: List[int]) -> pd.DataFrame:
+    def run_single_slice_wells_experiments(
+        self,
+        A_tensor: Union[np.ndarray, torch.Tensor],
+        test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+        subject_name: str,
+        slice_idx: int,
+        sensor_values: List[int],
+    ) -> pd.DataFrame:
         """Runs wells experiments for a specific slice and subject.
 
         Args:
@@ -366,7 +395,9 @@ class ExperimentRunner:
             raise ValueError("Wells configuration must be provided for wells experiments")
 
         A_tensor = to_torch_tensor(A_tensor, device=self.config.device, dtype=torch.float32)
-        test_data = to_torch_tensor(test_tensors[subject_name], device=self.config.device, dtype=torch.float32)
+        test_data = to_torch_tensor(
+            test_tensors[subject_name], device=self.config.device, dtype=torch.float32
+        )
         X_slice = test_data[..., slice_idx]
 
         # Get wells only for subject_name
@@ -381,17 +412,21 @@ class ExperimentRunner:
                 seen.add((i, j))
 
         results = []
-        num_total_samples = 1 + self.config.num_noise_samples
+        1 + self.config.num_noise_samples
 
         for N in tqdm(sensor_values, desc=f"Single slice wells experiments (slice {slice_idx})"):
-            selected_wells = valid_wells[:min(N, len(valid_wells))]
+            selected_wells = valid_wells[: min(N, len(valid_wells))]
             print(selected_wells)
             print(len(selected_wells))
             wells_dict = {subject_name: selected_wells}
             P = build_wells_matrix(wells_dict, A_tensor.shape, device=self.config.device)
 
             # Build Y matrix only for the specific subject
-            Y_mats = build_Y_matrices({subject_name: test_tensors[subject_name]}, P[subject_name], device=self.config.device)
+            Y_mats = build_Y_matrices(
+                {subject_name: test_tensors[subject_name]},
+                P[subject_name],
+                device=self.config.device,
+            )
             Y_subject = Y_mats[subject_name]
             Y_slice = Y_subject[..., slice_idx]
 
@@ -427,35 +462,45 @@ class ExperimentRunner:
             psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
 
             # Confidence intervals
-            error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(slice_errors))
-            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals([ssim_mean], [ssim_std], len(slice_ssims))
-            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals([psnr_mean], [psnr_std], len(slice_psnrs))
+            error_ci_lower, error_ci_upper = self._compute_confidence_intervals(
+                [error_mean], [error_std], len(slice_errors)
+            )
+            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals(
+                [ssim_mean], [ssim_std], len(slice_ssims)
+            )
+            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals(
+                [psnr_mean], [psnr_std], len(slice_psnrs)
+            )
 
-            results.append({
-                'sensors': N,
-                'subject': subject_name,
-                'slice_idx': slice_idx,
-                'error_mean': error_mean,
-                'error_std': error_std,
-                'ssim_mean': ssim_mean,
-                'ssim_std': ssim_std,
-                'psnr_mean': psnr_mean,
-                'psnr_std': psnr_std,
-                'error_ci_lower': error_ci_lower[0],
-                'error_ci_upper': error_ci_upper[0],
-                'ssim_ci_lower': ssim_ci_lower[0],
-                'ssim_ci_upper': ssim_ci_upper[0],
-                'psnr_ci_lower': psnr_ci_lower[0],
-                'psnr_ci_upper': psnr_ci_upper[0],
-                'num_samples': len(slice_errors)
-            })
+            results.append(
+                {
+                    "sensors": N,
+                    "subject": subject_name,
+                    "slice_idx": slice_idx,
+                    "error_mean": error_mean,
+                    "error_std": error_std,
+                    "ssim_mean": ssim_mean,
+                    "ssim_std": ssim_std,
+                    "psnr_mean": psnr_mean,
+                    "psnr_std": psnr_std,
+                    "error_ci_lower": error_ci_lower[0],
+                    "error_ci_upper": error_ci_upper[0],
+                    "ssim_ci_lower": ssim_ci_lower[0],
+                    "ssim_ci_upper": ssim_ci_upper[0],
+                    "psnr_ci_lower": psnr_ci_lower[0],
+                    "psnr_ci_upper": psnr_ci_upper[0],
+                    "num_samples": len(slice_errors),
+                }
+            )
 
         return pd.DataFrame(results)
 
-    def run_full_dataset_wells_experiments(self,
-                                         A_tensor: Union[np.ndarray, torch.Tensor],
-                                         test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
-                                         sensor_values: List[int]) -> pd.DataFrame:
+    def run_full_dataset_wells_experiments(
+        self,
+        A_tensor: Union[np.ndarray, torch.Tensor],
+        test_tensors: Dict[str, Union[np.ndarray, torch.Tensor]],
+        sensor_values: List[int],
+    ) -> pd.DataFrame:
         """Runs wells experiments across the full dataset.
 
         Args:
@@ -489,11 +534,13 @@ class ExperimentRunner:
             wells_dict_valid[subject] = valid_wells
 
         results = []
-        num_total_samples = 1 + self.config.num_noise_samples
+        1 + self.config.num_noise_samples
 
         for N in tqdm(sensor_values, desc="Full dataset wells experiments"):
             # Keep only the first N wells for each subject
-            wells_dict_N = {subject: wells[:min(N, len(wells))] for subject, wells in wells_dict_valid.items()}
+            wells_dict_N = {
+                subject: wells[: min(N, len(wells))] for subject, wells in wells_dict_valid.items()
+            }
             P = build_wells_matrix(wells_dict_N, A_tensor.shape, device=self.config.device)
 
             # Build Y matrices for all subjects
@@ -512,7 +559,9 @@ class ExperimentRunner:
                     # Baseline (no noise)
                     x_hat, _ = self._solve_compressive_sensing(A_tensor, P, Y_slice)
                     X_reconstructed = reconstruct_tensor(A_tensor=A_tensor, x_hat=x_hat)
-                    error_val, mse_val, ssim_val, psnr_val = compute_metrics(X_slice, X_reconstructed)
+                    error_val, mse_val, ssim_val, psnr_val = compute_metrics(
+                        X_slice, X_reconstructed
+                    )
 
                     all_errors.append(error_val)
                     all_mses.append(mse_val)
@@ -524,7 +573,9 @@ class ExperimentRunner:
                         noisy_Y = self._add_noise_to_measurements(Y_slice)
                         x_hat, _ = self._solve_compressive_sensing(A_tensor, P, noisy_Y)
                         X_reconstructed = reconstruct_tensor(A_tensor=A_tensor, x_hat=x_hat)
-                        error_val, mse_val, ssim_val, psnr_val = compute_metrics(X_slice, X_reconstructed)
+                        error_val, mse_val, ssim_val, psnr_val = compute_metrics(
+                            X_slice, X_reconstructed
+                        )
 
                         all_errors.append(error_val)
                         all_mses.append(mse_val)
@@ -543,31 +594,41 @@ class ExperimentRunner:
             psnr_mean, psnr_std = float(torch.mean(psnr_tensor)), float(torch.std(psnr_tensor))
 
             # Confidence intervals
-            error_ci_lower, error_ci_upper = self._compute_confidence_intervals([error_mean], [error_std], len(all_errors))
-            mse_ci_lower, mse_ci_upper = self._compute_confidence_intervals([mse_mean], [mse_std], len(all_mses))
-            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals([ssim_mean], [ssim_std], len(all_ssims))
-            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals([psnr_mean], [psnr_std], len(all_psnrs))
+            error_ci_lower, error_ci_upper = self._compute_confidence_intervals(
+                [error_mean], [error_std], len(all_errors)
+            )
+            mse_ci_lower, mse_ci_upper = self._compute_confidence_intervals(
+                [mse_mean], [mse_std], len(all_mses)
+            )
+            ssim_ci_lower, ssim_ci_upper = self._compute_confidence_intervals(
+                [ssim_mean], [ssim_std], len(all_ssims)
+            )
+            psnr_ci_lower, psnr_ci_upper = self._compute_confidence_intervals(
+                [psnr_mean], [psnr_std], len(all_psnrs)
+            )
 
-            results.append({
-                'sensors': N,
-                'error_mean': error_mean,
-                'error_std': error_std,
-                'mse_mean': mse_mean,
-                'mse_std': mse_std,
-                'ssim_mean': ssim_mean,
-                'ssim_std': ssim_std,
-                'psnr_mean': psnr_mean,
-                'psnr_std': psnr_std,
-                'error_ci_lower': error_ci_lower[0],
-                'error_ci_upper': error_ci_upper[0],
-                'mse_ci_lower': mse_ci_lower[0],
-                'mse_ci_upper': mse_ci_upper[0],
-                'ssim_ci_lower': ssim_ci_lower[0],
-                'ssim_ci_upper': ssim_ci_upper[0],
-                'psnr_ci_lower': psnr_ci_lower[0],
-                'psnr_ci_upper': psnr_ci_upper[0],
-                'num_samples': len(all_errors)
-            })
+            results.append(
+                {
+                    "sensors": N,
+                    "error_mean": error_mean,
+                    "error_std": error_std,
+                    "mse_mean": mse_mean,
+                    "mse_std": mse_std,
+                    "ssim_mean": ssim_mean,
+                    "ssim_std": ssim_std,
+                    "psnr_mean": psnr_mean,
+                    "psnr_std": psnr_std,
+                    "error_ci_lower": error_ci_lower[0],
+                    "error_ci_upper": error_ci_upper[0],
+                    "mse_ci_lower": mse_ci_lower[0],
+                    "mse_ci_upper": mse_ci_upper[0],
+                    "ssim_ci_lower": ssim_ci_lower[0],
+                    "ssim_ci_upper": ssim_ci_upper[0],
+                    "psnr_ci_lower": psnr_ci_lower[0],
+                    "psnr_ci_upper": psnr_ci_upper[0],
+                    "num_samples": len(all_errors),
+                }
+            )
 
         return pd.DataFrame(results)
 
@@ -588,7 +649,7 @@ def ensure_sensor_values_are_int(sensor_values: List) -> List[int]:
     """
     result = []
     for val in sensor_values:
-        if hasattr(val, 'item'):  # numpy scalar
+        if hasattr(val, "item"):  # numpy scalar
             result.append(val.item())
         else:
             result.append(int(val))
@@ -624,9 +685,11 @@ def run_experiments(*args, **kwargs):
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_full_dataset_experiments` instead.
     """
-    print("Warning: This function is deprecated. Use ExperimentRunner.run_full_dataset_experiments() instead.")
+    print(
+        "Warning: This function is deprecated. Use ExperimentRunner.run_full_dataset_experiments() instead."
+    )
     config = ExperimentConfig()
-    runner = ExperimentRunner(config)
+    ExperimentRunner(config)
     # This would need more complex mapping - recommend using the class directly
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
@@ -637,7 +700,9 @@ def run_experiments_single_slice(*args, **kwargs):
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_single_slice_experiments` instead.
     """
-    print("Warning: This function is deprecated. Use ExperimentRunner.run_single_slice_experiments() instead.")
+    print(
+        "Warning: This function is deprecated. Use ExperimentRunner.run_single_slice_experiments() instead."
+    )
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
 
@@ -657,17 +722,21 @@ def run_experiments_wells_df(*args, **kwargs):
     .. deprecated:: 0.1.0
        Use :meth:`ExperimentRunner.run_wells_experiments` instead.
     """
-    print("Warning: This function is deprecated. Use ExperimentRunner.run_wells_experiments() instead.")
+    print(
+        "Warning: This function is deprecated. Use ExperimentRunner.run_wells_experiments() instead."
+    )
     raise NotImplementedError("Please use ExperimentRunner class directly")
 
 
-def plot_analytics(df: pd.DataFrame,
-                  metrics: List[str] = ['error', 'ssim', 'psnr'],
-                  plot_type: str = "individual",
-                  title_prefix: str = "Experiment Results",
-                  figsize: Tuple[int, int] = (8, 5),
-                  save_path: Optional[str] = None,
-                  show_plots: bool = True) -> None:
+def plot_analytics(
+    df: pd.DataFrame,
+    metrics: List[str] = ["error", "ssim", "psnr"],
+    plot_type: str = "individual",
+    title_prefix: str = "Experiment Results",
+    figsize: Tuple[int, int] = (8, 5),
+    save_path: Optional[str] = None,
+    show_plots: bool = True,
+) -> None:
     """Plots analytics results from a DataFrame.
 
     This function provides comprehensive visualization options and replicates the
@@ -687,29 +756,33 @@ def plot_analytics(df: pd.DataFrame,
     import numpy as np
 
     # Determine data format (with or without confidence intervals)
-    has_ci = any(f'{metric}_ci_lower' in df.columns for metric in metrics)
-    has_mean_std = any(f'{metric}_mean' in df.columns for metric in metrics)
+    any(f"{metric}_ci_lower" in df.columns for metric in metrics)
+    has_mean_std = any(f"{metric}_mean" in df.columns for metric in metrics)
 
     # Extract data for plotting
-    sensor_values = df['sensors'].values
+    sensor_values = df["sensors"].values
     plot_data = {}
 
     for metric in metrics:
-        if has_mean_std and f'{metric}_mean' in df.columns:
+        if has_mean_std and f"{metric}_mean" in df.columns:
             # Data with confidence intervals
             plot_data[metric] = {
-                'means': df[f'{metric}_mean'].values,
-                'lower': df[f'{metric}_ci_lower'].values if f'{metric}_ci_lower' in df.columns else df[f'{metric}_mean'].values - df[f'{metric}_std'].values,
-                'upper': df[f'{metric}_ci_upper'].values if f'{metric}_ci_upper' in df.columns else df[f'{metric}_mean'].values + df[f'{metric}_std'].values,
-                'std': df[f'{metric}_std'].values if f'{metric}_std' in df.columns else None
+                "means": df[f"{metric}_mean"].values,
+                "lower": df[f"{metric}_ci_lower"].values
+                if f"{metric}_ci_lower" in df.columns
+                else df[f"{metric}_mean"].values - df[f"{metric}_std"].values,
+                "upper": df[f"{metric}_ci_upper"].values
+                if f"{metric}_ci_upper" in df.columns
+                else df[f"{metric}_mean"].values + df[f"{metric}_std"].values,
+                "std": df[f"{metric}_std"].values if f"{metric}_std" in df.columns else None,
             }
         elif metric in df.columns:
             # Simple data without confidence intervals
             plot_data[metric] = {
-                'means': df[metric].values,
-                'lower': df[metric].values,  # No CI, use same values
-                'upper': df[metric].values,
-                'std': None
+                "means": df[metric].values,
+                "lower": df[metric].values,  # No CI, use same values
+                "upper": df[metric].values,
+                "std": None,
             }
         else:
             print(f"Warning: Metric '{metric}' not found in DataFrame")
@@ -720,36 +793,44 @@ def plot_analytics(df: pd.DataFrame,
         return
 
     # Color mapping
-    colors = {'error': 'blue', 'ssim': 'green', 'psnr': 'red', 'mse': 'orange'}
+    colors = {"error": "blue", "ssim": "green", "psnr": "red", "mse": "orange"}
 
     def save_plot(suffix=""):
         if save_path:
             path = f"{save_path}_{suffix}.png" if suffix else f"{save_path}.png"
-            plt.savefig(path, dpi=300, bbox_inches='tight')
+            plt.savefig(path, dpi=300, bbox_inches="tight")
 
     # Plot 1: Individual plots for each metric
-    if plot_type in ['individual', 'all']:
+    if plot_type in ["individual", "all"]:
         for metric, data in plot_data.items():
-            color = colors.get(metric, 'black')
+            color = colors.get(metric, "black")
 
             plt.figure(figsize=figsize)
-            plt.plot(sensor_values, data['means'], color=color, label=f'Mean {metric.upper()}')
-            plt.scatter(sensor_values, data['means'], color=color, marker='o', s=30)
+            plt.plot(sensor_values, data["means"], color=color, label=f"Mean {metric.upper()}")
+            plt.scatter(sensor_values, data["means"], color=color, marker="o", s=30)
 
             # Add confidence intervals or std deviation
-            if not np.array_equal(data['lower'], data['means']) or not np.array_equal(data['upper'], data['means']):
-                plt.fill_between(sensor_values, data['lower'], data['upper'],
-                               color=color, alpha=0.2, label='95% CI')
+            if not np.array_equal(data["lower"], data["means"]) or not np.array_equal(
+                data["upper"], data["means"]
+            ):
+                plt.fill_between(
+                    sensor_values,
+                    data["lower"],
+                    data["upper"],
+                    color=color,
+                    alpha=0.2,
+                    label="95% CI",
+                )
 
-            plt.title(f'{metric.upper()} vs. Sensors')
-            plt.xlabel('Number of Sensors (N)')
+            plt.title(f"{metric.upper()} vs. Sensors")
+            plt.xlabel("Number of Sensors (N)")
 
-            if metric == 'error':
-                plt.ylabel('Error')
-            elif metric == 'ssim':
-                plt.ylabel('SSIM')
-            elif metric == 'psnr':
-                plt.ylabel('PSNR (dB)')
+            if metric == "error":
+                plt.ylabel("Error")
+            elif metric == "ssim":
+                plt.ylabel("SSIM")
+            elif metric == "psnr":
+                plt.ylabel("PSNR (dB)")
             else:
                 plt.ylabel(metric.upper())
 
@@ -766,19 +847,19 @@ def plot_analytics(df: pd.DataFrame,
                 plt.close()
 
     # Plot 2: Combined Normalized Plot (Error inverted and SSIM)
-    if plot_type in ['normalized', 'all'] and 'error' in plot_data and 'ssim' in plot_data:
+    if plot_type in ["normalized", "all"] and "error" in plot_data and "ssim" in plot_data:
         plt.figure(figsize=(10, 5))
 
-        error_data = plot_data['error']
-        ssim_data = plot_data['ssim']
+        error_data = plot_data["error"]
+        ssim_data = plot_data["ssim"]
 
         # Convert to numpy arrays for calculations
-        error_means_np = np.array(error_data['means'])
-        error_lower_np = np.array(error_data['lower'])
-        error_upper_np = np.array(error_data['upper'])
-        ssim_means_np = np.array(ssim_data['means'])
-        ssim_lower_np = np.array(ssim_data['lower'])
-        ssim_upper_np = np.array(ssim_data['upper'])
+        error_means_np = np.array(error_data["means"])
+        error_lower_np = np.array(error_data["lower"])
+        error_upper_np = np.array(error_data["upper"])
+        ssim_means_np = np.array(ssim_data["means"])
+        ssim_lower_np = np.array(ssim_data["lower"])
+        ssim_upper_np = np.array(ssim_data["upper"])
 
         # Determine global min/max for normalization
         error_min_val = np.min(error_lower_np)
@@ -801,21 +882,25 @@ def plot_analytics(df: pd.DataFrame,
         norm_ssim_upper_ci = (ssim_upper_np - ssim_min_val) / ssim_range
 
         # Plot normalized metrics
-        plt.plot(sensor_values, norm_error_means, color='blue', label='Error')
-        plt.scatter(sensor_values, norm_error_means, color='blue', marker='o', s=30)
-        plt.fill_between(sensor_values,
-                        np.minimum(norm_error_lower_ci, norm_error_upper_ci),
-                        np.maximum(norm_error_lower_ci, norm_error_upper_ci),
-                        color='blue', alpha=0.2)
+        plt.plot(sensor_values, norm_error_means, color="blue", label="Error")
+        plt.scatter(sensor_values, norm_error_means, color="blue", marker="o", s=30)
+        plt.fill_between(
+            sensor_values,
+            np.minimum(norm_error_lower_ci, norm_error_upper_ci),
+            np.maximum(norm_error_lower_ci, norm_error_upper_ci),
+            color="blue",
+            alpha=0.2,
+        )
 
-        plt.plot(sensor_values, norm_ssim_means, color='green', label='SSIM')
-        plt.scatter(sensor_values, norm_ssim_means, color='green', marker='o', s=30)
-        plt.fill_between(sensor_values, norm_ssim_lower_ci, norm_ssim_upper_ci,
-                        color='green', alpha=0.2)
+        plt.plot(sensor_values, norm_ssim_means, color="green", label="SSIM")
+        plt.scatter(sensor_values, norm_ssim_means, color="green", marker="o", s=30)
+        plt.fill_between(
+            sensor_values, norm_ssim_lower_ci, norm_ssim_upper_ci, color="green", alpha=0.2
+        )
 
-        plt.xlabel('Number of Sensors (N)')
-        plt.ylabel('Normalized Quality Metrics')
-        plt.title('Performance Metrics vs. Number of Sensors')
+        plt.xlabel("Number of Sensors (N)")
+        plt.ylabel("Normalized Quality Metrics")
+        plt.title("Performance Metrics vs. Number of Sensors")
         plt.legend()
         plt.grid(True)
         plt.ylim(0, 1)
@@ -830,24 +915,32 @@ def plot_analytics(df: pd.DataFrame,
             plt.close()
 
     # Plot 3: Combined Non-Normalized Plot (All metrics, only if explicitly requested)
-    if plot_type == 'combined':
+    if plot_type == "combined":
         plt.figure(figsize=(12, 6))
 
         for i, (metric, data) in enumerate(plot_data.items()):
-            color = colors.get(metric, f'C{i}')
-            marker = ['o', 's', '^', 'D'][i % 4]  # Different markers
+            color = colors.get(metric, f"C{i}")
+            marker = ["o", "s", "^", "D"][i % 4]  # Different markers
 
-            plt.plot(sensor_values, data['means'], color=color, label=f'Mean {metric.upper()}')
-            plt.scatter(sensor_values, data['means'], color=color, marker=marker, s=30)
+            plt.plot(sensor_values, data["means"], color=color, label=f"Mean {metric.upper()}")
+            plt.scatter(sensor_values, data["means"], color=color, marker=marker, s=30)
 
             # Add confidence intervals
-            if not np.array_equal(data['lower'], data['means']) or not np.array_equal(data['upper'], data['means']):
-                plt.fill_between(sensor_values, data['lower'], data['upper'],
-                               color=color, alpha=0.2, label=f'{metric.upper()} 95% CI')
+            if not np.array_equal(data["lower"], data["means"]) or not np.array_equal(
+                data["upper"], data["means"]
+            ):
+                plt.fill_between(
+                    sensor_values,
+                    data["lower"],
+                    data["upper"],
+                    color=color,
+                    alpha=0.2,
+                    label=f"{metric.upper()} 95% CI",
+                )
 
-        plt.title('Combined Metrics vs. Sensors')
-        plt.xlabel('Number of Sensors (N)')
-        plt.ylabel('Metric Value')
+        plt.title("Combined Metrics vs. Sensors")
+        plt.xlabel("Number of Sensors (N)")
+        plt.ylabel("Metric Value")
         plt.legend()
         plt.grid(True)
         plt.tight_layout()
@@ -861,10 +954,19 @@ def plot_analytics(df: pd.DataFrame,
             plt.close()
 
 
-def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
-                         ssim_means, ssim_lower, ssim_upper,
-                         psnr_means, psnr_lower, psnr_upper,
-                         save_path: Optional[str] = None):
+def plot_analytics_legacy(
+    sensor_values,
+    error_means,
+    error_lower,
+    error_upper,
+    ssim_means,
+    ssim_lower,
+    ssim_upper,
+    psnr_means,
+    psnr_lower,
+    psnr_upper,
+    save_path: Optional[str] = None,
+):
     """Plots analytics using a legacy function for backward compatibility.
 
     This function is the original `plot_analytics` from `plots.py`, adapted for
@@ -886,17 +988,19 @@ def plot_analytics_legacy(sensor_values, error_means, error_lower, error_upper,
     print("Warning: Using legacy plot function. Consider using plot_analytics with DataFrame.")
 
     # Create a DataFrame and use the new function
-    df = pd.DataFrame({
-        'sensors': sensor_values,
-        'error_mean': error_means,
-        'error_ci_lower': error_lower,
-        'error_ci_upper': error_upper,
-        'ssim_mean': ssim_means,
-        'ssim_ci_lower': ssim_lower,
-        'ssim_ci_upper': ssim_upper,
-        'psnr_mean': psnr_means,
-        'psnr_ci_lower': psnr_lower,
-        'psnr_ci_upper': psnr_upper
-    })
+    df = pd.DataFrame(
+        {
+            "sensors": sensor_values,
+            "error_mean": error_means,
+            "error_ci_lower": error_lower,
+            "error_ci_upper": error_upper,
+            "ssim_mean": ssim_means,
+            "ssim_ci_lower": ssim_lower,
+            "ssim_ci_upper": ssim_upper,
+            "psnr_mean": psnr_means,
+            "psnr_ci_lower": psnr_lower,
+            "psnr_ci_upper": psnr_upper,
+        }
+    )
 
-    plot_analytics(df, metrics=['error', 'ssim', 'psnr'], plot_type='all', save_path=save_path)
+    plot_analytics(df, metrics=["error", "ssim", "psnr"], plot_type="all", save_path=save_path)

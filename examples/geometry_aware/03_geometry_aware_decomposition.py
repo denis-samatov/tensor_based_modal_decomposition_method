@@ -9,7 +9,6 @@ Stages:
  5. Report reconstruction metrics and visualise sensor placement.
 """
 
-
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -18,24 +17,26 @@ import numpy as np
 import torch
 
 from TBMD.core.decomposition import (
-    GeometryAwareTuckerDecomposer,
     GeometryAwareDecompositionConfig as GeometryAwareConfig,
 )
-from TBMD.core.sensor_placement import (
-    GeometryAwareTensorQR,
-    GeometricQRConfig,
+from TBMD.core.decomposition import (
+    GeometryAwareTuckerDecomposer,
 )
+from TBMD.core.geometry import MeshGraphBuilder
 from TBMD.core.reconstruction import (
     CompressiveSensingConfig,
     TensorCompressiveSensing,
 )
-from TBMD.core.geometry import MeshGraphBuilder
+from TBMD.core.sensor_placement import (
+    GeometricQRConfig,
+    GeometryAwareTensorQR,
+)
 from TBMD.utils.metrics import compute_metrics
-
 
 # ---------------------------------------------------------------------------
 # Synthetic dataset
 # ---------------------------------------------------------------------------
+
 
 def make_vortex_dataset(
     spatial_shape: Tuple[int, int] = (50, 50),
@@ -72,6 +73,7 @@ class GeometryAwareResult:
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 def run_geometry_aware_pipeline() -> GeometryAwareResult:
     spatial_shape = (50, 50)
@@ -159,6 +161,7 @@ def run_geometry_aware_pipeline() -> GeometryAwareResult:
 # Visualisation helpers
 # ---------------------------------------------------------------------------
 
+
 def show_results(result: GeometryAwareResult, time_index: int = 0) -> None:
     original = result.test_tensor[..., time_index]
     reconstructed = result.reconstruction[..., time_index]
@@ -191,6 +194,7 @@ def show_results(result: GeometryAwareResult, time_index: int = 0) -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     result = run_geometry_aware_pipeline()

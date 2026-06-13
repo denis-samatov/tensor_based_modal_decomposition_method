@@ -11,49 +11,44 @@ The optional compatibility layer exposes monitoring-oriented components.
 """
 
 # Main Digital Twin implementation
-from .digital_twin import DigitalTwin, DigitalTwinState, ForecasterType, ProxyModelType
+# Re-export data classes and proxy models from models
+from TBMD.core.forecasting.ReservoirProxyModel import (
+    LinearDynamicsProxyModel,
+    NeuralProxyModel,
+    PhysicsInformedProxyModel,
+    ReservoirProxyModelBase,
+    ReservoirState,
+    WellControl,
+)
 
 # Extended system with monitoring components (optional)
 # Extended system components from compat (for backward compatibility)
 from .compat import (
+    ModelCalibrator,
     RealtimeMonitor,
     ScenarioAnalyzer,
-    ModelCalibrator,
 )
-
-# Re-export data classes and proxy models from models
-from TBMD.core.forecasting.ReservoirProxyModel import (
-    WellControl, 
-    ReservoirState,
-    ReservoirProxyModelBase,
-    LinearDynamicsProxyModel,
-    NeuralProxyModel,
-    PhysicsInformedProxyModel
-)
+from .digital_twin import DigitalTwin, DigitalTwinState, ForecasterType, ProxyModelType
 
 __all__ = [
     # Main classes
-    'DigitalTwin',
-    'DigitalTwinState',
-    'ForecasterType',
-    'ProxyModelType',
-    'DigitalTwinTBMD',
-    
+    "DigitalTwin",
+    "DigitalTwinState",
+    "ForecasterType",
+    "ProxyModelType",
+    "DigitalTwinTBMD",
     # System components
     # 'SystemDigitalTwinConfig',
-    # 'SystemDigitalTwinState', 
-    'RealtimeMonitor',
-    'ScenarioAnalyzer',
-    'ModelCalibrator',
-    
+    # 'SystemDigitalTwinState',
+    "RealtimeMonitor",
+    "ScenarioAnalyzer",
+    "ModelCalibrator",
     # Data classes
-    'WellControl',
-    'ReservoirState',
-    
+    "WellControl",
+    "ReservoirState",
     # Proxy Models
-    'ReservoirProxyModelBase',
-    'LinearDynamicsProxyModel',
-    'NeuralProxyModel',
-    'PhysicsInformedProxyModel',
+    "ReservoirProxyModelBase",
+    "LinearDynamicsProxyModel",
+    "NeuralProxyModel",
+    "PhysicsInformedProxyModel",
 ]
-

@@ -131,9 +131,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
 
     specs_by_slug = {spec.slug: spec for spec in get_fast_tplus1_model_specs()}
     missing = [slug for slug in args.slugs if slug not in specs_by_slug]

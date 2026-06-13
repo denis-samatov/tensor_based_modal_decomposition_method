@@ -1,10 +1,11 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
 
 def visualize_wells_placement(wells_matrix, title="Wells placement"):
     """
     Visualizes wells placement matrix.
-    
+
     Args:
         wells_matrix: Binary tensor with 1s at well positions
         title: Title for the plot

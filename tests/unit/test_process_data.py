@@ -1,12 +1,14 @@
 import unittest
+
 import torch
-import numpy as np
+
 from TBMD.core.data.processors import (
-    process_data,
     calculate_global_minmax_params,
     calculate_global_zscore_params,
     inverse_normalization,
+    process_data,
 )
+
 
 class TestProcessData(unittest.TestCase):
     def setUp(self):
@@ -68,9 +70,7 @@ class TestProcessData(unittest.TestCase):
             global_params=params,
         )
         inverted_data = torch.from_numpy(inverted_data)
-        self.assertTrue(
-            torch.allclose(inverted_data, self.train_data["subject1"], atol=1e-4)
-        )
+        self.assertTrue(torch.allclose(inverted_data, self.train_data["subject1"], atol=1e-4))
 
     def test_inverse_normalization_zscore(self):
         mean, std = calculate_global_zscore_params(self.train_data)
@@ -86,9 +86,8 @@ class TestProcessData(unittest.TestCase):
             global_params=params,
         )
         inverted_data = torch.from_numpy(inverted_data)
-        self.assertTrue(
-            torch.allclose(inverted_data, self.train_data["subject1"], atol=1e-5)
-        )
+        self.assertTrue(torch.allclose(inverted_data, self.train_data["subject1"], atol=1e-5))
+
 
 if __name__ == "__main__":
     unittest.main()

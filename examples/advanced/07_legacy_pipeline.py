@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from TBMD.modules.TensorHOSVD import TuckerDecomposerInterface
+from TBMD.core.metrics.metrics import compute_metrics
 from TBMD.modules.TensorBasedCompressiveSensing import (
     CompressiveSensingConfig,
     TensorCompressiveSensing,
@@ -25,7 +25,7 @@ from TBMD.modules.TensorBasedCompressiveSensing import (
 from TBMD.modules.TensorBasedTubeFiberPivotQRFactorization import (
     TensorTubeQRDecomposition,
 )
-from TBMD.core.metrics.metrics import compute_metrics
+from TBMD.modules.TensorHOSVD import TuckerDecomposerInterface
 
 
 def make_synthetic_dataset(

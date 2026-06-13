@@ -8,8 +8,6 @@ Main package for tensor-based modal decomposition algorithms with geometry aware
 # This allows "from TBMD.geometry import ..." to work
 from .core import geometry
 
-__all__ = [
-    'geometry'
-]
+__all__ = ["geometry"]
 
-__version__ = '2.0.0'
+__version__ = "2.0.0"

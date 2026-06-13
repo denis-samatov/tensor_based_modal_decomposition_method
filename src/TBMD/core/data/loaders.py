@@ -1,11 +1,12 @@
-import pandas as pd
-import numpy as np
-import torch
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Tuple, Union, List, Optional, Any
 from collections import defaultdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+import torch
 from PIL import Image
 from tqdm import tqdm
 
@@ -18,20 +19,18 @@ logger = logging.getLogger(__name__)
 # EXISTING CLASSES FROM data/loaders.py (Renamed DataLoader -> BaseDataLoader)
 # =================================================================================================
 
+
 class BaseDataLoader:
     """
     Base class for loading tensor data.
-    
+
     Examples:
         >>> loader = BaseDataLoader('data.h5')
         >>> tensor = loader.load_tensor()
     """
-    
+
     def __init__(
-        self,
-        data_path: Union[str, Path],
-        device: str = 'cpu',
-        dtype: torch.dtype = torch.float32
+        self, data_path: Union[str, Path], device: str = "cpu", dtype: torch.dtype = torch.float32
     ):
         """
         Args:
@@ -42,198 +41,181 @@ class BaseDataLoader:
         self.data_path = Path(data_path)
         self.device = torch.device(device)
         self.dtype = dtype
-        
+
         if not self.data_path.exists():
             raise FileNotFoundError(f"File not found: {self.data_path}")
-    
-    def load_tensor(
-        self,
-        key: Optional[str] = None,
-        **kwargs
-    ) -> torch.Tensor:
+
+    def load_tensor(self, key: Optional[str] = None, **kwargs) -> torch.Tensor:
         """
         Load a tensor from file.
-        
+
         Args:
             key: Key for HDF5 or NPZ files.
             **kwargs: Additional parameters.
-            
+
         Returns:
             Loaded tensor.
         """
         suffix = self.data_path.suffix.lower()
-        
-        if suffix == '.h5' or suffix == '.hdf5':
+
+        if suffix == ".h5" or suffix == ".hdf5":
             return self._load_hdf5(key, **kwargs)
-        elif suffix in ['.npy', '.npz']:
+        elif suffix in [".npy", ".npz"]:
             return self._load_numpy(key, **kwargs)
-        elif suffix in ['.pt', '.pth']:
+        elif suffix in [".pt", ".pth"]:
             return self._load_pytorch(key, **kwargs)
         else:
             raise ValueError(f"Unsupported format: {suffix}")
-    
-    def _load_hdf5(
-        self,
-        key: Optional[str] = None,
-        **kwargs
-    ) -> torch.Tensor:
+
+    def _load_hdf5(self, key: Optional[str] = None, **kwargs) -> torch.Tensor:
         """Load from HDF5."""
         try:
             import h5py
         except ImportError:
-            raise ImportError("h5py is required for HDF5 loading. Please install it via 'pip install h5py'.")
+            raise ImportError(
+                "h5py is required for HDF5 loading. Please install it via 'pip install h5py'."
+            )
 
-        with h5py.File(self.data_path, 'r') as f:
+        with h5py.File(self.data_path, "r") as f:
             if key is None:
                 # Use the first key
                 key = list(f.keys())[0]
                 logger.info(f"No key specified; using: {key}")
-            
+
             data = f[key][:]
-        
+
         return torch.from_numpy(data).to(device=self.device, dtype=self.dtype)
-    
-    def _load_numpy(
-        self,
-        key: Optional[str] = None,
-        **kwargs
-    ) -> torch.Tensor:
+
+    def _load_numpy(self, key: Optional[str] = None, **kwargs) -> torch.Tensor:
         """Load from NumPy."""
-        if self.data_path.suffix == '.npz':
+        if self.data_path.suffix == ".npz":
             data_dict = np.load(self.data_path)
             if key is None:
                 key = list(data_dict.keys())[0]
             data = data_dict[key]
         else:
             data = np.load(self.data_path)
-        
+
         return torch.from_numpy(data).to(device=self.device, dtype=self.dtype)
-    
-    def _load_pytorch(
-        self,
-        key: Optional[str] = None,
-        **kwargs
-    ) -> torch.Tensor:
+
+    def _load_pytorch(self, key: Optional[str] = None, **kwargs) -> torch.Tensor:
         """Load from PyTorch."""
         data = torch.load(self.data_path, map_location=self.device)
-        
+
         if isinstance(data, dict) and key is not None:
             data = data[key]
-        
+
         return data.to(device=self.device, dtype=self.dtype)
-    
+
     def load_metadata(self) -> Dict[str, Any]:
         """
         Load metadata from file.
-        
+
         Returns:
             Metadata dictionary.
         """
         metadata = {
-            'path': str(self.data_path),
-            'format': self.data_path.suffix,
-            'size_mb': self.data_path.stat().st_size / (1024 * 1024)
+            "path": str(self.data_path),
+            "format": self.data_path.suffix,
+            "size_mb": self.data_path.stat().st_size / (1024 * 1024),
         }
-        
+
         suffix = self.data_path.suffix.lower()
-        
-        if suffix in ['.h5', '.hdf5']:
+
+        if suffix in [".h5", ".hdf5"]:
             try:
                 import h5py
-                with h5py.File(self.data_path, 'r') as f:
-                    metadata['keys'] = list(f.keys())
+
+                with h5py.File(self.data_path, "r") as f:
+                    metadata["keys"] = list(f.keys())
                     # Shape of the first dataset
-                    if metadata['keys']:
-                        first_key = metadata['keys'][0]
-                        metadata['shape'] = f[first_key].shape
-                        metadata['dtype'] = str(f[first_key].dtype)
+                    if metadata["keys"]:
+                        first_key = metadata["keys"][0]
+                        metadata["shape"] = f[first_key].shape
+                        metadata["dtype"] = str(f[first_key].dtype)
             except ImportError:
                 logger.warning("h5py not installed, cannot read HDF5 metadata")
-        
-        elif suffix == '.npz':
+
+        elif suffix == ".npz":
             data = np.load(self.data_path)
-            metadata['keys'] = list(data.keys())
-        
+            metadata["keys"] = list(data.keys())
+
         return metadata
 
 
 class HDF5Loader(BaseDataLoader):
     """
     Specialized loader for HDF5 files.
-    
+
     Provides convenience methods for HDF5 files.
     """
-    
+
     def list_keys(self) -> List[str]:
         """Return all keys in the HDF5 file."""
         try:
             import h5py
         except ImportError:
-            raise ImportError("h5py is required for HDF5 loading. Please install it via 'pip install h5py'.")
-            
-        with h5py.File(self.data_path, 'r') as f:
+            raise ImportError(
+                "h5py is required for HDF5 loading. Please install it via 'pip install h5py'."
+            )
+
+        with h5py.File(self.data_path, "r") as f:
             return list(f.keys())
-    
-    def load_multiple(
-        self,
-        keys: List[str]
-    ) -> Dict[str, torch.Tensor]:
+
+    def load_multiple(self, keys: List[str]) -> Dict[str, torch.Tensor]:
         """
         Load multiple tensors.
-        
+
         Args:
             keys: Keys to load.
-            
+
         Returns:
             Dictionary mapping keys to tensors.
         """
         try:
             import h5py
         except ImportError:
-            raise ImportError("h5py is required for HDF5 loading. Please install it via 'pip install h5py'.")
+            raise ImportError(
+                "h5py is required for HDF5 loading. Please install it via 'pip install h5py'."
+            )
 
         result = {}
-        with h5py.File(self.data_path, 'r') as f:
+        with h5py.File(self.data_path, "r") as f:
             for key in keys:
                 if key in f:
                     data = f[key][:]
-                    result[key] = torch.from_numpy(data).to(
-                        device=self.device,
-                        dtype=self.dtype
-                    )
-        
+                    result[key] = torch.from_numpy(data).to(device=self.device, dtype=self.dtype)
+
         return result
-    
-    def load_slice(
-        self,
-        key: str,
-        slices: tuple
-    ) -> torch.Tensor:
+
+    def load_slice(self, key: str, slices: tuple) -> torch.Tensor:
         """
         Load a slice of data efficiently for large files.
-        
+
         Args:
             key: Dataset key.
             slices: Tuple of slices, for example (slice(0, 100), slice(0, 50)).
-            
+
         Returns:
             Data slice.
         """
         try:
             import h5py
         except ImportError:
-            raise ImportError("h5py is required for HDF5 loading. Please install it via 'pip install h5py'.")
+            raise ImportError(
+                "h5py is required for HDF5 loading. Please install it via 'pip install h5py'."
+            )
 
-        with h5py.File(self.data_path, 'r') as f:
+        with h5py.File(self.data_path, "r") as f:
             data = f[key][slices]
-        
+
         return torch.from_numpy(data).to(device=self.device, dtype=self.dtype)
 
 
 class TensorDataLoader:
     """
     Loader for tensor data with optional preprocessing.
-    
+
     Examples:
         >>> loader = TensorDataLoader('data.h5')
         >>> tensor, metadata = loader.load_with_preprocessing(
@@ -241,69 +223,66 @@ class TensorDataLoader:
         ...     remove_mean=True
         ... )
     """
-    
+
     def __init__(
-        self,
-        data_path: Union[str, Path],
-        device: str = 'cpu',
-        dtype: torch.dtype = torch.float32
+        self, data_path: Union[str, Path], device: str = "cpu", dtype: torch.dtype = torch.float32
     ):
         self.loader = BaseDataLoader(data_path, device, dtype)
-    
+
     def load_with_preprocessing(
         self,
         key: Optional[str] = None,
         normalize: bool = False,
         remove_mean: bool = False,
         remove_trend: bool = False,
-        **kwargs
+        **kwargs,
     ) -> tuple:
         """
         Load a tensor with preprocessing.
-        
+
         Args:
             key: HDF5 key.
             normalize: Normalize to [0, 1].
             remove_mean: Remove the mean along the last dimension.
             remove_trend: Remove a linear trend along the last dimension.
-            
+
         Returns:
             (tensor, metadata), where metadata contains preprocessing parameters.
         """
         tensor = self.loader.load_tensor(key, **kwargs)
         metadata = {}
-        
+
         if remove_mean:
             mean = tensor.mean(dim=-1, keepdim=True)
             tensor = tensor - mean
-            metadata['mean'] = mean
-        
+            metadata["mean"] = mean
+
         if remove_trend:
             # Simple linear detrending
             T = tensor.shape[-1]
             t = torch.linspace(0, 1, T, device=tensor.device)
-            
+
             # For each time series
             original_shape = tensor.shape
             tensor_2d = tensor.reshape(-1, T)
-            
+
             for i in range(tensor_2d.shape[0]):
                 # Linear regression
                 A = torch.stack([t, torch.ones_like(t)], dim=1)
                 coeffs = torch.linalg.lstsq(A, tensor_2d[i]).solution
                 trend = A @ coeffs
                 tensor_2d[i] -= trend
-            
+
             tensor = tensor_2d.reshape(original_shape)
-            metadata['detrended'] = True
-        
+            metadata["detrended"] = True
+
         if normalize:
             min_val = tensor.min()
             max_val = tensor.max()
             tensor = (tensor - min_val) / (max_val - min_val + 1e-8)
-            metadata['min'] = min_val
-            metadata['max'] = max_val
-        
+            metadata["min"] = min_val
+            metadata["max"] = max_val
+
         return tensor, metadata
 
 
@@ -311,9 +290,10 @@ class TensorDataLoader:
 # MIGRATED CLASS FROM utils/data_loader.py
 # =================================================================================================
 
+
 class DataLoader:
     """Unified data loader class for tensor-based datasets (Migrated from utils)."""
-    
+
     @staticmethod
     def _read_tabular_file(file_path: Path) -> pd.DataFrame:
         """Helper method to read CSV or Excel files."""
@@ -326,15 +306,23 @@ class DataLoader:
         elif file_suffix in (".xls", ".xlsx"):
             return pd.read_excel(file_path)
         else:
-            raise ValueError(f"Unsupported file format: {file_suffix}. Please provide a CSV or Excel file.")
+            raise ValueError(
+                f"Unsupported file format: {file_suffix}. Please provide a CSV or Excel file."
+            )
 
-    def load_static_tensor(self, data_path: Union[str, Path], shape: tuple) -> Dict[str, np.ndarray]:
+    def load_static_tensor(
+        self, data_path: Union[str, Path], shape: tuple
+    ) -> Dict[str, np.ndarray]:
         """Load static tensor data from CSV or Excel files in a directory."""
         data_path = Path(data_path)
         if not data_path.is_dir():
             raise ValueError(f"The provided path '{data_path}' is not a valid directory.")
 
-        files = list(data_path.glob("*.csv")) + list(data_path.glob("*.xls")) + list(data_path.glob("*.xlsx"))
+        files = (
+            list(data_path.glob("*.csv"))
+            + list(data_path.glob("*.xls"))
+            + list(data_path.glob("*.xlsx"))
+        )
         if not files:
             raise ValueError(f"No CSV or Excel files found in directory: {data_path}")
 
@@ -349,8 +337,10 @@ class DataLoader:
                 print(f"Error loading file {file}: {e}")
 
         return tensors_dict
-    
-    def load_images_tensor(self, dataset_path: Union[str, Path]) -> Tuple[Dict[str, np.ndarray], List[str]]:
+
+    def load_images_tensor(
+        self, dataset_path: Union[str, Path]
+    ) -> Tuple[Dict[str, np.ndarray], List[str]]:
         """Load images from subject directories into tensors."""
         dataset_path = Path(dataset_path)
         subject_images = defaultdict(lambda: None)
@@ -382,12 +372,14 @@ class DataLoader:
             raise ValueError(f"No subjects with PNG images found in the directory: {dataset_path}")
 
         return subject_images, subject_dir_list
-    
-    def load_dynamic_tensor(self, directory: Union[str, Path], target_shape: tuple) -> Dict[str, np.ndarray]:
+
+    def load_dynamic_tensor(
+        self, directory: Union[str, Path], target_shape: tuple
+    ) -> Dict[str, np.ndarray]:
         """Load dynamic tensor data from CSV or Excel files in a directory and post-process them.
 
-        This function reads each file, reshapes the data into the specified target_shape, and then checks 
-        if the resulting tensor is 4D with the third dimension equal to 25. If so, it splits the tensor 
+        This function reads each file, reshapes the data into the specified target_shape, and then checks
+        if the resulting tensor is 4D with the third dimension equal to 25. If so, it splits the tensor
         into multiple 3D tensors by slicing along the third dimension.
 
         Parameters:
@@ -430,45 +422,53 @@ class DataLoader:
                 processed_tensors[key] = tensor
 
         return processed_tensors
-    
-    def load_data(self, path: Union[str, Path], data_type: str, shape: Optional[tuple] = None, tensor_type: str = "np") -> Any:
+
+    def load_data(
+        self,
+        path: Union[str, Path],
+        data_type: str,
+        shape: Optional[tuple] = None,
+        tensor_type: str = "np",
+    ) -> Any:
         """
         Unified interface to load data of different types.
-        
+
         Parameters:
             path: Path to the data file or directory
             data_type: Type of data to load ('static', 'images', or 'dynamic')
             shape: Shape for reshaping tensor data (required for static and dynamic)
             tensor_type: Either 'np' or 'pt'. If 'pt', the returned data will be converted to PyTorch tensors.
-            
+
         Returns:
             Loaded data in the appropriate format for the data type, as either numpy arrays or PyTorch tensors.
         """
         path = Path(path)
-        
-        if data_type == 'static':
+
+        if data_type == "static":
             if shape is None:
                 raise ValueError("Shape must be provided for static tensor data")
             data = self.load_static_tensor(path, shape)
-            
-        elif data_type == 'images':
+
+        elif data_type == "images":
             data = self.load_images_tensor(path)
-            
-        elif data_type == 'dynamic':
+
+        elif data_type == "dynamic":
             if shape is None:
                 raise ValueError("Shape must be provided for dynamic tensor data")
             data = self.load_dynamic_tensor(path, shape)
-            
+
         else:
             raise ValueError(f"Unsupported data type: {data_type}")
-        
+
         # Convert numpy arrays to PyTorch tensors if requested
         if tensor_type == "pt":
             try:
                 import torch
             except ImportError:
-                raise ImportError("PyTorch is not installed. Please install it to convert numpy arrays to PyTorch tensors.")
-            
+                raise ImportError(
+                    "PyTorch is not installed. Please install it to convert numpy arrays to PyTorch tensors."
+                )
+
             if data_type in ("static", "dynamic"):
                 for key, value in data.items():
                     if value is not None:
@@ -479,7 +479,7 @@ class DataLoader:
                     if value is not None:
                         subject_images[key] = torch.from_numpy(value).to(torch.float32)
                 data = (subject_images, subject_list)
-        
+
         return data
 
     @staticmethod
@@ -492,7 +492,9 @@ class DataLoader:
         try:
             import h5py
         except ImportError:
-            raise ImportError("h5py is required for HDF5 loading. Please install it via 'pip install h5py'.")
+            raise ImportError(
+                "h5py is required for HDF5 loading. Please install it via 'pip install h5py'."
+            )
 
         h5_path = str(h5_path)  # h5py.File expects string path
         temp_tensors_all = {}
@@ -504,17 +506,15 @@ class DataLoader:
             names_loaded = [n.decode() for n in f["names"][:]]
         for i, name in enumerate(names_loaded):
             temp_tensors_all[name] = np.transpose(
-                np.concatenate([
-                    pressure_loaded[i][..., None],
-                    soil_loaded[i][..., None]
-                ], axis=-1), (0, 1, 3, 2)
+                np.concatenate([pressure_loaded[i][..., None], soil_loaded[i][..., None]], axis=-1),
+                (0, 1, 3, 2),
             )
             temp_tensors_pressure[name] = pressure_loaded[i]
             temp_tensors_soil[name] = soil_loaded[i]
         return {
-            'all': temp_tensors_all,
-            'pressure': temp_tensors_pressure,
-            'soil': temp_tensors_soil
+            "all": temp_tensors_all,
+            "pressure": temp_tensors_pressure,
+            "soil": temp_tensors_soil,
         }
 
     @staticmethod
@@ -523,5 +523,5 @@ class DataLoader:
         Load wells data from a JSON file (as in load_all_wells_from_json).
         """
         json_path = str(json_path)  # json.load expects string path when using open()
-        with open(json_path, 'r') as f:
+        with open(json_path, "r") as f:
             return json.load(f)

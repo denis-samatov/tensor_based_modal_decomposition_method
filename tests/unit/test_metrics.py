@@ -1,7 +1,10 @@
 import unittest
-import torch
+
 import numpy as np
+import torch
+
 from TBMD.core.metrics.metrics import compute_metrics
+
 
 class TestMetrics(unittest.TestCase):
     def test_compute_metrics(self):
@@ -34,8 +37,6 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(ssim, 1.0)
         self.assertTrue(np.isinf(psnr))
 
-
-
     def test_compute_metrics_constant_arrays(self):
         # Test with identical constant arrays (e.g. all tens) to ensure no division-by-zero
         # and PSNR is handled correctly (infinity for 0 MSE).
@@ -49,7 +50,8 @@ class TestMetrics(unittest.TestCase):
         self.assertEqual(error, 0.0)
         self.assertEqual(mse, 0.0)
         self.assertEqual(ssim, 1.0)
-        self.assertEqual(psnr, float('inf'))
+        self.assertEqual(psnr, float("inf"))
+
 
 if __name__ == "__main__":
     unittest.main()

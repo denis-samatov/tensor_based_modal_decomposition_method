@@ -1,35 +1,37 @@
+import logging
+from typing import Dict, Optional, Tuple, Union
+
 import numpy as np
 import torch
 from skimage.color import rgb2gray
 from skimage.transform import resize as sk_resize
-from typing import Optional, Union, Tuple, Dict, List
 from tqdm import tqdm
-import logging
 
 logger = logging.getLogger(__name__)
 
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
+
 class DataProcessor:
     """
     Base class for data processing.
-    
+
     Examples:
         >>> processor = DataProcessor()
         >>> processed = processor.process(tensor)
     """
-    
-    def __init__(self, device: str = 'cpu', dtype: torch.dtype = torch.float32):
+
+    def __init__(self, device: str = "cpu", dtype: torch.dtype = torch.float32):
         self.device = torch.device(device)
         self.dtype = dtype
-    
+
     def process(self, data: torch.Tensor) -> torch.Tensor:
         """
         Process data. Subclasses should override this method.
-        
+
         Args:
             data: Input data.
-            
+
         Returns:
             Processed data.
         """
@@ -39,24 +41,24 @@ class DataProcessor:
 class Normalizer(DataProcessor):
     """
     Data normalization.
-    
+
     Supported normalization methods:
     - minmax: scale to [0, 1]
     - zscore: standardize to mean=0, std=1
     - maxabs: scale to [-1, 1] by maximum absolute value
-    
+
     Examples:
         >>> normalizer = Normalizer(method='minmax')
         >>> normalized = normalizer.normalize(tensor)
         >>> original = normalizer.denormalize(normalized)
     """
-    
+
     def __init__(
         self,
-        method: str = 'minmax',
+        method: str = "minmax",
         feature_range: Tuple[float, float] = (0, 1),
-        device: str = 'cpu',
-        dtype: torch.dtype = torch.float32
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
     ):
         """
         Args:
@@ -68,41 +70,33 @@ class Normalizer(DataProcessor):
         super().__init__(device, dtype)
         self.method = method
         self.feature_range = feature_range
-        
+
         # Parameters used for denormalization
         self.params = {}
-    
-    def normalize(
-        self,
-        data: torch.Tensor,
-        dim: Optional[int] = None
-    ) -> torch.Tensor:
+
+    def normalize(self, data: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
         """
         Normalize data.
-        
+
         Args:
             data: Input data.
             dim: Dimension used to compute statistics; None means all values.
-            
+
         Returns:
             Normalized data.
         """
         data = data.to(device=self.device, dtype=self.dtype)
-        
-        if self.method == 'minmax':
+
+        if self.method == "minmax":
             return self._normalize_minmax(data, dim)
-        elif self.method == 'zscore':
+        elif self.method == "zscore":
             return self._normalize_zscore(data, dim)
-        elif self.method == 'maxabs':
+        elif self.method == "maxabs":
             return self._normalize_maxabs(data, dim)
         else:
             raise ValueError(f"Unknown method: {self.method}")
-    
-    def _normalize_minmax(
-        self,
-        data: torch.Tensor,
-        dim: Optional[int] = None
-    ) -> torch.Tensor:
+
+    def _normalize_minmax(self, data: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
         """Min-max normalization."""
         if dim is None:
             min_val = data.min()
@@ -110,25 +104,21 @@ class Normalizer(DataProcessor):
         else:
             min_val = data.min(dim=dim, keepdim=True)[0]
             max_val = data.max(dim=dim, keepdim=True)[0]
-        
+
         # Store parameters
-        self.params['min'] = min_val
-        self.params['max'] = max_val
-        
+        self.params["min"] = min_val
+        self.params["max"] = max_val
+
         # Normalize
         data_norm = (data - min_val) / (max_val - min_val + 1e-8)
-        
+
         # Scale to feature_range
         feat_min, feat_max = self.feature_range
         data_norm = data_norm * (feat_max - feat_min) + feat_min
-        
+
         return data_norm
-    
-    def _normalize_zscore(
-        self,
-        data: torch.Tensor,
-        dim: Optional[int] = None
-    ) -> torch.Tensor:
+
+    def _normalize_zscore(self, data: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
         """Z-score standardization."""
         if dim is None:
             mean = data.mean()
@@ -136,125 +126,123 @@ class Normalizer(DataProcessor):
         else:
             mean = data.mean(dim=dim, keepdim=True)
             std = data.std(dim=dim, keepdim=True)
-        
+
         # Store parameters
-        self.params['mean'] = mean
-        self.params['std'] = std
-        
+        self.params["mean"] = mean
+        self.params["std"] = std
+
         # Standardize
         data_norm = (data - mean) / (std + 1e-8)
-        
+
         return data_norm
-    
-    def _normalize_maxabs(
-        self,
-        data: torch.Tensor,
-        dim: Optional[int] = None
-    ) -> torch.Tensor:
+
+    def _normalize_maxabs(self, data: torch.Tensor, dim: Optional[int] = None) -> torch.Tensor:
         """Max-abs normalization."""
         if dim is None:
             max_abs = torch.abs(data).max()
         else:
             max_abs = torch.abs(data).max(dim=dim, keepdim=True)[0]
-        
+
         # Store parameters
-        self.params['max_abs'] = max_abs
-        
+        self.params["max_abs"] = max_abs
+
         # Normalize
         data_norm = data / (max_abs + 1e-8)
-        
+
         return data_norm
-    
+
     def denormalize(self, data: torch.Tensor) -> torch.Tensor:
         """
         Denormalize data.
-        
+
         Args:
             data: Normalized data.
-            
+
         Returns:
             Original-scale data.
         """
         if not self.params:
             logger.warning("Normalization parameters were not found; returning data unchanged")
             return data
-        
-        if self.method == 'minmax':
+
+        if self.method == "minmax":
             feat_min, feat_max = self.feature_range
             data = (data - feat_min) / (feat_max - feat_min)
-            data = data * (self.params['max'] - self.params['min']) + self.params['min']
-        
-        elif self.method == 'zscore':
-            data = data * self.params['std'] + self.params['mean']
-        
-        elif self.method == 'maxabs':
-            data = data * self.params['max_abs']
-        
+            data = data * (self.params["max"] - self.params["min"]) + self.params["min"]
+
+        elif self.method == "zscore":
+            data = data * self.params["std"] + self.params["mean"]
+
+        elif self.method == "maxabs":
+            data = data * self.params["max_abs"]
+
         return data
-    
+
     def fit(self, data: torch.Tensor, dim: Optional[int] = None):
         """
         Compute normalization parameters without applying them.
-        
+
         Args:
             data: Input data.
             dim: Dimension used for statistics.
         """
         data = data.to(device=self.device, dtype=self.dtype)
-        
-        if self.method == 'minmax':
+
+        if self.method == "minmax":
             if dim is None:
-                self.params['min'] = data.min()
-                self.params['max'] = data.max()
+                self.params["min"] = data.min()
+                self.params["max"] = data.max()
             else:
-                self.params['min'] = data.min(dim=dim, keepdim=True)[0]
-                self.params['max'] = data.max(dim=dim, keepdim=True)[0]
-        
-        elif self.method == 'zscore':
+                self.params["min"] = data.min(dim=dim, keepdim=True)[0]
+                self.params["max"] = data.max(dim=dim, keepdim=True)[0]
+
+        elif self.method == "zscore":
             if dim is None:
-                self.params['mean'] = data.mean()
-                self.params['std'] = data.std()
+                self.params["mean"] = data.mean()
+                self.params["std"] = data.std()
             else:
-                self.params['mean'] = data.mean(dim=dim, keepdim=True)
-                self.params['std'] = data.std(dim=dim, keepdim=True)
-        
-        elif self.method == 'maxabs':
+                self.params["mean"] = data.mean(dim=dim, keepdim=True)
+                self.params["std"] = data.std(dim=dim, keepdim=True)
+
+        elif self.method == "maxabs":
             if dim is None:
-                self.params['max_abs'] = torch.abs(data).max()
+                self.params["max_abs"] = torch.abs(data).max()
             else:
-                self.params['max_abs'] = torch.abs(data).max(dim=dim, keepdim=True)[0]
-    
+                self.params["max_abs"] = torch.abs(data).max(dim=dim, keepdim=True)[0]
+
     def transform(self, data: torch.Tensor) -> torch.Tensor:
         """
         Apply previously computed normalization parameters.
-        
+
         Args:
             data: Input data.
-            
+
         Returns:
             Normalized data.
         """
         if not self.params:
             raise ValueError("Call fit() or normalize() before transform()")
-        
+
         data = data.to(device=self.device, dtype=self.dtype)
-        
-        if self.method == 'minmax':
-            data = (data - self.params['min']) / (self.params['max'] - self.params['min'] + 1e-8)
+
+        if self.method == "minmax":
+            data = (data - self.params["min"]) / (self.params["max"] - self.params["min"] + 1e-8)
             feat_min, feat_max = self.feature_range
             data = data * (feat_max - feat_min) + feat_min
-        
-        elif self.method == 'zscore':
-            data = (data - self.params['mean']) / (self.params['std'] + 1e-8)
-        
-        elif self.method == 'maxabs':
-            data = data / (self.params['max_abs'] + 1e-8)
-        
+
+        elif self.method == "zscore":
+            data = (data - self.params["mean"]) / (self.params["std"] + 1e-8)
+
+        elif self.method == "maxabs":
+            data = data / (self.params["max_abs"] + 1e-8)
+
         return data
+
 
 # =================================================================================================
 # MIGRATED FUNCTIONS FROM utils/process_data.py
 # =================================================================================================
+
 
 def safe_copy(x: ArrayLike) -> ArrayLike:
     """Return a *detached* copy of an array or tensor."""
@@ -286,14 +274,13 @@ def foreground_stats(
     """
     if mask is None:
         mask = (
-            np.ones_like(arr, dtype=bool)
-            if background_value is None
-            else (arr != background_value)
+            np.ones_like(arr, dtype=bool) if background_value is None else (arr != background_value)
         )
     if not mask.any():
         return 0.0, 0.0, 0.0, 1.0
     vals = arr[mask]
     return float(vals.min()), float(vals.max()), float(vals.mean()), float(vals.std())
+
 
 def inverse_normalization(
     normalized_tensor: ArrayLike,
@@ -368,6 +355,7 @@ def inverse_normalization(
 
     return restored
 
+
 def calculate_global_minmax_params(
     data: Dict[str, np.ndarray] | np.ndarray,
     masks: Optional[Dict[str, np.ndarray] | np.ndarray] = None,
@@ -391,9 +379,7 @@ def calculate_global_minmax_params(
     if isinstance(data, dict):
         for sid, tensor in data.items():
             m = None if masks is None else masks[sid]
-            m_min, m_max, _, _ = foreground_stats(
-                tensor, mask=m, background_value=background_value
-            )
+            m_min, m_max, _, _ = foreground_stats(tensor, mask=m, background_value=background_value)
             global_min, global_max = min(global_min, m_min), max(global_max, m_max)
     else:
         global_min, global_max, _, _ = foreground_stats(
@@ -442,6 +428,7 @@ def calculate_global_zscore_params(
     concat = np.concatenate(all_vals, axis=0)
     return float(concat.mean()), float(concat.std())
 
+
 def process_tensor(
     tensor: np.ndarray,
     resize_shape: Optional[Tuple[int, int]] = None,
@@ -480,23 +467,31 @@ def process_tensor(
     # Display processing parameters if verbose
     if verbose:
         original_shape = tensor.shape
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("TENSOR PROCESSING CONFIGURATION")
-        print("="*60)
+        print("=" * 60)
         print(f"▸ Input tensor shape:    {original_shape}")
         print(f"▸ Resize shape:          {resize_shape if resize_shape else 'No resizing'}")
         print(f"▸ Convert to grayscale:  {convert_to_grayscale}")
-        print(f"▸ Normalization method:  {normalization_method if normalization_method else 'No normalization'}")
+        print(
+            f"▸ Normalization method:  {normalization_method if normalization_method else 'No normalization'}"
+        )
         if normalization_method and global_params:
             if normalization_method == "minmax" and {"min", "max"} <= global_params.keys():
-                print(f"  ↳ Global min/max:      {global_params['min']:.4f} / {global_params['max']:.4f}")
+                print(
+                    f"  ↳ Global min/max:      {global_params['min']:.4f} / {global_params['max']:.4f}"
+                )
             elif normalization_method == "zscore" and {"mean", "std"} <= global_params.keys():
-                print(f"  ↳ Global mean/std:     {global_params['mean']:.4f} / {global_params['std']:.4f}")
+                print(
+                    f"  ↳ Global mean/std:     {global_params['mean']:.4f} / {global_params['std']:.4f}"
+                )
             else:
-                print(f"  ↳ Using local statistics (per slice)")
-        print(f"▸ Background value:      {background_value if background_value is not None else 'None'}")
-        print("="*60 + "\n")
-    
+                print("  ↳ Using local statistics (per slice)")
+        print(
+            f"▸ Background value:      {background_value if background_value is not None else 'None'}"
+        )
+        print("=" * 60 + "\n")
+
     processed: list[np.ndarray] = []
     T = tensor.shape[-1]
 
@@ -554,6 +549,7 @@ def process_tensor(
 
     return np.stack(processed, axis=-1)
 
+
 def process_data(
     data: Dict[str, np.ndarray],
     resize_shape: Optional[Tuple[int, int]] = None,
@@ -588,24 +584,32 @@ def process_data(
         Dict[str, np.ndarray]: The processed dataset, with the same subject IDs.
     """
     processed: Dict[str, np.ndarray] = {}
-    
+
     if verbose:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("DATA PROCESSING CONFIGURATION")
-        print("="*60)
+        print("=" * 60)
         print(f"▸ Resize shape:          {resize_shape if resize_shape else 'No resizing'}")
         print(f"▸ Convert to grayscale:  {convert_to_grayscale}")
-        print(f"▸ Normalization method:  {normalization_method if normalization_method else 'No normalization'}")
+        print(
+            f"▸ Normalization method:  {normalization_method if normalization_method else 'No normalization'}"
+        )
         if normalization_method and global_params:
             if normalization_method == "minmax" and {"min", "max"} <= global_params.keys():
-                print(f"  ↳ Global min/max:      {global_params['min']:.4f} / {global_params['max']:.4f}")
+                print(
+                    f"  ↳ Global min/max:      {global_params['min']:.4f} / {global_params['max']:.4f}"
+                )
             elif normalization_method == "zscore" and {"mean", "std"} <= global_params.keys():
-                print(f"  ↳ Global mean/std:     {global_params['mean']:.4f} / {global_params['std']:.4f}")
+                print(
+                    f"  ↳ Global mean/std:     {global_params['mean']:.4f} / {global_params['std']:.4f}"
+                )
             else:
-                print(f"  ↳ Using local statistics (per slice)")
-        print(f"▸ Background value:      {background_value if background_value is not None else 'None'}")
-        print("="*60 + "\n")
-    
+                print("  ↳ Using local statistics (per slice)")
+        print(
+            f"▸ Background value:      {background_value if background_value is not None else 'None'}"
+        )
+        print("=" * 60 + "\n")
+
     for sid, tensor in tqdm(data.items(), desc="Processing subjects"):
         try:
             processed[sid] = process_tensor(

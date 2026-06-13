@@ -1,19 +1,20 @@
 """Sensor placement modules."""
 
-
-
-from .tensor_qr_factorization import TensorTubeQRDecomposition, TensorBasedTubeFiberPivotQRFactorization
-from .geometry_aware import GeometryAwareTensorQR
 from TBMD.config import (
-    SensorPlacementConfig as TensorQRConfig, # Alias for backward compatibility
-    GeometricSensorConfig as GeometricQRConfig # Alias for backward compatibility
+    GeometricSensorConfig as GeometricQRConfig,  # Alias for backward compatibility
+)
+from TBMD.config import SensorPlacementConfig as TensorQRConfig  # Alias for backward compatibility
+
+from .geometry_aware import GeometryAwareTensorQR
+from .tensor_qr_factorization import (
+    TensorBasedTubeFiberPivotQRFactorization,
+    TensorTubeQRDecomposition,
 )
 
 __all__ = [
-    'TensorTubeQRDecomposition',
-    'TensorBasedTubeFiberPivotQRFactorization',
-    'GeometryAwareTensorQR',
-    'TensorQRConfig',
-    'GeometricQRConfig'
+    "TensorTubeQRDecomposition",
+    "TensorBasedTubeFiberPivotQRFactorization",
+    "GeometryAwareTensorQR",
+    "TensorQRConfig",
+    "GeometricQRConfig",
 ]
-

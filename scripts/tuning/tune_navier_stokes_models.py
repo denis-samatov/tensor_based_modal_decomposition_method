@@ -6,7 +6,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any, Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MPL_CACHE_DIR = PROJECT_ROOT / ".cache" / "matplotlib"
@@ -14,6 +14,7 @@ MPL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CACHE_DIR))
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -25,6 +26,8 @@ from TBMD.experiments import (
     compute_common_horizon_diagnostics,
     compute_common_horizon_metrics,
     load_navier_stokes_trajectory_dataset,
+)
+from TBMD.experiments import (
     split_train_dev_trajectories as _split_train_dev_trajectories,
 )
 from TBMD.experiments.navier_stokes_model_registry import (
@@ -304,7 +307,9 @@ def main():
 
     logger.info("Tuning summary saved to: %s", OUTPUT_PATH)
     for family, result in best_by_family.items():
-        logger.info("Best %s: %s (R2=%.4f)", family, result["candidate"], result["rollout_r2_common"])
+        logger.info(
+            "Best %s: %s (R2=%.4f)", family, result["candidate"], result["rollout_r2_common"]
+        )
 
 
 if __name__ == "__main__":

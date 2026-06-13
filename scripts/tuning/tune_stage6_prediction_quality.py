@@ -121,7 +121,12 @@ class Stage6Candidate:
 
 def build_stage6_candidates(
     *,
-    groups: tuple[str, ...] = ("delta_ablation", "seq_length_ablation", "rank_extension", "ar_baseline"),
+    groups: tuple[str, ...] = (
+        "delta_ablation",
+        "seq_length_ablation",
+        "rank_extension",
+        "ar_baseline",
+    ),
 ) -> list[Stage6Candidate]:
     """Build the full candidate grid for Stage 6."""
 
@@ -443,9 +448,7 @@ def main() -> None:
         ]
     )
     selected_dev_result = select_best_result(dev_results)
-    selected_candidate = next(
-        c for c in candidates if c.name == selected_dev_result["candidate"]
-    )
+    selected_candidate = next(c for c in candidates if c.name == selected_dev_result["candidate"])
     logger.info(
         "Selected %s by dev %s=%.6f",
         selected_dev_result["candidate"],

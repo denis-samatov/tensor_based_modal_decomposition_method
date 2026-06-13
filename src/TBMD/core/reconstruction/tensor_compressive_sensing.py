@@ -21,14 +21,13 @@
 
 from __future__ import annotations
 
-import logging
 import time
-import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
+from typing import Callable, List, Optional, Protocol, Tuple, Union
 
 import numpy as np
 import torch
+
 from ..utils.misc import get_torch_device, to_torch_tensor
 
 __all__ = [
@@ -130,8 +129,7 @@ class LinearSolver(Protocol):
     Should solve (lhs) x = rhs and return x.
     """
 
-    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor:
-        ...
+    def __call__(self, lhs: torch.Tensor, rhs: torch.Tensor) -> torch.Tensor: ...
 
 
 class DeltaPolicy(Protocol):
@@ -147,8 +145,7 @@ class DeltaPolicy(Protocol):
 
     def __call__(
         self, delta: float, primal: float, dual: float, delta_max: float
-    ) -> Tuple[float, float]:
-        ...
+    ) -> Tuple[float, float]: ...
 
 
 class StopPolicy(Protocol):
@@ -161,8 +158,7 @@ class StopPolicy(Protocol):
         dual: float,
         cfg: CompressiveSensingConfig,
         history: List[float],
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
 
 class MetricsHook(Protocol):
@@ -182,10 +178,7 @@ class MetricsHook(Protocol):
         Current δ value.
     """
 
-    def __call__(
-        self, it: int, primal: float, dual: float, obj: float, delta: float
-    ) -> None:
-        ...
+    def __call__(self, it: int, primal: float, dual: float, obj: float, delta: float) -> None: ...
 
 
 # ------------------------------------------------------------------
@@ -304,9 +297,7 @@ def make_delta_policy(name: str) -> DeltaPolicy:
     """
     if name == "boyd":
 
-        def boyd(
-            delta: float, primal: float, dual: float, delta_max: float
-        ) -> Tuple[float, float]:
+        def boyd(delta: float, primal: float, dual: float, delta_max: float) -> Tuple[float, float]:
             if primal > 10 * dual:
                 return min(delta * 2, delta_max), 0.5  # p /= 2
             if dual > 10 * primal:
@@ -361,9 +352,7 @@ def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
 
         return relative_stop
     else:  # both
-        residual = make_stop_policy(
-            ExtensionCompressiveSensingConfig(stop_policy="residual")
-        )
+        residual = make_stop_policy(ExtensionCompressiveSensingConfig(stop_policy="residual"))
         relative = make_stop_policy(
             ExtensionCompressiveSensingConfig(
                 stop_policy="relative",
@@ -379,9 +368,7 @@ def make_stop_policy(ext_cfg: ExtensionCompressiveSensingConfig) -> StopPolicy:
             cfg: CompressiveSensingConfig,
             history: List[float],
         ) -> bool:
-            return residual(it, p, d, cfg, history) or relative(
-                it, p, d, cfg, history
-            )
+            return residual(it, p, d, cfg, history) or relative(it, p, d, cfg, history)
 
         return both
 
@@ -516,7 +503,7 @@ class TensorCompressiveSensing:
 
     def reset(self) -> None:
         """Reset ADMM variables for a fresh solve.
-        
+
         Call this method before solve() if you want to re-run the algorithm
         from scratch on the same data.
         """
@@ -552,9 +539,10 @@ class TensorCompressiveSensing:
         Objective: 0.5‖Ax−y‖² + ε‖d‖₁
         """
         res = self.As @ self.x - self.Ys
-        return 0.5 * torch.norm(res).pow(2).item() + self.cfg.epsilon_l1 * torch.norm(
-            self.d, p=1
-        ).item()
+        return (
+            0.5 * torch.norm(res).pow(2).item()
+            + self.cfg.epsilon_l1 * torch.norm(self.d, p=1).item()
+        )
 
     def _admm_step(self) -> Tuple[float, float, float]:
         """Perform one ADMM iteration and return residuals & objective.
@@ -596,9 +584,7 @@ class TensorCompressiveSensing:
         dual = torch.norm(self.delta * (self.d - self._d_prev)).item()
 
         # δ‑update
-        new_delta, p_scale = self.delta_policy(
-            self.delta, primal, dual, self.cfg.delta_max
-        )
+        new_delta, p_scale = self.delta_policy(self.delta, primal, dual, self.cfg.delta_max)
         if new_delta != self.delta:
             self.delta = new_delta
             if p_scale != 1.0:

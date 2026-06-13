@@ -1,39 +1,41 @@
 """Base configuration shared by TBMD modules."""
+
+import random
 from dataclasses import dataclass
 from typing import Literal, Optional
-import torch
-import tensorly as tl
-import random
+
 import numpy as np
+import tensorly as tl
+import torch
 
 
 @dataclass
 class BaseConfig:
     """Base configuration for TBMD modules."""
-    
+
     # Compute options
-    backend: Literal['pytorch', 'numpy'] = 'pytorch'
-    dtype: Literal['float32', 'float64'] = 'float32'
+    backend: Literal["pytorch", "numpy"] = "pytorch"
+    dtype: Literal["float32", "float64"] = "float32"
     device: Optional[str] = None  # 'cuda', 'cpu', or None for auto selection
-    
+
     # Reproducibility
     seed: Optional[int] = 0
     deterministic: bool = True
-    
+
     # Logging
     verbose: bool = True
-    log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR'] = 'INFO'
-    
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+
     def __post_init__(self):
         """Validate and apply automatic defaults."""
         # Automatic device selection
         if self.device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         # Seed setup
         if self.seed is not None:
             self._set_seed()
-    
+
     def _set_seed(self):
         """Set random seeds for reproducibility.
 
@@ -44,6 +46,7 @@ class BaseConfig:
         try:
             # Import local helper to centralise seed logic
             from TBMD.core.utils.misc import set_seed as _set_seed_helper
+
             _set_seed_helper(int(self.seed))
         except Exception:
             # Fallback: set seeds manually if the helper isn't available
@@ -66,15 +69,15 @@ class BaseConfig:
             except AttributeError:
                 torch.backends.cudnn.deterministic = True
                 torch.backends.cudnn.benchmark = False
-    
+
     def to_dict(self):
         """Convert the configuration to a dictionary."""
         return {
-            'backend': self.backend,
-            'dtype': self.dtype,
-            'device': self.device,
-            'seed': self.seed,
-            'deterministic': self.deterministic,
-            'verbose': self.verbose,
-            'log_level': self.log_level
+            "backend": self.backend,
+            "dtype": self.dtype,
+            "device": self.device,
+            "seed": self.seed,
+            "deterministic": self.deterministic,
+            "verbose": self.verbose,
+            "log_level": self.log_level,
         }

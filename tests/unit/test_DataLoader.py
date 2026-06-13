@@ -1,23 +1,23 @@
-
+import json
+import os
+import shutil
+import sys
+import tempfile
 import unittest
 from pathlib import Path
-import shutil
-import tempfile
-import sys
-import os
-import json
 
 try:
-    import pandas as pd
     import numpy as np
+    import pandas as pd
     from PIL import Image
+
     HAS_DEPS = True
 except ImportError:
     HAS_DEPS = False
 
 # Ensure algorithm directory is in sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../algorithm')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../algorithm")))
 
 import sys
 from unittest.mock import MagicMock
@@ -26,37 +26,39 @@ from unittest.mock import MagicMock
 try:
     import numpy as np
     import pandas as pd
-    from PIL import Image
     import tqdm
+    from PIL import Image
+
     HAS_DEPS = True
 except ImportError:
     HAS_DEPS = False
 
 if not HAS_DEPS:
-    sys.modules['numpy'] = MagicMock()
-    sys.modules['pandas'] = MagicMock()
-    sys.modules['PIL'] = MagicMock()
-    sys.modules['tqdm'] = MagicMock()
-    sys.modules['TBMD'] = MagicMock()
-    sys.modules['TBMD.utils'] = MagicMock()
-    sys.modules['TBMD.utils.utils'] = MagicMock()
-    sys.modules['matplotlib'] = MagicMock()
-    sys.modules['matplotlib.pyplot'] = MagicMock()
-    sys.modules['scipy'] = MagicMock()
-    sys.modules['scipy.interpolate'] = MagicMock()
-    sys.modules['scipy.sparse'] = MagicMock()
-    sys.modules['scipy.sparse.csgraph'] = MagicMock()
-    sys.modules['scipy.spatial'] = MagicMock()
-    sys.modules['scipy.ndimage'] = MagicMock()
-    sys.modules['scipy.optimize'] = MagicMock()
-    sys.modules['scikit-learn'] = MagicMock()
-    sys.modules['sklearn'] = MagicMock()
-    sys.modules['sklearn.metrics'] = MagicMock()
-    sys.modules['tensorly'] = MagicMock()
-    sys.modules['tensorly.decomposition'] = MagicMock()
-    sys.modules['torch'] = MagicMock()
+    sys.modules["numpy"] = MagicMock()
+    sys.modules["pandas"] = MagicMock()
+    sys.modules["PIL"] = MagicMock()
+    sys.modules["tqdm"] = MagicMock()
+    sys.modules["TBMD"] = MagicMock()
+    sys.modules["TBMD.utils"] = MagicMock()
+    sys.modules["TBMD.utils.utils"] = MagicMock()
+    sys.modules["matplotlib"] = MagicMock()
+    sys.modules["matplotlib.pyplot"] = MagicMock()
+    sys.modules["scipy"] = MagicMock()
+    sys.modules["scipy.interpolate"] = MagicMock()
+    sys.modules["scipy.sparse"] = MagicMock()
+    sys.modules["scipy.sparse.csgraph"] = MagicMock()
+    sys.modules["scipy.spatial"] = MagicMock()
+    sys.modules["scipy.ndimage"] = MagicMock()
+    sys.modules["scipy.optimize"] = MagicMock()
+    sys.modules["scikit-learn"] = MagicMock()
+    sys.modules["sklearn"] = MagicMock()
+    sys.modules["sklearn.metrics"] = MagicMock()
+    sys.modules["tensorly"] = MagicMock()
+    sys.modules["tensorly.decomposition"] = MagicMock()
+    sys.modules["torch"] = MagicMock()
 
 from TBMD.core.data.loaders import DataLoader
+
 
 class TestDataLoader(unittest.TestCase):
     def setUp(self):
@@ -156,21 +158,18 @@ class TestDataLoader(unittest.TestCase):
             expected = expected_tensors[stem]
             np.testing.assert_allclose(tensor, expected, atol=1e-5)
 
-
     def test_load_wells_from_json(self):
         # Test loading wells from JSON
-        sample_data = {
-            "well_1": {"x": 10, "y": 20},
-            "well_2": {"x": 30, "y": 40}
-        }
+        sample_data = {"well_1": {"x": 10, "y": 20}, "well_2": {"x": 30, "y": 40}}
         json_path = Path(self.test_dir) / "wells.json"
-        with open(json_path, 'w') as f:
+        with open(json_path, "w") as f:
             json.dump(sample_data, f)
 
         loader = DataLoader()
         loaded_data = loader.load_wells_from_json(json_path)
 
         self.assertEqual(loaded_data, sample_data)
+
 
 if __name__ == "__main__":
     unittest.main()

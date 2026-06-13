@@ -34,14 +34,9 @@ from TBMD.experiments.navier_stokes_structure_metrics import (
     radial_power_spectrum,
 )
 
-
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 DEFAULT_OUTPUT_DIR = (
-    PROJECT_ROOT
-    / "scripts"
-    / "plots"
-    / "models_eval"
-    / "stage5_fast_tplus1_structure_metrics"
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "stage5_fast_tplus1_structure_metrics"
 )
 
 
@@ -190,7 +185,9 @@ def plot_structure_frame(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--predictor", type=Path, required=True, help="Saved Fast TBMD+QR+CS .npz predictor.")
+    parser.add_argument(
+        "--predictor", type=Path, required=True, help="Saved Fast TBMD+QR+CS .npz predictor."
+    )
     parser.add_argument("--split", choices=["test", "train"], default="test")
     parser.add_argument("--n-trajectories", type=int, default=200)
     parser.add_argument("--max-starts", type=int, default=None)
@@ -224,7 +221,10 @@ def main() -> None:
     if not args.no_plots:
         for label, row in representatives.items():
             frame_idx = int(row["flat_index"])
-            path = args.output_dir / f"{label}_structure_traj{row['trajectory_index']:03d}_start{row['start_index']:02d}.png"
+            path = (
+                args.output_dir
+                / f"{label}_structure_traj{row['trajectory_index']:03d}_start{row['start_index']:02d}.png"
+            )
             plot_structure_frame(
                 target=targets[frame_idx],
                 pred=predictions[frame_idx],

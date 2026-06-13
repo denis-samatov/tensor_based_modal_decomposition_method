@@ -1,11 +1,13 @@
 import unittest
+
 import torch
-import numpy as np
+
 from TBMD.core.sensor_placement.tensor_qr_factorization import (
+    TensorQRConfig,
     TensorTubeQRDecomposition,
     UniformDistributionManager,
-    TensorQRConfig
 )
+
 
 class TestTensorBasedTubeFiberPivotQRFactorization(unittest.TestCase):
     def setUp(self):
@@ -26,7 +28,7 @@ class TestTensorBasedTubeFiberPivotQRFactorization(unittest.TestCase):
         )
 
         self.config = TensorQRConfig()
-        self.device = torch.device('cpu')
+        self.device = torch.device("cpu")
 
     def test_factorize(self):
         P, Q, R = self.qr_decomposer.factorize()
@@ -94,17 +96,16 @@ class TestTensorBasedTubeFiberPivotQRFactorization(unittest.TestCase):
         # Should block some but not all (max 25%)
         # Region size is 25. 25/4 = 6. So at most 6 blocked.
         self.assertGreaterEqual(blocked_count, 0)
-        self.assertLessEqual(blocked_count, max(1, len(region_coords)//4))
+        self.assertLessEqual(blocked_count, max(1, len(region_coords) // 4))
 
     def test_full_decomposition_with_uniform_distribution(self):
         # Initialize with uniform_distribution=True
         decomposer = TensorTubeQRDecomposition(
-            tensor=self.structured_tensor,
-            N=5,
-            uniform_distribution=True
+            tensor=self.structured_tensor, N=5, uniform_distribution=True
         )
         P, Q, R = decomposer.factorize()
         self.assertIsNotNone(P)
+
 
 if __name__ == "__main__":
     unittest.main()

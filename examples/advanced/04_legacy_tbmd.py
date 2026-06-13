@@ -11,7 +11,6 @@ This script demonstrates how to work with the refactored
 4. Benchmark the threaded CPU strategy via `max_workers`.
 """
 
-
 import time
 from dataclasses import dataclass
 from typing import Dict, Tuple
@@ -21,17 +20,17 @@ import numpy as np
 import torch
 
 from TBMD.modules.TensorHOSVD import (
-    TuckerDecomposerInterface,
-    TensorDecompositionError,
     InvalidRankError,
     StateError,
+    TensorDecompositionError,
+    TuckerDecomposerInterface,
     ValidationError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
 
 def _seed_everything(seed: int = 42) -> None:
     """Seed NumPy and PyTorch RNGs for deterministic examples."""
@@ -54,9 +53,7 @@ def make_sample_tensor(
     for k in range(t):
         phase = 2.0 * np.pi * k / t
         tensor[..., k] = (
-            np.sin(np.pi * X + phase) * np.cos(np.pi * Y - 0.5 * phase)
-            + 0.25 * X
-            - 0.15 * Y
+            np.sin(np.pi * X + phase) * np.cos(np.pi * Y - 0.5 * phase) + 0.25 * X - 0.15 * Y
         )
 
     if noise > 0:
@@ -82,6 +79,7 @@ def plot_middle_slice(original: torch.Tensor, reconstructed: torch.Tensor) -> No
 # ---------------------------------------------------------------------------
 # Example workflows
 # ---------------------------------------------------------------------------
+
 
 def single_tensor_demo() -> None:
     """Decompose and reconstruct a single tensor."""
@@ -117,8 +115,7 @@ def collection_demo() -> None:
     print("=" * 60)
 
     tensors: Dict[str, torch.Tensor] = {
-        f"subject_{i:02d}": make_sample_tensor((30, 20, 18), seed=100 + i)
-        for i in range(3)
+        f"subject_{i:02d}": make_sample_tensor((30, 20, 18), seed=100 + i) for i in range(3)
     }
     decomposer = TuckerDecomposerInterface(
         tensors=tensors,
@@ -173,10 +170,7 @@ def performance_demo() -> None:
     print("Performance Demo")
     print("=" * 60)
 
-    tensors = {
-        f"sample_{i:02d}": make_sample_tensor((35, 35, 25), seed=200 + i)
-        for i in range(6)
-    }
+    tensors = {f"sample_{i:02d}": make_sample_tensor((35, 35, 25), seed=200 + i) for i in range(6)}
 
     results = []
     for workers in (1, 2, 4):
@@ -200,6 +194,7 @@ def performance_demo() -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     try:

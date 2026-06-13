@@ -2,51 +2,51 @@
 
 from .base import BaseConfig
 from .decomposition import DecompositionConfig, GeometryAwareDecompositionConfig
-from .modal_processor import ModalProcessorConfig, ProcessingStrategy
-from .sensor_placement import SensorPlacementConfig, GeometricSensorConfig
-from .reconstruction import (
-    CompressiveSensingConfig,
-    ExtensionCompressiveSensingConfig,
-    ReconstructionConfig,
-    GeometryAwareReconstructionConfig,
-    TensorCSConfig,
-    CSConfig
-)
 from .digital_twin import DigitalTwinConfig
 from .forecaster import (
     ForecasterConfig,
-    LinearForecasterConfig,
-    MLPForecasterConfig,
-    LSTMForecasterConfig,
     LatentModalForecasterConfig,
+    LinearForecasterConfig,
+    LSTMForecasterConfig,
+    MLPForecasterConfig,
     MultiResolutionTBMDConfig,
-    create_forecaster_config_from_dict
+    create_forecaster_config_from_dict,
 )
+from .modal_processor import ModalProcessorConfig, ProcessingStrategy
+from .reconstruction import (
+    CompressiveSensingConfig,
+    CSConfig,
+    ExtensionCompressiveSensingConfig,
+    GeometryAwareReconstructionConfig,
+    ReconstructionConfig,
+    TensorCSConfig,
+)
+from .sensor_placement import GeometricSensorConfig, SensorPlacementConfig
 
 __all__ = [
-    'BaseConfig',
-    'DecompositionConfig',
-    'GeometryAwareDecompositionConfig',
-    'ModalProcessorConfig',
-    'ProcessingStrategy',
-    'SensorPlacementConfig',
-    'GeometricSensorConfig',
+    "BaseConfig",
+    "DecompositionConfig",
+    "GeometryAwareDecompositionConfig",
+    "ModalProcessorConfig",
+    "ProcessingStrategy",
+    "SensorPlacementConfig",
+    "GeometricSensorConfig",
     # New CS configs (primary)
-    'CompressiveSensingConfig',
-    'ExtensionCompressiveSensingConfig',
-    'TensorCSConfig',
-    'CSConfig',
+    "CompressiveSensingConfig",
+    "ExtensionCompressiveSensingConfig",
+    "TensorCSConfig",
+    "CSConfig",
     # Legacy configs
-    'ReconstructionConfig',
-    'GeometryAwareReconstructionConfig',
-    'DigitalTwinConfig',
-    'ForecasterConfig',
-    'LinearForecasterConfig',
-    'MLPForecasterConfig',
-    'LSTMForecasterConfig',
-    'LatentModalForecasterConfig',
-    'MultiResolutionTBMDConfig',
-    'create_forecaster_config_from_dict'
+    "ReconstructionConfig",
+    "GeometryAwareReconstructionConfig",
+    "DigitalTwinConfig",
+    "ForecasterConfig",
+    "LinearForecasterConfig",
+    "MLPForecasterConfig",
+    "LSTMForecasterConfig",
+    "LatentModalForecasterConfig",
+    "MultiResolutionTBMDConfig",
+    "create_forecaster_config_from_dict",
 ]
 
 
@@ -77,14 +77,16 @@ INITIAL_STEP_SIZE = _reconstruction_config.initial_step_size
 MAX_STEP_SIZE = _reconstruction_config.max_step_size
 
 # Export legacy constants
-__all__.extend([
-    'SEED',
-    'SET_BACKEND',
-    'DTYPE',
-    'NUMBER_SENSORS',
-    'MAX_ITERATIONS',
-    'CONVERGENCE_EPS',
-    'DAMPING_FACTOR',
-    'INITIAL_STEP_SIZE',
-    'MAX_STEP_SIZE'
-])
+__all__.extend(
+    [
+        "SEED",
+        "SET_BACKEND",
+        "DTYPE",
+        "NUMBER_SENSORS",
+        "MAX_ITERATIONS",
+        "CONVERGENCE_EPS",
+        "DAMPING_FACTOR",
+        "INITIAL_STEP_SIZE",
+        "MAX_STEP_SIZE",
+    ]
+)

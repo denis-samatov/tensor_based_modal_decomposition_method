@@ -12,7 +12,6 @@ This example script covers:
   3. Performing a lightweight grid-search over two hyper-parameters.
 """
 
-
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple
 
@@ -26,18 +25,18 @@ from TBMD.modules.TensorBasedCompressiveSensing import (
     TensorCompressiveSensing,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic problem generator
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SyntheticProblem:
-    A: np.ndarray          # (H, W, modes)
-    mask: np.ndarray       # (H, W) boolean sensor mask
+    A: np.ndarray  # (H, W, modes)
+    mask: np.ndarray  # (H, W) boolean sensor mask
     measurements: np.ndarray  # (H, W) masked field
     ground_truth: np.ndarray  # (modes,)
-    full_field: np.ndarray    # (H, W)
+    full_field: np.ndarray  # (H, W)
 
 
 def build_problem(
@@ -98,6 +97,7 @@ def build_problem(
 # Demonstrations
 # ---------------------------------------------------------------------------
 
+
 def solve_basic(problem: SyntheticProblem) -> Tuple[torch.Tensor, Dict[str, float]]:
     """Solve with default settings and report basic metrics."""
     solver = TensorCompressiveSensing(
@@ -113,7 +113,9 @@ def solve_basic(problem: SyntheticProblem) -> Tuple[torch.Tensor, Dict[str, floa
     recon = (problem.A.reshape(-1, problem.A.shape[-1]) @ x_hat.numpy()).reshape(
         problem.A.shape[:2]
     )
-    rel_field_error = np.linalg.norm(recon - problem.full_field) / np.linalg.norm(problem.full_field)
+    rel_field_error = np.linalg.norm(recon - problem.full_field) / np.linalg.norm(
+        problem.full_field
+    )
 
     report = {
         "coeff_rel_error": rel_coeff_error,
@@ -125,7 +127,9 @@ def solve_basic(problem: SyntheticProblem) -> Tuple[torch.Tensor, Dict[str, floa
     return x_hat, report
 
 
-def solve_with_history(problem: SyntheticProblem) -> Tuple[torch.Tensor, Dict[str, float], list[float]]:
+def solve_with_history(
+    problem: SyntheticProblem,
+) -> Tuple[torch.Tensor, Dict[str, float], list[float]]:
     """Collect residual history for plotting."""
     core_cfg = CompressiveSensingConfig(
         max_iter=800,
@@ -220,6 +224,7 @@ def plot_history(history: list[float]) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     problem = build_problem(sensor_ratio=0.3, noise_std=0.01)
 
@@ -241,10 +246,14 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("Demo 3 – grid search")
     print("=" * 70)
-    best_cfg, results = grid_search(problem, epsilons=[5e-3, 1e-2, 2e-2], relaxations=[0.9, 0.95, 0.99])
-    print(f"Best configuration: epsilon_l1={best_cfg.get('epsilon_l1')}, "
-          f"relax_lambda={best_cfg.get('relax_lambda')}, "
-          f"relative error={best_cfg.get('rel_error'):.4f}")
+    best_cfg, results = grid_search(
+        problem, epsilons=[5e-3, 1e-2, 2e-2], relaxations=[0.9, 0.95, 0.99]
+    )
+    print(
+        f"Best configuration: epsilon_l1={best_cfg.get('epsilon_l1')}, "
+        f"relax_lambda={best_cfg.get('relax_lambda')}, "
+        f"relative error={best_cfg.get('rel_error'):.4f}"
+    )
     worst = max(results.values())
     print(f"Search space size: {len(results)}, worst error: {worst:.4f}")
 

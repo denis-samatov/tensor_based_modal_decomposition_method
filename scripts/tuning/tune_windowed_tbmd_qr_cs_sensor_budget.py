@@ -156,9 +156,7 @@ def _evaluate_sensor_budget(
         selected_test_metrics = {
             "test_fixed_sensor_cs_r2": test_metrics["corrected_fixed_sensor_cs_r2"],
             "test_fixed_sensor_cs_rmse": test_metrics["corrected_fixed_sensor_cs_rmse"],
-            "test_fixed_sensor_cs_rel_frob": test_metrics[
-                "corrected_fixed_sensor_cs_rel_frob"
-            ],
+            "test_fixed_sensor_cs_rel_frob": test_metrics["corrected_fixed_sensor_cs_rel_frob"],
             "test_base_fixed_sensor_cs_r2": test_metrics["base_fixed_sensor_cs_r2"],
         }
 
@@ -166,17 +164,13 @@ def _evaluate_sensor_budget(
     return {
         "n_spatial_sensors": int(n_spatial_sensors),
         "actual_spatial_sensors": int(spatial_mask.sum()),
-        "total_history_measurements_per_prediction": int(
-            spatial_mask.sum() * args.history_length
-        ),
+        "total_history_measurements_per_prediction": int(spatial_mask.sum() * args.history_length),
         "selected_ridge": {
             "selected_label": selected_label,
             "selected_alpha": float(selected_alpha),
             "dev_fixed_sensor_cs_r2": dev_metrics["corrected_fixed_sensor_cs_r2"],
             "dev_fixed_sensor_cs_rmse": dev_metrics["corrected_fixed_sensor_cs_rmse"],
-            "dev_fixed_sensor_cs_rel_frob": dev_metrics[
-                "corrected_fixed_sensor_cs_rel_frob"
-            ],
+            "dev_fixed_sensor_cs_rel_frob": dev_metrics["corrected_fixed_sensor_cs_rel_frob"],
             "dev_base_fixed_sensor_cs_r2": dev_metrics["base_fixed_sensor_cs_r2"],
             **selected_test_metrics,
         },

@@ -1,11 +1,14 @@
 import unittest
+
 import torch
+
 from TBMD.core.modal_processor.modes import (
     BatchModalProcessor,
-    ModalTensorStacker,
     ModalProcessorConfig,
+    ModalTensorStacker,
     ProcessingStrategy,
 )
+
 
 class TestTensorTimeInsensitiveModes(unittest.TestCase):
     def setUp(self):
@@ -14,8 +17,18 @@ class TestTensorTimeInsensitiveModes(unittest.TestCase):
             "subject2": torch.randn(5, 5, 3, 5),
         }
         self.factors = {
-            "subject1": [torch.randn(10, 5), torch.randn(10, 5), torch.randn(5, 3), torch.randn(10, 5)],
-            "subject2": [torch.randn(10, 5), torch.randn(10, 5), torch.randn(5, 3), torch.randn(10, 5)],
+            "subject1": [
+                torch.randn(10, 5),
+                torch.randn(10, 5),
+                torch.randn(5, 3),
+                torch.randn(10, 5),
+            ],
+            "subject2": [
+                torch.randn(10, 5),
+                torch.randn(10, 5),
+                torch.randn(5, 3),
+                torch.randn(10, 5),
+            ],
         }
         self.config = ModalProcessorConfig(
             processing_strategy=ProcessingStrategy.BATCH,
@@ -33,6 +46,7 @@ class TestTensorTimeInsensitiveModes(unittest.TestCase):
         stacker = ModalTensorStacker(self.config)
         A_tensor = stacker.stack_modal_tensors(modal_tensors)
         self.assertEqual(A_tensor.shape, (10, 10, 5, 10))
+
 
 if __name__ == "__main__":
     unittest.main()

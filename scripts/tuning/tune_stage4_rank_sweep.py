@@ -216,11 +216,7 @@ def build_stage4_candidates(
             )
         )
 
-    return [
-        candidate
-        for candidate in candidates
-        if requested.intersection(candidate.groups)
-    ]
+    return [candidate for candidate in candidates if requested.intersection(candidate.groups)]
 
 
 def load_data(n_train_trajectories: int = DEFAULT_N_TRAIN_TRAJECTORIES):
@@ -361,7 +357,8 @@ def build_payload(
             "current_default_ranks": list(DEFAULT_NAVIER_STOKES_RANKS),
             "dev_selected_ranks": list(selected_ranks),
             "update_default_ranks_if_final_test_confirms": list(selected_ranks),
-            "default_ranks_change_needed": list(selected_ranks) != list(DEFAULT_NAVIER_STOKES_RANKS),
+            "default_ranks_change_needed": list(selected_ranks)
+            != list(DEFAULT_NAVIER_STOKES_RANKS),
         },
     }
 
@@ -377,7 +374,12 @@ def parse_args() -> argparse.Namespace:
         "--groups",
         nargs="+",
         default=["rank_sweep", "correction_head_sweep", "lstm_backbone_sweep"],
-        choices=["rank_sweep", "correction_head_sweep", "lstm_backbone_sweep", "spatial_rank_sweep"],
+        choices=[
+            "rank_sweep",
+            "correction_head_sweep",
+            "lstm_backbone_sweep",
+            "spatial_rank_sweep",
+        ],
         help="Candidate groups to run. Defaults to the three primary Stage 4 sweeps.",
     )
     parser.add_argument(
@@ -415,7 +417,9 @@ def main() -> None:
     )
     logger.info("Stage 4 tuning train trajectories: %s", tuning_train_states.shape)
     logger.info("Stage 4 tuning dev trajectories: %s", tuning_dev_states.shape)
-    logger.info("Official test trajectories held out from selection: %s", official_test_states.shape)
+    logger.info(
+        "Official test trajectories held out from selection: %s", official_test_states.shape
+    )
 
     candidates = build_stage4_candidates(
         groups=tuple(args.groups),

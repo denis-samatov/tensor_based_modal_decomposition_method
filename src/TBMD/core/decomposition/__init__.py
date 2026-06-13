@@ -2,58 +2,56 @@
 Decomposition module - Tucker/HOSVD tensor decomposition
 """
 
-
-from .hosvd import (
-    TuckerDecomposer,
-    TuckerDecomposerInterface,
-    TuckerDecomposerCore,
-    TensorProcessor,
-    TensorValidator,
-    TensorReconstructor,
-    TensorVisualizer,
-    ProcessingStrategy,
-    CPUStrategy,
-    GPUStrategy,
-    DecomposerState,
-    DecompositionResult as HOSVDDecompositionResult,
-    ReconstructionResult,
-    TensorDecompositionError,
-    InvalidRankError,
-    StateError,
-    ValidationError,
-    DecompositionConfig
-)
 from ..modal_processor.modes import BatchModalProcessor
-from .geometry_aware import GeometryAwareTuckerDecomposer, GeometryAwareConfig as GeometryAwareDecompositionConfig
+from .geometry_aware import GeometryAwareConfig as GeometryAwareDecompositionConfig
+from .geometry_aware import GeometryAwareTuckerDecomposer
+from .hosvd import (
+    CPUStrategy,
+    DecomposerState,
+    DecompositionConfig,
+    GPUStrategy,
+    InvalidRankError,
+    ProcessingStrategy,
+    ReconstructionResult,
+    StateError,
+    TensorDecompositionError,
+    TensorProcessor,
+    TensorReconstructor,
+    TensorValidator,
+    TensorVisualizer,
+    TuckerDecomposer,
+    TuckerDecomposerCore,
+    TuckerDecomposerInterface,
+    ValidationError,
+)
+from .hosvd import DecompositionResult as HOSVDDecompositionResult
 
 __all__ = [
     # Base classes
-
-    'DecompositionConfig',
+    "DecompositionConfig",
     # Main interfaces
-    'TuckerDecomposer',
-    'TuckerDecomposerInterface',
-    'BatchModalProcessor',
-    'GeometryAwareTuckerDecomposer',
-    'GeometryAwareDecompositionConfig',
+    "TuckerDecomposer",
+    "TuckerDecomposerInterface",
+    "BatchModalProcessor",
+    "GeometryAwareTuckerDecomposer",
+    "GeometryAwareDecompositionConfig",
     # Core components
-    'TuckerDecomposerCore',
-    'TensorProcessor',
-    'TensorValidator',
-    'TensorReconstructor',
-    'TensorVisualizer',
+    "TuckerDecomposerCore",
+    "TensorProcessor",
+    "TensorValidator",
+    "TensorReconstructor",
+    "TensorVisualizer",
     # Strategies
-    'ProcessingStrategy',
-    'CPUStrategy',
-    'GPUStrategy',
+    "ProcessingStrategy",
+    "CPUStrategy",
+    "GPUStrategy",
     # State & Results
-    'DecomposerState',
-    'HOSVDDecompositionResult',
-    'ReconstructionResult',
+    "DecomposerState",
+    "HOSVDDecompositionResult",
+    "ReconstructionResult",
     # Exceptions
-    'TensorDecompositionError',
-    'InvalidRankError',
-    'StateError',
-    'ValidationError',
+    "TensorDecompositionError",
+    "InvalidRankError",
+    "StateError",
+    "ValidationError",
 ]
-

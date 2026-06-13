@@ -32,18 +32,17 @@ from TBMD.experiments.navier_stokes_fast_tplus1 import (
     apply_coefficient_calibrator,
     apply_ridge_residual_corrector,
     attach_coefficient_gate,
-    build_forecast_segment_tensor,
-    build_forecast_segment_tensor_with_refs,
     build_correction_feature_matrix,
+    build_forecast_segment_tensor_with_refs,
+    fft_highpass_frames,
     fit_coefficient_calibrator,
     fit_composite_patch_hf_residual_corrector,
     fit_noop_residual_corrector,
-    fit_sensor_innovation_encoder,
     fit_patch_residual_svd_corrector,
     fit_ridge_residual_corrector,
     fit_segment_dictionary,
     fit_sensor_coefficient_decoder,
-    fft_highpass_frames,
+    fit_sensor_innovation_encoder,
     history_and_target,
     history_sensor_matrix,
     place_fixed_spatial_sensors,
@@ -57,14 +56,9 @@ from TBMD.experiments.navier_stokes_forecasting import _compute_regression_metri
 from TBMD.experiments.navier_stokes_model_registry import DEFAULT_N_TRAIN_TRAJECTORIES
 from TBMD.experiments.navier_stokes_structure_metrics import compute_structure_metrics
 
-
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 OUTPUT_PATH = (
-    PROJECT_ROOT
-    / "scripts"
-    / "plots"
-    / "models_eval"
-    / "stage5_fast_tplus1_cached_residual.json"
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "stage5_fast_tplus1_cached_residual.json"
 )
 
 
@@ -682,7 +676,9 @@ def filter_candidates(
             family_candidates = [
                 candidate
                 for candidate in candidates
-                if "highpass" in candidate.name or "hfweight" in candidate.name or candidate.name in controls
+                if "highpass" in candidate.name
+                or "hfweight" in candidate.name
+                or candidate.name in controls
             ]
     if not candidate_names:
         return family_candidates
@@ -776,12 +772,23 @@ def compute_hard_bucket_metrics(
     bucket_size = max(1, int(np.ceil(n_frames * hard_fraction)))
     easy_idx = order[:bucket_size]
     hard_idx = order[-bucket_size:]
-    mid_idx = order[bucket_size:-bucket_size] if n_frames > 2 * bucket_size else np.array([], dtype=int)
+    mid_idx = (
+        order[bucket_size:-bucket_size] if n_frames > 2 * bucket_size else np.array([], dtype=int)
+    )
 
     def add_bucket(payload: dict[str, float | int], name: str, indices: np.ndarray) -> None:
         payload[f"{prefix}_{name}_count"] = int(indices.size)
         if indices.size == 0:
-            for metric in ["r2", "rmse", "mae", "rel_frob_err", "base_r2", "base_rmse", "delta_r2", "delta_rmse"]:
+            for metric in [
+                "r2",
+                "rmse",
+                "mae",
+                "rel_frob_err",
+                "base_r2",
+                "base_rmse",
+                "delta_r2",
+                "delta_rmse",
+            ]:
                 payload[f"{prefix}_{name}_{metric}"] = float("nan")
             return
         candidate_metrics = _metrics_with_mae(target_array[indices], pred_array[indices])
@@ -911,9 +918,13 @@ def fit_cached_ridge_residual_corrector(
     feature_matrix: np.ndarray | None = None,
 ) -> dict[str, Any]:
     target_flat = np.asarray(target_frames, dtype=np.float64).reshape(target_frames.shape[0], -1)
-    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(base_predictions.shape[0], -1)
+    base_flat = np.asarray(base_predictions, dtype=np.float64).reshape(
+        base_predictions.shape[0], -1
+    )
     coeffs = np.asarray(coeffs, dtype=np.float64)
-    model_features = coeffs if feature_matrix is None else np.asarray(feature_matrix, dtype=np.float64)
+    model_features = (
+        coeffs if feature_matrix is None else np.asarray(feature_matrix, dtype=np.float64)
+    )
     features = np.concatenate(
         [model_features, np.ones((model_features.shape[0], 1), dtype=np.float64)],
         axis=1,
@@ -1163,7 +1174,9 @@ def evaluate_residual_candidate(
         )
     elif candidate.head_type == "patch_residual_svd":
         if candidate.patch_size is None or candidate.patch_residual_rank is None:
-            raise ValueError("patch_residual_svd candidates require patch_size and patch_residual_rank")
+            raise ValueError(
+                "patch_residual_svd candidates require patch_size and patch_residual_rank"
+            )
         corrector = fit_patch_residual_svd_corrector(
             cache["train_targets"],
             train_base,
@@ -1374,8 +1387,12 @@ def aggregate_candidate_results(split_results: list[dict[str, Any]]) -> list[dic
                 "sample_weight_power": first["sample_weight_power"],
                 "sample_weight_floor": first["sample_weight_floor"],
                 "sample_weight_clip": first["sample_weight_clip"],
-                "mean_sample_weight_min": float(np.mean([row["sample_weight_min"] for row in rows])),
-                "mean_sample_weight_max": float(np.mean([row["sample_weight_max"] for row in rows])),
+                "mean_sample_weight_min": float(
+                    np.mean([row["sample_weight_min"] for row in rows])
+                ),
+                "mean_sample_weight_max": float(
+                    np.mean([row["sample_weight_max"] for row in rows])
+                ),
                 "n_splits": len(rows),
                 "mean_dev_r2": float(np.mean(dev_r2)),
                 "std_dev_r2": float(np.std(dev_r2)),

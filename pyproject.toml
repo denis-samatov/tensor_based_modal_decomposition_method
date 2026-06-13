@@ -48,6 +48,7 @@ dev = [
     "jupyter_client>=8.6",
     "jupyter_core>=5.7",
     "nbformat>=5.10",
+    "ruff>=0.4.0",
 ]
 
 [project.urls]
@@ -62,3 +63,21 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E741", "E501", "F401", "E722"]
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "data",
+    "results",
+]
+

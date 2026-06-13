@@ -32,14 +32,9 @@ from TBMD.experiments.navier_stokes_model_registry import (
     get_fast_tplus1_model_specs,
 )
 
-
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 DEFAULT_OUTPUT_DIR = (
-    PROJECT_ROOT
-    / "scripts"
-    / "plots"
-    / "models_eval"
-    / "stage5_fast_tplus1_visuals"
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "stage5_fast_tplus1_visuals"
 )
 
 
@@ -83,7 +78,9 @@ def compute_frame_metrics(target: np.ndarray, pred: np.ndarray) -> dict[str, flo
     }
 
 
-def load_or_fit_predictor(args: argparse.Namespace) -> tuple[FastWindowedTBMDQRCSForecaster, dict[str, Any]]:
+def load_or_fit_predictor(
+    args: argparse.Namespace,
+) -> tuple[FastWindowedTBMDQRCSForecaster, dict[str, Any]]:
     """Load a saved predictor, or explicitly fit one from a registry slug."""
     if args.predictor is not None:
         return FastWindowedTBMDQRCSForecaster.load(args.predictor), {

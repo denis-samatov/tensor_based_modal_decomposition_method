@@ -12,7 +12,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MPL_CACHE_DIR = PROJECT_ROOT / ".cache" / "matplotlib"
@@ -45,6 +45,7 @@ DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 OUTPUT_PATH = PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "stage6b_summary.json"
 TUNING_DEV_SPLIT = 0.2
 SELECTION_METRIC = "rollout_r2_common"
+
 
 @dataclass(frozen=True)
 class Stage6bCandidate:
@@ -107,9 +108,10 @@ class Stage6bCandidate:
         )
         return payload
 
+
 def build_candidates() -> list[Stage6bCandidate]:
     candidates: list[Stage6bCandidate] = []
-    
+
     # Baseline (Stage 6 winner)
     candidates.append(
         Stage6bCandidate(
@@ -121,7 +123,7 @@ def build_candidates() -> list[Stage6bCandidate]:
             lstm_use_scheduled_sampling=False,
         )
     )
-    
+
     # SS Unroll 5
     candidates.append(
         Stage6bCandidate(
@@ -135,7 +137,7 @@ def build_candidates() -> list[Stage6bCandidate]:
             lstm_ss_decay_rate=0.01,
         )
     )
-    
+
     # SS Unroll 10
     candidates.append(
         Stage6bCandidate(
@@ -151,6 +153,7 @@ def build_candidates() -> list[Stage6bCandidate]:
     )
 
     return candidates
+
 
 def _build_forecaster(candidate: Stage6bCandidate):
     if candidate.use_correction:
@@ -176,17 +179,21 @@ def _build_forecaster(candidate: Stage6bCandidate):
         feature_mode=candidate.feature_mode,
     )
 
+
 def load_data(n_train_trajectories: int = DEFAULT_N_TRAIN_TRAJECTORIES):
     dataset = load_navier_stokes_trajectory_dataset(DATA_ROOT)
     return dataset.train_states[:n_train_trajectories], dataset.test_states
 
+
 def sort_results_for_selection(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(results, key=lambda item: item[SELECTION_METRIC], reverse=True)
+
 
 def select_best_result(results: list[dict[str, Any]]) -> dict[str, Any]:
     if not results:
         raise ValueError("Cannot select from an empty result list")
     return sort_results_for_selection(results)[0]
+
 
 def evaluate_candidate(
     candidate: Stage6bCandidate,
@@ -202,10 +209,16 @@ def evaluate_candidate(
     one_step = model.evaluate_one_step(test_states)
     rollout = model.evaluate_rollout(test_states)
 
-    one_step_common = compute_common_horizon_metrics(one_step, test_states, DEFAULT_COMMON_WARMUP_STEPS)
-    rollout_common = compute_common_horizon_metrics(rollout, test_states, DEFAULT_COMMON_WARMUP_STEPS)
-    rollout_diagnostics = compute_common_horizon_diagnostics(rollout, test_states, DEFAULT_COMMON_WARMUP_STEPS)
-    
+    one_step_common = compute_common_horizon_metrics(
+        one_step, test_states, DEFAULT_COMMON_WARMUP_STEPS
+    )
+    rollout_common = compute_common_horizon_metrics(
+        rollout, test_states, DEFAULT_COMMON_WARMUP_STEPS
+    )
+    rollout_diagnostics = compute_common_horizon_diagnostics(
+        rollout, test_states, DEFAULT_COMMON_WARMUP_STEPS
+    )
+
     elapsed = time.time() - start
 
     result = {
@@ -238,8 +251,9 @@ def evaluate_candidate(
     )
     return result
 
+
 def main() -> None:
-    args = argparse.ArgumentParser().parse_args()
+    argparse.ArgumentParser().parse_args()
     all_train_states, official_test_states = load_data(DEFAULT_N_TRAIN_TRAJECTORIES)
     tuning_train_states, tuning_dev_states = split_train_dev_trajectories(
         all_train_states,
@@ -248,16 +262,16 @@ def main() -> None:
 
     candidates = build_candidates()
     logger.info("Running %d candidates", len(candidates))
-    
-    dev_results = sort_results_for_selection([
-        evaluate_candidate(c, tuning_train_states, tuning_dev_states) for c in candidates
-    ])
-    
+
+    dev_results = sort_results_for_selection(
+        [evaluate_candidate(c, tuning_train_states, tuning_dev_states) for c in candidates]
+    )
+
     selected_dev_result = select_best_result(dev_results)
     selected_candidate = next(c for c in candidates if c.name == selected_dev_result["candidate"])
-    
+
     logger.info("Selected %s", selected_dev_result["candidate"])
-    
+
     final_test_result = evaluate_candidate(
         selected_candidate,
         all_train_states,
@@ -274,8 +288,9 @@ def main() -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with OUTPUT_PATH.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
-    
+
     logger.info("Stage 6b summary saved to: %s", OUTPUT_PATH)
+
 
 if __name__ == "__main__":
     main()

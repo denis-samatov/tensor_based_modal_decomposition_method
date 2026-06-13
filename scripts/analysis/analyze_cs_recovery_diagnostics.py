@@ -26,11 +26,7 @@ from TBMD.experiments.navier_stokes_forecasting import (
 
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 OUTPUT_PATH = (
-    PROJECT_ROOT
-    / "scripts"
-    / "plots"
-    / "models_eval"
-    / "cs_recovery_diagnostics_summary.json"
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "cs_recovery_diagnostics_summary.json"
 )
 
 
@@ -56,7 +52,9 @@ def _compute_sparsity_diagnostics(coeffs: np.ndarray, thresholds=(1e-3, 1e-2)) -
         "mean_abs_coeff": float(np.mean(abs_vectors)),
         "median_abs_coeff": float(np.median(abs_vectors)),
         **{
-            f"mean_count_abs_gt_{threshold:g}": float(np.mean(np.sum(abs_vectors > threshold, axis=1)))
+            f"mean_count_abs_gt_{threshold:g}": float(
+                np.mean(np.sum(abs_vectors > threshold, axis=1))
+            )
             for threshold in thresholds
         },
         **topk,
@@ -128,9 +126,7 @@ def _solve_temporal_regularized_lstsq(
     space_evals, space_vecs = np.linalg.eigh(gram_space)
     transformed_rhs = time_vecs.T @ rhs @ space_vecs
     denominator = (
-        temporal_weight * time_evals[:, np.newaxis]
-        + space_evals[np.newaxis, :]
-        + ridge_weight
+        temporal_weight * time_evals[:, np.newaxis] + space_evals[np.newaxis, :] + ridge_weight
     )
     denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
     transformed_solution = transformed_rhs / denominator
@@ -202,7 +198,9 @@ def _sensor_equation_residual(
     sensor_indices: np.ndarray,
     sensor_dictionary: np.ndarray,
 ) -> dict[str, float]:
-    measurements = centered_states.reshape(-1, int(np.prod(centered_states.shape[2:])))[:, sensor_indices]
+    measurements = centered_states.reshape(-1, int(np.prod(centered_states.shape[2:])))[
+        :, sensor_indices
+    ]
     predicted = coeffs.reshape(-1, coeffs.shape[-1]) @ sensor_dictionary.T
     residual = measurements - predicted
     denom = max(float(np.linalg.norm(measurements)), 1e-12)
@@ -358,10 +356,7 @@ def main() -> None:
                 "window_length": args.temporal_window_length,
                 "temporal_weight": float(temporal_weight),
                 "ridge_weight": args.temporal_ridge_weight,
-                "objective": (
-                    "||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 "
-                    "+ lambda_r ||A||_F^2"
-                ),
+                "objective": ("||A Theta.T - Y||_F^2 + lambda_t ||D A||_F^2 + lambda_r ||A||_F^2"),
             },
         }
 

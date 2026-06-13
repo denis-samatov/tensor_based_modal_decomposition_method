@@ -1,7 +1,9 @@
 import unittest
+
 import torch
-import numpy as np
+
 from TBMD.core.decomposition.hosvd import TuckerDecomposer
+
 
 class TestTensorHOSVD(unittest.TestCase):
     def setUp(self):
@@ -20,10 +22,7 @@ class TestTensorHOSVD(unittest.TestCase):
         self.assertIsNotNone(self.decomposer.factors)
         self.assertIn("subject1", self.decomposer.cores)
         self.assertIn("subject1", self.decomposer.factors)
-        self.assertEqual(
-            self.decomposer.cores["subject1"].shape,
-            (5, 5, 3, 5)
-        )
+        self.assertEqual(self.decomposer.cores["subject1"].shape, (5, 5, 3, 5))
         self.assertEqual(len(self.decomposer.factors["subject1"]), 4)
 
     def test_reconstruct(self):
@@ -36,6 +35,7 @@ class TestTensorHOSVD(unittest.TestCase):
             self.tensors["subject1"].shape,
         )
         self.assertIn("subject1", self.decomposer.reconstruction_errors)
+
 
 if __name__ == "__main__":
     unittest.main()

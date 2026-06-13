@@ -1,33 +1,33 @@
 import itertools
-import unittest
-from unittest.mock import patch
-import numpy as np
-import torch
 import os
 import tempfile
+import unittest
+from unittest.mock import patch
+
+import numpy as np
+import torch
 
 from TBMD.core.forecasting.LinearForecaster import LinearForecaster
 
 
 class TestLinearForecaster(unittest.TestCase):
-
     def setUp(self):
         """Set up a simple testing environment."""
         self.in_dim = 3
         self.t_steps = 20
         # Create a known transformation matrix
-        self.true_m = np.array([
-            [0.1, 0.2, 0.7],
-            [0.4, 0.5, 0.1],
-            [0.8, 0.1, 0.1]
-        ])
+        self.true_m = np.array([[0.1, 0.2, 0.7], [0.4, 0.5, 0.1], [0.8, 0.1, 0.1]])
         # Generate synthetic data: x(t+1) = x(t) @ true_m
         # Note: LinearForecaster expects X_input @ M = X_output
-        self.x_history = np.array(list(itertools.accumulate(
-            itertools.repeat(self.true_m, self.t_steps - 1),
-            lambda x, m: x @ m,
-            initial=np.array([1., 2., 3.])
-        )))
+        self.x_history = np.array(
+            list(
+                itertools.accumulate(
+                    itertools.repeat(self.true_m, self.t_steps - 1),
+                    lambda x, m: x @ m,
+                    initial=np.array([1.0, 2.0, 3.0]),
+                )
+            )
+        )
 
     def test_initialization(self):
         """Test model initialization with different settings."""
@@ -42,8 +42,8 @@ class TestLinearForecaster(unittest.TestCase):
         self.assertIsNotNone(model_torch.device)
 
         # Torch (Explicit device)
-        model_cpu = LinearForecaster(use_torch=True, device='cpu')
-        self.assertEqual(model_cpu.device.type, 'cpu')
+        model_cpu = LinearForecaster(use_torch=True, device="cpu")
+        self.assertEqual(model_cpu.device.type, "cpu")
 
     def test_training_metrics_numpy(self):
         """Test if the training metrics are calculated correctly with NumPy."""
@@ -55,11 +55,12 @@ class TestLinearForecaster(unittest.TestCase):
         expected_predictions = x_input @ forecaster.M
 
         # Manually calculate MSE
-        expected_mse = np.mean((self.x_history[1:] - expected_predictions)**2)
+        expected_mse = np.mean((self.x_history[1:] - expected_predictions) ** 2)
 
         # The reported MSE should be close to our manually calculated one
-        self.assertAlmostEqual(metrics['mse'], expected_mse, places=5,
-                               msg="NumPy MSE metric is incorrect.")
+        self.assertAlmostEqual(
+            metrics["mse"], expected_mse, places=5, msg="NumPy MSE metric is incorrect."
+        )
         self.assertTrue(forecaster.trained)
 
     def test_training_metrics_torch(self):
@@ -72,11 +73,18 @@ class TestLinearForecaster(unittest.TestCase):
         expected_predictions = x_input @ forecaster.M
 
         # Manually calculate MSE
-        expected_mse = torch.mean((torch.tensor(self.x_history[1:], dtype=torch.float32, device=forecaster.device) - expected_predictions)**2).item()
+        expected_mse = torch.mean(
+            (
+                torch.tensor(self.x_history[1:], dtype=torch.float32, device=forecaster.device)
+                - expected_predictions
+            )
+            ** 2
+        ).item()
 
         # The reported MSE should be close to our manually calculated one
-        self.assertAlmostEqual(metrics['mse'], expected_mse, places=5,
-                               msg="PyTorch MSE metric is incorrect.")
+        self.assertAlmostEqual(
+            metrics["mse"], expected_mse, places=5, msg="PyTorch MSE metric is incorrect."
+        )
         self.assertTrue(forecaster.trained)
 
     def test_predict_next_numpy(self):
@@ -143,7 +151,9 @@ class TestLinearForecaster(unittest.TestCase):
             manual_seq.append(x_curr.detach().cpu().numpy())
         manual_seq = np.array(manual_seq)
 
-        np.testing.assert_allclose(seq, manual_seq, atol=1e-5, err_msg="predict_sequence output mismatch")
+        np.testing.assert_allclose(
+            seq, manual_seq, atol=1e-5, err_msg="predict_sequence output mismatch"
+        )
 
     def test_evaluate_unseen_data(self):
         """Test evaluation on data not used during training."""
@@ -155,16 +165,16 @@ class TestLinearForecaster(unittest.TestCase):
         # Evaluate on second half
         metrics = forecaster.evaluate(self.x_history[mid:])
 
-        self.assertIn('mse', metrics)
-        self.assertIn('r2', metrics)
-        self.assertIsInstance(metrics['mse'], float)
+        self.assertIn("mse", metrics)
+        self.assertIn("r2", metrics)
+        self.assertIsInstance(metrics["mse"], float)
 
     def test_save_load_model_numpy(self):
         """Test if the model is saved and loaded correctly with NumPy."""
         forecaster = LinearForecaster(use_torch=False)
         forecaster.train(self.x_history, verbose=False)
 
-        with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".npz", delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
@@ -175,7 +185,7 @@ class TestLinearForecaster(unittest.TestCase):
 
             self.assertTrue(loaded_forecaster.trained)
             self.assertFalse(loaded_forecaster.use_torch)
-            self.assertEqual(forecaster.metrics['mse'], loaded_forecaster.metrics['mse'])
+            self.assertEqual(forecaster.metrics["mse"], loaded_forecaster.metrics["mse"])
             np.testing.assert_allclose(forecaster.M, loaded_forecaster.M)
         finally:
             if os.path.exists(tmp_path):
@@ -186,7 +196,7 @@ class TestLinearForecaster(unittest.TestCase):
         forecaster = LinearForecaster(use_torch=True)
         forecaster.train(self.x_history, verbose=False)
 
-        with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".npz", delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
@@ -197,10 +207,9 @@ class TestLinearForecaster(unittest.TestCase):
 
             self.assertTrue(loaded_forecaster.trained)
             self.assertTrue(loaded_forecaster.use_torch)
-            self.assertEqual(forecaster.metrics['mse'], loaded_forecaster.metrics['mse'])
+            self.assertEqual(forecaster.metrics["mse"], loaded_forecaster.metrics["mse"])
             np.testing.assert_allclose(
-                forecaster.M.detach().cpu().numpy(),
-                loaded_forecaster.M.detach().cpu().numpy()
+                forecaster.M.detach().cpu().numpy(), loaded_forecaster.M.detach().cpu().numpy()
             )
         finally:
             if os.path.exists(tmp_path):
@@ -227,7 +236,7 @@ class TestLinearForecaster(unittest.TestCase):
         with self.assertRaises(ValueError):
             forecaster.predict_sequence(x, 5)
 
-    @patch('matplotlib.pyplot.show')
+    @patch("matplotlib.pyplot.show")
     def test_plot_prediction_comparison(self, mock_show):
         """Test that plotting function runs without error."""
         forecaster = LinearForecaster(use_torch=False)
@@ -241,9 +250,14 @@ class TestLinearForecaster(unittest.TestCase):
 
         # Test with specific feature indices
         try:
-            forecaster.plot_prediction_comparison(self.x_history, feature_indices=[0, 2], n_steps_ahead=2)
+            forecaster.plot_prediction_comparison(
+                self.x_history, feature_indices=[0, 2], n_steps_ahead=2
+            )
         except Exception as e:
-            self.fail(f"plot_prediction_comparison raised {type(e).__name__} with specific indices unexpectedly!")
+            self.fail(
+                f"plot_prediction_comparison raised {type(e).__name__} with specific indices unexpectedly!"
+            )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

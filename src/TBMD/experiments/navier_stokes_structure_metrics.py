@@ -115,8 +115,16 @@ def compute_structure_metrics(
 
     target_gx, target_gy = periodic_gradient(target)
     pred_gx, pred_gy = periodic_gradient(pred)
-    grad_target = np.concatenate([target_gx.reshape(target.shape[0], -1), target_gy.reshape(target.shape[0], -1)], axis=1)
-    grad_diff = np.concatenate([(pred_gx - target_gx).reshape(target.shape[0], -1), (pred_gy - target_gy).reshape(target.shape[0], -1)], axis=1)
+    grad_target = np.concatenate(
+        [target_gx.reshape(target.shape[0], -1), target_gy.reshape(target.shape[0], -1)], axis=1
+    )
+    grad_diff = np.concatenate(
+        [
+            (pred_gx - target_gx).reshape(target.shape[0], -1),
+            (pred_gy - target_gy).reshape(target.shape[0], -1),
+        ],
+        axis=1,
+    )
     grad_rmse = float(np.sqrt(np.mean(grad_diff**2)))
     grad_rel = _safe_rel_norm(grad_diff, grad_target)
 

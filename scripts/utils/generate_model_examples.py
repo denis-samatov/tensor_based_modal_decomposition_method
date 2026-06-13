@@ -14,6 +14,7 @@ MPL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CACHE_DIR))
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -28,9 +29,9 @@ from TBMD.experiments import (
     make_frame_filename,
     save_comparison_sheet,
     save_contact_sheet,
-    save_t_plus_one_diagnostics_sheet,
     save_rollout_frame,
     save_rollout_gif,
+    save_t_plus_one_diagnostics_sheet,
     select_fixed_rollout_steps,
     select_fixed_trajectory_indices,
 )
@@ -282,7 +283,11 @@ def main():
         output_root=str(OUTPUT_ROOT),
         trajectory_indices=trajectory_indices,
         rollout_steps=rollout_steps,
-        image_settings={"dpi": IMAGE_DPI, "fps": GIF_FPS, "warmup_steps": DEFAULT_COMMON_WARMUP_STEPS},
+        image_settings={
+            "dpi": IMAGE_DPI,
+            "fps": GIF_FPS,
+            "warmup_steps": DEFAULT_COMMON_WARMUP_STEPS,
+        },
         per_model=per_model_entries,
         comparison_artifacts=comparison_artifacts,
     )

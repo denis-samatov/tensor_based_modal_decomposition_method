@@ -3,34 +3,40 @@ from unittest.mock import patch
 
 try:
     import numpy as np
+
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
 
 try:
     import torch
+
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
 
 try:
     import matplotlib.pyplot as plt
+
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
 
 # Try to import the functions to test
 try:
-    from TBMD.visualization import visualize_tensor, normalize_for_rgb_display
+    from TBMD.visualization import normalize_for_rgb_display, visualize_tensor
+
     HAS_PLOTS = True
 except ImportError:
     HAS_PLOTS = False
 
-class TestPlots(unittest.TestCase):
 
-    @unittest.skipUnless(HAS_TORCH and HAS_PLOTS and HAS_MATPLOTLIB, "Requires torch, plots and matplotlib")
-    @patch('matplotlib.pyplot.show')
-    @patch('matplotlib.pyplot.savefig')
+class TestPlots(unittest.TestCase):
+    @unittest.skipUnless(
+        HAS_TORCH and HAS_PLOTS and HAS_MATPLOTLIB, "Requires torch, plots and matplotlib"
+    )
+    @patch("matplotlib.pyplot.show")
+    @patch("matplotlib.pyplot.savefig")
     def test_visualize_tensor_torch(self, mock_savefig, mock_show):
         tensor = torch.rand((10, 10, 10))
         try:
@@ -38,9 +44,11 @@ class TestPlots(unittest.TestCase):
         except Exception as e:
             self.fail(f"visualize_tensor raised an exception: {e}")
 
-    @unittest.skipUnless(HAS_NUMPY and HAS_PLOTS and HAS_MATPLOTLIB, "Requires numpy, plots and matplotlib")
-    @patch('matplotlib.pyplot.show')
-    @patch('matplotlib.pyplot.savefig')
+    @unittest.skipUnless(
+        HAS_NUMPY and HAS_PLOTS and HAS_MATPLOTLIB, "Requires numpy, plots and matplotlib"
+    )
+    @patch("matplotlib.pyplot.show")
+    @patch("matplotlib.pyplot.savefig")
     def test_visualize_tensor_numpy(self, mock_savefig, mock_show):
         tensor = np.random.rand(10, 10, 10)
         try:
@@ -93,5 +101,6 @@ class TestPlots(unittest.TestCase):
         self.assertTrue(np.all(normalized >= 0))
         self.assertTrue(np.all(normalized <= 1))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

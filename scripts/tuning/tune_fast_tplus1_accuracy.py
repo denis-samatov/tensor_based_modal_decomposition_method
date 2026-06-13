@@ -28,11 +28,7 @@ from TBMD.experiments.navier_stokes_model_registry import DEFAULT_N_TRAIN_TRAJEC
 
 DATA_ROOT = PROJECT_ROOT / "data" / "navier_stokes"
 OUTPUT_PATH = (
-    PROJECT_ROOT
-    / "scripts"
-    / "plots"
-    / "models_eval"
-    / "stage5_fast_tplus1_accuracy_sweep.json"
+    PROJECT_ROOT / "scripts" / "plots" / "models_eval" / "stage5_fast_tplus1_accuracy_sweep.json"
 )
 DEV_SPLIT = 0.2
 
@@ -65,7 +61,9 @@ class FastTPlus1Candidate:
     correction_learning_rate: float = 1e-3
     correction_weight_decay: float = 1e-6
 
-    def config(self, *, max_train_segments: int | None, random_state: int) -> FastWindowedTBMDQRCSConfig:
+    def config(
+        self, *, max_train_segments: int | None, random_state: int
+    ) -> FastWindowedTBMDQRCSConfig:
         return FastWindowedTBMDQRCSConfig(
             history_length=self.history_length,
             ranks=[self.r_tau, self.r_x, self.r_y, self.r_segment],
@@ -429,7 +427,9 @@ def build_candidates(groups: tuple[str, ...] = ("quick",)) -> list[FastTPlus1Can
             r_y=32,
             r_segment=300,
             n_spatial_sensors=300,
-            notes={"hypothesis": "production-scale precomputed ridge decoder with residual-SVD head"},
+            notes={
+                "hypothesis": "production-scale precomputed ridge decoder with residual-SVD head"
+            },
             sensor_decoder="ridge",
             decoder_ridge_lambda=1e-4,
             correction_residual_rank=256,
@@ -739,7 +739,9 @@ def build_candidates(groups: tuple[str, ...] = ("quick",)) -> list[FastTPlus1Can
             r_y=32,
             r_segment=300,
             n_spatial_sensors=1000,
-            notes={"hypothesis": "test whether sensor-overbudget tolerates stronger residual scale"},
+            notes={
+                "hypothesis": "test whether sensor-overbudget tolerates stronger residual scale"
+            },
             sensor_decoder="ridge",
             decoder_ridge_lambda=1e-8,
             correction_residual_rank=256,
@@ -1089,9 +1091,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.n_train_trajectories > DEFAULT_N_TRAIN_TRAJECTORIES:
-        raise ValueError(
-            f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}"
-        )
+        raise ValueError(f"n_train_trajectories cannot exceed {DEFAULT_N_TRAIN_TRAJECTORIES}")
     dataset = load_navier_stokes_trajectory_dataset(DATA_ROOT)
     all_train_states = dataset.train_states[: args.n_train_trajectories]
     tuning_train_states, tuning_dev_states = split_train_dev_trajectories(

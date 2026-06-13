@@ -146,7 +146,9 @@ def main():
     )
     logger.info("Stable-DMD tuning train trajectories: %s", tuning_train_states.shape)
     logger.info("Stable-DMD tuning dev trajectories: %s", tuning_dev_states.shape)
-    logger.info("Official test trajectories held out from rho selection: %s", official_test_states.shape)
+    logger.info(
+        "Official test trajectories held out from rho selection: %s", official_test_states.shape
+    )
 
     candidates = build_stable_dmd_candidates()
     dev_results = sort_results_for_selection(
@@ -157,7 +159,9 @@ def main():
     )
     selected_dev_result = select_best_result(dev_results)
     selected_candidate = next(
-        candidate for candidate in candidates if candidate["name"] == selected_dev_result["candidate"]
+        candidate
+        for candidate in candidates
+        if candidate["name"] == selected_dev_result["candidate"]
     )
     logger.info(
         "Selected %s by dev %s=%.6f",

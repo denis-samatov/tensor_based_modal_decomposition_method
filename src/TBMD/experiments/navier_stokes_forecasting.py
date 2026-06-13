@@ -23,15 +23,15 @@ from TBMD.config import (
     CompressiveSensingConfig,
     LatentModalForecasterConfig,
     LinearForecasterConfig,
-    MLPForecasterConfig,
-    SensorPlacementConfig,
     LSTMForecasterConfig,
+    MLPForecasterConfig,
     MultiResolutionTBMDConfig,
+    SensorPlacementConfig,
 )
 from TBMD.core.forecasting.LatentModalForecaster import LatentModalForecaster, LatentModalResult
 from TBMD.core.forecasting.LinearForecaster import LinearForecaster
-from TBMD.core.forecasting.MLPForecaster import MLPForecaster
 from TBMD.core.forecasting.LSTMForecaster import LSTMForecaster
+from TBMD.core.forecasting.MLPForecaster import MLPForecaster
 from TBMD.core.forecasting.ScheduledSamplingLSTMForecaster import ScheduledSamplingLSTMForecaster
 from TBMD.core.reconstruction.tensor_compressive_sensing import (
     ExtensionCompressiveSensingConfig,
@@ -178,6 +178,7 @@ def load_navier_stokes_trajectory_dataset(
         test_states=stitch_inputs_and_labels_to_states(test_inputs_t, test_labels_t),
     )
 
+
 def build_one_step_pairs(
     trajectory_series: np.ndarray,
     *,
@@ -278,7 +279,7 @@ def build_unrolled_lagged_windows(
     for trajectory in flattened:
         for end_idx in range(seq_length, steps - unroll_steps + 1):
             windows.append(trajectory[end_idx - seq_length : end_idx])
-            
+
             target_seq = trajectory[end_idx : end_idx + unroll_steps]
             if predict_deltas:
                 prev_seq = trajectory[end_idx - 1 : end_idx + unroll_steps - 1]
@@ -739,9 +740,7 @@ class TrajectoryAwareEigenvalueProjectedDMDForecaster(TrajectoryAwareDMDForecast
         super().fit(train_states)
         eigenvalues, eigenvectors = np.linalg.eig(self._operator)
         magnitudes = np.abs(eigenvalues)
-        self._unconstrained_spectral_radius = (
-            float(np.max(magnitudes)) if eigenvalues.size else 0.0
-        )
+        self._unconstrained_spectral_radius = float(np.max(magnitudes)) if eigenvalues.size else 0.0
         self._operator_scale = 1.0
         self._n_projected_modes = int(np.sum(magnitudes > self.max_spectral_radius))
 
@@ -929,7 +928,9 @@ class TrajectoryAwareCSForecaster:
             centered_states,
             self._train_coeffs,
         )
-        self._coeff_mean, self._coeff_std = _compute_latent_standardization_stats(self._train_coeffs)
+        self._coeff_mean, self._coeff_std = _compute_latent_standardization_stats(
+            self._train_coeffs
+        )
         self._fit_sub_forecaster()
         self._fit_correction_head(states)
         self._fitted = True
@@ -1096,7 +1097,9 @@ class TrajectoryAwareCSForecaster:
         return coeffs, metrics_out
 
     def _to_model_coeffs(self, coeff_series: np.ndarray) -> np.ndarray:
-        standardized = _apply_latent_standardization(coeff_series, self._coeff_mean, self._coeff_std)
+        standardized = _apply_latent_standardization(
+            coeff_series, self._coeff_mean, self._coeff_std
+        )
         if self.feature_mode == "coeff":
             return standardized
         return _augment_latent_series_with_deltas(standardized)
@@ -1280,8 +1283,8 @@ class TrajectoryAwareCSForecaster:
         )
 
         if val_raw is not None and val_model is not None and val_states is not None:
-            val_x, val_y_raw, val_baseline_raw, val_target_spatial = (
-                self._build_correction_dataset(val_raw, val_model, val_states)
+            val_x, val_y_raw, val_baseline_raw, val_target_spatial = self._build_correction_dataset(
+                val_raw, val_model, val_states
             )
         else:
             val_x = val_y_raw = val_baseline_raw = val_target_spatial = None
@@ -1306,7 +1309,10 @@ class TrajectoryAwareCSForecaster:
                 verbose=self.verbose,
             ),
         )
-        if self.correction_spatial_loss_weight <= 0.0 and self.correction_rel_frob_loss_weight <= 0.0:
+        if (
+            self.correction_spatial_loss_weight <= 0.0
+            and self.correction_rel_frob_loss_weight <= 0.0
+        ):
             train_y = (train_y_raw - self._correction_target_mean) / self._correction_target_std
             if val_y_raw is not None:
                 val_y = (val_y_raw - self._correction_target_mean) / self._correction_target_std
@@ -1356,9 +1362,8 @@ class TrajectoryAwareCSForecaster:
             current_input_model,
             baseline_pred_model,
         )
-        corrected_raw = (
-            baseline_pred_raw
-            + self.correction_scale * self._predict_residual_raw(correction_features)
+        corrected_raw = baseline_pred_raw + self.correction_scale * self._predict_residual_raw(
+            correction_features
         )
         return baseline_pred_model, baseline_pred_raw, corrected_raw
 
@@ -1413,7 +1418,9 @@ class TrajectoryAwareCSForecaster:
 
         coeff_metrics = _compute_regression_metrics(target_raw, pred_raw)
         spatial_metrics = _compute_regression_metrics(spatial_target, spatial_pred)
-        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_spatial_pred)
+        baseline_spatial_metrics = _compute_regression_metrics(
+            spatial_target, baseline_spatial_pred
+        )
         return {
             "coeff_mse": coeff_metrics["mse"],
             "coeff_rmse": coeff_metrics["rmse"],
@@ -1440,7 +1447,7 @@ class TrajectoryAwareCSForecaster:
         states = np.asarray(test_states, dtype=np.float64)
         centered = states - self._spatial_mean
         coeffs_raw = self._states_to_coefficients(centered)
-        spatial_shape = states.shape[2:]
+        states.shape[2:]
         warmup = self.lstm_seq_length
 
         pred_coeff_all = []
@@ -1448,12 +1455,12 @@ class TrajectoryAwareCSForecaster:
         target_spatial_all = []
         for traj_idx in range(coeffs_raw.shape[0]):
             raw_history = [state.copy() for state in coeffs_raw[traj_idx, :warmup, :]]
-            baseline_raw_history = [
-                state.copy() for state in coeffs_raw[traj_idx, :warmup, :]
-            ]
+            baseline_raw_history = [state.copy() for state in coeffs_raw[traj_idx, :warmup, :]]
             model_history = [
                 state.copy()
-                for state in self._to_model_coeffs(coeffs_raw[traj_idx : traj_idx + 1, :warmup, :])[0]
+                for state in self._to_model_coeffs(coeffs_raw[traj_idx : traj_idx + 1, :warmup, :])[
+                    0
+                ]
             ]
             baseline_model_history = [state.copy() for state in model_history]
             target_traj = coeffs_raw[traj_idx, warmup:, :]
@@ -1489,7 +1496,9 @@ class TrajectoryAwareCSForecaster:
 
         coeff_metrics = _compute_regression_metrics(target_raw, pred_raw)
         spatial_metrics = _compute_regression_metrics(spatial_target, spatial_pred)
-        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_spatial_pred)
+        baseline_spatial_metrics = _compute_regression_metrics(
+            spatial_target, baseline_spatial_pred
+        )
         return {
             "coeff_mse": coeff_metrics["mse"],
             "coeff_rmse": coeff_metrics["rmse"],
@@ -1668,9 +1677,9 @@ def _fit_explicit_mlp(
 
         if verbose and (epoch + 1) % 50 == 0:
             if val_loader is not None:
-                print(f"Epoch {epoch+1}/{num_epochs} - train={train_loss:.6f} val={val_loss:.6f}")
+                print(f"Epoch {epoch + 1}/{num_epochs} - train={train_loss:.6f} val={val_loss:.6f}")
             else:
-                print(f"Epoch {epoch+1}/{num_epochs} - train={train_loss:.6f}")
+                print(f"Epoch {epoch + 1}/{num_epochs} - train={train_loss:.6f}")
 
 
 def _fit_explicit_mlp_with_mixed_loss(
@@ -1830,14 +1839,14 @@ def _fit_explicit_mlp_with_mixed_loss(
         if verbose and (epoch + 1) % 50 == 0:
             if val_loader is not None:
                 print(
-                    f"Epoch {epoch+1}/{num_epochs} - "
+                    f"Epoch {epoch + 1}/{num_epochs} - "
                     f"train_total={train_metrics['total']:.6f} "
                     f"train_spatial={train_metrics['spatial']:.6f} "
                     f"val_total={val_metrics['total']:.6f}"
                 )
             else:
                 print(
-                    f"Epoch {epoch+1}/{num_epochs} - "
+                    f"Epoch {epoch + 1}/{num_epochs} - "
                     f"train_total={train_metrics['total']:.6f} "
                     f"train_spatial={train_metrics['spatial']:.6f}"
                 )
@@ -1907,9 +1916,9 @@ def _fit_explicit_lstm(
 
         if verbose and (epoch + 1) % 50 == 0:
             if val_loader is not None:
-                print(f"Epoch {epoch+1}/{num_epochs} - train={train_loss:.6f} val={val_loss:.6f}")
+                print(f"Epoch {epoch + 1}/{num_epochs} - train={train_loss:.6f} val={val_loss:.6f}")
             else:
-                print(f"Epoch {epoch+1}/{num_epochs} - train={train_loss:.6f}")
+                print(f"Epoch {epoch + 1}/{num_epochs} - train={train_loss:.6f}")
 
 
 class TrajectoryAwareLatentForecaster:
@@ -1973,7 +1982,9 @@ class TrajectoryAwareLatentForecaster:
         self._latent_dim = latent_dim
         self._train_latent = temporal_coeffs.reshape(n_trajectories, steps, latent_dim)
         if self.config.latent_normalization:
-            self._latent_mean, self._latent_std = _compute_latent_standardization_stats(self._train_latent)
+            self._latent_mean, self._latent_std = _compute_latent_standardization_stats(
+                self._train_latent
+            )
         else:
             self._latent_mean = np.zeros(latent_dim, dtype=np.float64)
             self._latent_std = np.ones(latent_dim, dtype=np.float64)
@@ -1994,7 +2005,9 @@ class TrajectoryAwareLatentForecaster:
         return self
 
     def _to_model_latent(self, latent_series: np.ndarray) -> np.ndarray:
-        standardized = _apply_latent_standardization(latent_series, self._latent_mean, self._latent_std)
+        standardized = _apply_latent_standardization(
+            latent_series, self._latent_mean, self._latent_std
+        )
         if self._feature_mode == "latent":
             return standardized
         return _augment_latent_series_with_deltas(standardized)
@@ -2015,7 +2028,9 @@ class TrajectoryAwareLatentForecaster:
                 predict_deltas=self.config.delta_forecast,
             )
             model = LinearForecaster(
-                config=LinearForecasterConfig(device=self._adapter._device, verbose=self.config.verbose)
+                config=LinearForecasterConfig(
+                    device=self._adapter._device, verbose=self.config.verbose
+                )
             )
             model.M = np.linalg.pinv(x_pairs, rcond=1e-3) @ y_pairs
             model.trained = True
@@ -2082,7 +2097,7 @@ class TrajectoryAwareLatentForecaster:
                 device=self._adapter._device,
                 verbose=self.config.verbose,
             )
-            
+
             train_series, val_series = _split_trajectory_series_for_validation(
                 train_latent_model,
                 self.config.lstm_val_split,
@@ -2158,7 +2173,9 @@ class TrajectoryAwareLatentForecaster:
 
         spatial_shape = self._train_states.shape[2:]
         if self._matrix_basis is not None:
-            self._spatial_decoder_basis = self._matrix_basis.reshape(self._latent_dim, *spatial_shape)
+            self._spatial_decoder_basis = self._matrix_basis.reshape(
+                self._latent_dim, *spatial_shape
+            )
             return self._spatial_decoder_basis
 
         result = self._adapter._result
@@ -2168,7 +2185,9 @@ class TrajectoryAwareLatentForecaster:
         self._spatial_decoder_basis = basis
         return basis
 
-    def _reconstruct_latent_batch(self, latent_vectors: np.ndarray, spatial_shape: tuple[int, int]) -> np.ndarray:
+    def _reconstruct_latent_batch(
+        self, latent_vectors: np.ndarray, spatial_shape: tuple[int, int]
+    ) -> np.ndarray:
         vectors = np.asarray(latent_vectors, dtype=np.float64)
         if self._matrix_basis is not None:
             recon = (vectors @ self._matrix_basis).reshape(vectors.shape[0], *spatial_shape)
@@ -2209,12 +2228,20 @@ class TrajectoryAwareLatentForecaster:
         spatial_shape = states.shape[2:]
 
         if self.config.forecaster_type == "lstm":
-            windows, latent_target_model = build_lagged_windows(latent_model, self.config.lstm_seq_length)
-            latent_pred_model = np.stack([self._predict_next_model_latent(window) for window in windows], axis=0)
-            spatial_target = states[:, self.config.lstm_seq_length :, :, :].reshape(-1, *spatial_shape)
+            windows, latent_target_model = build_lagged_windows(
+                latent_model, self.config.lstm_seq_length
+            )
+            latent_pred_model = np.stack(
+                [self._predict_next_model_latent(window) for window in windows], axis=0
+            )
+            spatial_target = states[:, self.config.lstm_seq_length :, :, :].reshape(
+                -1, *spatial_shape
+            )
         else:
             latent_input, latent_target_model = build_one_step_pairs(latent_model)
-            latent_pred_model = np.stack([self._predict_next_model_latent(x) for x in latent_input], axis=0)
+            latent_pred_model = np.stack(
+                [self._predict_next_model_latent(x) for x in latent_input], axis=0
+            )
             spatial_target = states[:, 1:, :, :].reshape(-1, *spatial_shape)
 
         latent_target = self._from_model_latent(latent_target_model)
@@ -2422,14 +2449,19 @@ class TrajectoryAwareResidualCorrectedForecaster:
             current_model, _ = build_one_step_pairs(model_latent_series)
             last_states = current_model
             baseline_pred_model = np.stack(
-                [self._base_forecaster._predict_next_model_latent(state) for state in current_model],
+                [
+                    self._base_forecaster._predict_next_model_latent(state)
+                    for state in current_model
+                ],
                 axis=0,
             )
             target_raw = raw_latent_series[:, 1:, :].reshape(-1, raw_latent_series.shape[-1])
             target_spatial = spatial_states[:, 1:, :, :].reshape(-1, *spatial_states.shape[2:])
 
         baseline_pred_raw = self._base_forecaster._from_model_latent(baseline_pred_model)
-        correction_features = _build_t_plus_one_correction_features(last_states, baseline_pred_model)
+        correction_features = _build_t_plus_one_correction_features(
+            last_states, baseline_pred_model
+        )
         correction_targets = target_raw - baseline_pred_raw
         return correction_features, correction_targets, baseline_pred_raw, target_spatial
 
@@ -2444,18 +2476,22 @@ class TrajectoryAwareResidualCorrectedForecaster:
         raw_latent = np.asarray(self._base_forecaster._train_latent, dtype=np.float64)
         model_latent = self._base_forecaster._to_model_latent(raw_latent)
         spatial_states = np.asarray(self._base_forecaster._train_states, dtype=np.float64)
-        train_raw, train_model, train_states, val_raw, val_model, val_states = self._split_correction_trajectories(
-            raw_latent,
-            model_latent,
-            spatial_states,
+        train_raw, train_model, train_states, val_raw, val_model, val_states = (
+            self._split_correction_trajectories(
+                raw_latent,
+                model_latent,
+                spatial_states,
+            )
         )
-        train_x, train_y_raw, train_baseline_raw, train_target_spatial = self._build_correction_dataset(
-            train_raw,
-            train_model,
-            train_states,
+        train_x, train_y_raw, train_baseline_raw, train_target_spatial = (
+            self._build_correction_dataset(
+                train_raw,
+                train_model,
+                train_states,
+            )
         )
-        self._correction_target_mean, self._correction_target_std = _compute_vector_standardization_stats(
-            train_y_raw
+        self._correction_target_mean, self._correction_target_std = (
+            _compute_vector_standardization_stats(train_y_raw)
         )
 
         if val_raw is not None and val_model is not None and val_states is not None:
@@ -2565,8 +2601,12 @@ class TrajectoryAwareResidualCorrectedForecaster:
 
         if self.config.forecaster_type == "lstm":
             inputs, _ = build_lagged_windows(latent_model, self.config.lstm_seq_length)
-            target_raw = latent_raw[:, self.config.lstm_seq_length :, :].reshape(-1, latent_raw.shape[-1])
-            spatial_target = states[:, self.config.lstm_seq_length :, :, :].reshape(-1, *spatial_shape)
+            target_raw = latent_raw[:, self.config.lstm_seq_length :, :].reshape(
+                -1, latent_raw.shape[-1]
+            )
+            spatial_target = states[:, self.config.lstm_seq_length :, :, :].reshape(
+                -1, *spatial_shape
+            )
         else:
             inputs, _ = build_one_step_pairs(latent_model)
             target_raw = latent_raw[:, 1:, :].reshape(-1, latent_raw.shape[-1])
@@ -2592,7 +2632,9 @@ class TrajectoryAwareResidualCorrectedForecaster:
 
         latent_metrics = _compute_regression_metrics(target_raw, corrected_pred_raw)
         spatial_metrics = _compute_regression_metrics(spatial_target, corrected_pred_spatial)
-        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_pred_spatial)
+        baseline_spatial_metrics = _compute_regression_metrics(
+            spatial_target, baseline_pred_spatial
+        )
 
         return {
             "latent_mse": latent_metrics["mse"],
@@ -2672,7 +2714,9 @@ class TrajectoryAwareResidualCorrectedForecaster:
 
         latent_metrics = _compute_regression_metrics(latent_target, corrected_pred_raw)
         spatial_metrics = _compute_regression_metrics(spatial_target, corrected_pred_spatial)
-        baseline_spatial_metrics = _compute_regression_metrics(spatial_target, baseline_pred_spatial)
+        baseline_spatial_metrics = _compute_regression_metrics(
+            spatial_target, baseline_pred_spatial
+        )
 
         return {
             "latent_mse": latent_metrics["mse"],
@@ -2743,7 +2787,11 @@ class TrajectoryAwareMultiResolutionForecaster:
         )
 
     @staticmethod
-    def _reconstruct_states(level: TrajectoryAwareLatentForecaster, latent_states: np.ndarray, spatial_shape: tuple[int, int]) -> np.ndarray:
+    def _reconstruct_states(
+        level: TrajectoryAwareLatentForecaster,
+        latent_states: np.ndarray,
+        spatial_shape: tuple[int, int],
+    ) -> np.ndarray:
         flat = latent_states.reshape(-1, latent_states.shape[-1])
         recon = level._reconstruct_latent_batch(flat, spatial_shape)
         return recon.reshape(latent_states.shape[0], latent_states.shape[1], *spatial_shape)
@@ -2782,7 +2830,9 @@ class TrajectoryAwareMultiResolutionForecaster:
             pred += level_metrics["pred_spatial"]
 
             test_latent = level._project_states_to_latent(residual_test)
-            residual_test = residual_test - self._reconstruct_states(level, test_latent, states.shape[2:])
+            residual_test = residual_test - self._reconstruct_states(
+                level, test_latent, states.shape[2:]
+            )
 
         spatial_metrics = _compute_regression_metrics(target, pred)
         return {
@@ -2809,7 +2859,9 @@ class TrajectoryAwareMultiResolutionForecaster:
             pred += level_metrics["pred_spatial"]
 
             test_latent = level._project_states_to_latent(residual_test)
-            residual_test = residual_test - self._reconstruct_states(level, test_latent, states.shape[2:])
+            residual_test = residual_test - self._reconstruct_states(
+                level, test_latent, states.shape[2:]
+            )
 
         spatial_metrics = _compute_regression_metrics(target, pred)
         return {

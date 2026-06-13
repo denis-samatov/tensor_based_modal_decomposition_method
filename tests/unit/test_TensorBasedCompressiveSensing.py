@@ -1,10 +1,13 @@
 import unittest
+
 import torch
+
 from TBMD.core.reconstruction.tensor_compressive_sensing import (
-    TensorCompressiveSensing,
     CompressiveSensingConfig,
     ExtensionCompressiveSensingConfig,
+    TensorCompressiveSensing,
 )
+
 
 class TestTensorBasedCompressiveSensing(unittest.TestCase):
     def setUp(self):
@@ -30,6 +33,7 @@ class TestTensorBasedCompressiveSensing(unittest.TestCase):
         x_hat, _ = self.solver.solve()
         error = self.solver.reconstruction_error(x_hat)
         self.assertIsInstance(error, float)
+
 
 if __name__ == "__main__":
     unittest.main()

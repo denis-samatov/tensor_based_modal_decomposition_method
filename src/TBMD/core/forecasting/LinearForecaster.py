@@ -1,10 +1,11 @@
-import os
 import json
-import numpy as np
-import matplotlib.pyplot as plt
-import torch
+import os
 from functools import wraps
-from typing import Dict, Tuple, List, Optional, Union, Any
+from typing import Dict, List, Optional, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from sklearn.metrics import r2_score
 
 # Import config
@@ -22,13 +23,14 @@ def with_torch_conversion(func):
     2. Runs the function.
     3. Converts returned PyTorch tensors back to numpy arrays.
     """
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if not getattr(self, 'use_torch', False):
+        if not getattr(self, "use_torch", False):
             return func(self, *args, **kwargs)
 
-        import torch
         import numpy as np
+        import torch
 
         # Convert args to tensors
         new_args = []
@@ -57,9 +59,14 @@ def with_torch_conversion(func):
         if isinstance(result, torch.Tensor):
             return result.detach().cpu().numpy()
         elif isinstance(result, tuple):
-            return tuple(r.detach().cpu().numpy() if isinstance(r, torch.Tensor) else r for r in result)
+            return tuple(
+                r.detach().cpu().numpy() if isinstance(r, torch.Tensor) else r for r in result
+            )
         elif isinstance(result, dict):
-            return {k: (v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v) for k, v in result.items()}
+            return {
+                k: (v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v)
+                for k, v in result.items()
+            }
         return result
 
     return wrapper
@@ -78,9 +85,13 @@ class LinearForecaster:
             (e.g., 'cpu', 'cuda', 'mps'). If `None`, the device is automatically
             selected.
     """
-    
-    def __init__(self, use_torch: bool = False, device: str = None,
-                 config: Optional[LinearForecasterConfig] = None):
+
+    def __init__(
+        self,
+        use_torch: bool = False,
+        device: str = None,
+        config: Optional[LinearForecasterConfig] = None,
+    ):
         """Initializes the LinearForecaster.
 
         Args:
@@ -96,28 +107,28 @@ class LinearForecaster:
             # Old API: create config from parameters
             if LinearForecasterConfig is None:
                 raise ImportError("LinearForecasterConfig not available.")
-            
-            self.config = LinearForecasterConfig(
-                device=device
-            )
+
+            self.config = LinearForecasterConfig(device=device)
             if use_torch is not None:
                 # LinearForecasterConfig doesn't have use_torch, but we can infer backend
-                self.config.backend = 'pytorch' if use_torch else 'numpy'
-        
+                self.config.backend = "pytorch" if use_torch else "numpy"
+
         self.M = None
         self.trained = False
-        self.use_torch = (self.config.backend == 'pytorch')
+        self.use_torch = self.config.backend == "pytorch"
         self.metrics = {}
-        
+
         if self.use_torch:
             if self.config.device is None:
-                self.device = torch.device('cuda' if torch.cuda.is_available() else 
-                                      ('mps' if torch.backends.mps.is_available() else 'cpu'))
+                self.device = torch.device(
+                    "cuda"
+                    if torch.cuda.is_available()
+                    else ("mps" if torch.backends.mps.is_available() else "cpu")
+                )
             else:
                 self.device = torch.device(self.config.device)
             if self.config.verbose:
                 print(f"Using device: {self.device}")
-    
 
     def _calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
         """Helper method to calculate common evaluation metrics.
@@ -130,8 +141,10 @@ class LinearForecaster:
             Dict[str, float]: A dictionary containing mse, rmse, rel_frob_err, and r2.
         """
         import numpy as np
+
         if self.use_torch:
             import torch
+
             if isinstance(y_true, torch.Tensor):
                 y_true = y_true.detach().cpu().numpy()
             if isinstance(y_pred, torch.Tensor):
@@ -139,13 +152,13 @@ class LinearForecaster:
 
         mse = np.mean((y_true - y_pred) ** 2)
         rmse = np.sqrt(mse)
-        rel_frob_err = np.linalg.norm(y_true - y_pred, 'fro') / np.linalg.norm(y_true, 'fro')
-        r2 = r2_score(y_true, y_pred, multioutput='uniform_average')
+        rel_frob_err = np.linalg.norm(y_true - y_pred, "fro") / np.linalg.norm(y_true, "fro")
+        r2 = r2_score(y_true, y_pred, multioutput="uniform_average")
         return {
-            'mse': float(mse),
-            'rmse': float(rmse),
-            'rel_frob_err': float(rel_frob_err),
-            'r2': float(r2)
+            "mse": float(mse),
+            "rmse": float(rmse),
+            "rel_frob_err": float(rel_frob_err),
+            "r2": float(r2),
         }
 
     @with_torch_conversion
@@ -164,40 +177,44 @@ class LinearForecaster:
         """
         if verbose:
             print("Training linear forecaster...")
-        
+
         # Create input-output pairs
-        X_input = x_history[:-1, :]   # (T-1, W)
-        
-        if getattr(self.config, 'delta_forecast', False):
+        X_input = x_history[:-1, :]  # (T-1, W)
+
+        if getattr(self.config, "delta_forecast", False):
             X_output = x_history[1:, :] - X_input
         else:
-            X_output = x_history[1:, :]   # (T-1, W)
-        
+            X_output = x_history[1:, :]  # (T-1, W)
+
         if self.use_torch:
             import torch
+
             # Solve the linear system X_input * M = X_output for M
             self.M = torch.linalg.lstsq(X_input, X_output).solution
         else:
             import numpy as np
+
             # Solve the linear system X_input * M = X_output for M using numpy
             self.M, _, _, _ = np.linalg.lstsq(X_input, X_output, rcond=None)
-            
+
         # Calculate predictions for evaluation
         X_output_est = X_input @ self.M
 
         # Calculate metrics
         metrics = self._calculate_metrics(X_output, X_output_est)
-        
+
         # Store metrics
         self.metrics = metrics
-        
+
         self.trained = True
-        
+
         if verbose:
-            print(f"Training complete. RMSE: {metrics['rmse']:.5f}, Rel. Frob. Err: {metrics['rel_frob_err']:.5f}, R²: {metrics['r2']:.5f}")
-        
+            print(
+                f"Training complete. RMSE: {metrics['rmse']:.5f}, Rel. Frob. Err: {metrics['rel_frob_err']:.5f}, R²: {metrics['r2']:.5f}"
+            )
+
         return self.metrics
-    
+
     @with_torch_conversion
     def predict_next(self, x_current: np.ndarray) -> np.ndarray:
         """Predicts the next state.
@@ -210,10 +227,10 @@ class LinearForecaster:
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
-        
+
         # The decorator handles tensor conversion
         return x_current @ self.M
-    
+
     @with_torch_conversion
     def predict_sequence(self, x_start: np.ndarray, n_steps: int) -> np.ndarray:
         """Predicts a sequence of future states.
@@ -227,12 +244,16 @@ class LinearForecaster:
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before making predictions.")
-        
+
         if self.use_torch:
             import torch
-            sequence = torch.zeros((n_steps + 1, x_start.shape[0]), dtype=torch.float32, device=self.device)
+
+            sequence = torch.zeros(
+                (n_steps + 1, x_start.shape[0]), dtype=torch.float32, device=self.device
+            )
         else:
             import numpy as np
+
             sequence = np.zeros((n_steps + 1, x_start.shape[0]), dtype=x_start.dtype)
 
         sequence[0] = x_start
@@ -242,11 +263,11 @@ class LinearForecaster:
         x_current = x_start
         for i in range(n_steps):
             x_next = x_current @ self.M
-            sequence[i+1] = x_next
+            sequence[i + 1] = x_next
             x_current = x_next
 
         return sequence[1:]
-    
+
     @with_torch_conversion
     def evaluate(self, x_history: np.ndarray) -> Dict[str, float]:
         """Evaluates the model on historical data.
@@ -259,28 +280,30 @@ class LinearForecaster:
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before evaluating.")
-        
+
         # Create input-output pairs
-        X_input = x_history[:-1, :]   # (T-1, W)
-        
-        if getattr(self.config, 'delta_forecast', False):
+        X_input = x_history[:-1, :]  # (T-1, W)
+
+        if getattr(self.config, "delta_forecast", False):
             X_output = x_history[1:, :] - X_input
         else:
-            X_output = x_history[1:, :]   # (T-1, W)
-        
+            X_output = x_history[1:, :]  # (T-1, W)
+
         # Make predictions using device-agnostic operation
         X_output_est = X_input @ self.M
 
         # Calculate metrics
         metrics = self._calculate_metrics(X_output, X_output_est)
-        
+
         return metrics
-    
-    def plot_prediction_comparison(self, 
-                                  x_history: np.ndarray, 
-                                  feature_indices: List[int] = None, 
-                                  n_steps_ahead: int = 10,
-                                  figsize: Tuple[int, int] = (15, 8)) -> None:
+
+    def plot_prediction_comparison(
+        self,
+        x_history: np.ndarray,
+        feature_indices: List[int] = None,
+        n_steps_ahead: int = 10,
+        figsize: Tuple[int, int] = (15, 8),
+    ) -> None:
         """Plots a comparison between actual and predicted values.
 
         Args:
@@ -294,49 +317,49 @@ class LinearForecaster:
         """
         if not self.trained:
             raise ValueError("Model not trained. Call train() before plotting predictions.")
-        
+
         # If no feature indices provided, use the first 3 (or all if fewer)
         if feature_indices is None:
             feature_indices = list(range(min(3, x_history.shape[1])))
-        
+
         # Split data into training and testing portions
         train_data = x_history[:-n_steps_ahead]
         test_data = x_history[-n_steps_ahead:]
-        
+
         # Predict the future steps
         last_train_point = train_data[-1]
         predicted_sequence = self.predict_sequence(last_train_point, n_steps_ahead)
-        
+
         # Create the plot
         plt.figure(figsize=figsize)
-        
+
         # Generate x-axis points
         x_train = np.arange(len(train_data))
         x_test = np.arange(len(train_data), len(x_history))
         x_pred = np.arange(len(train_data), len(x_history))
-        
+
         for idx, feature_idx in enumerate(feature_indices):
-            plt.subplot(len(feature_indices), 1, idx+1)
-            
+            plt.subplot(len(feature_indices), 1, idx + 1)
+
             # Plot training data
-            plt.plot(x_train, train_data[:, feature_idx], 'b-', label='Training Data')
-            
+            plt.plot(x_train, train_data[:, feature_idx], "b-", label="Training Data")
+
             # Plot test data
-            plt.plot(x_test, test_data[:, feature_idx], 'g-', label='Actual Future')
-            
+            plt.plot(x_test, test_data[:, feature_idx], "g-", label="Actual Future")
+
             # Plot predictions
-            plt.plot(x_pred, predicted_sequence[:, feature_idx], 'r--', label='Predicted Future')
-            
-            plt.title(f'Feature {feature_idx}')
-            plt.ylabel('Value')
+            plt.plot(x_pred, predicted_sequence[:, feature_idx], "r--", label="Predicted Future")
+
+            plt.title(f"Feature {feature_idx}")
+            plt.ylabel("Value")
             if idx == len(feature_indices) - 1:
-                plt.xlabel('Time Step')
+                plt.xlabel("Time Step")
             plt.legend()
             plt.grid(True)
-        
+
         plt.tight_layout()
         plt.show()
-    
+
     def save_model(self, path: str) -> None:
         """Saves the model to a file.
 
@@ -352,25 +375,21 @@ class LinearForecaster:
         dir_path = os.path.dirname(os.path.abspath(path))
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
-        
+
         # Create metadata
-        metadata = {
-            'trained': self.trained,
-            'metrics': self.metrics,
-            'use_torch': self.use_torch
-        }
-        
+        metadata = {"trained": self.trained, "metrics": self.metrics, "use_torch": self.use_torch}
+
         # Save using numpy
         # Use np.savez to save tensors and JSON-serialized metadata
         # This avoids using pickles and improves security
         np.savez(
             path,
             M=self.M.detach().cpu().numpy() if self.use_torch else self.M,
-            metadata=json.dumps(metadata)
+            metadata=json.dumps(metadata),
         )
-        
+
         print(f"Model saved to {path}")
-    
+
     def load_model(self, path: str) -> None:
         """Loads the model from a file.
 
@@ -386,7 +405,7 @@ class LinearForecaster:
         # Load the saved model without allowing pickles for security
         with np.load(path, allow_pickle=False) as loaded:
             # Restore metadata
-            metadata_raw = loaded['metadata']
+            metadata_raw = loaded["metadata"]
             # Handle both 0-d and 1-d arrays for robustness
             if metadata_raw.ndim == 0:
                 metadata_json = str(metadata_raw)
@@ -395,18 +414,21 @@ class LinearForecaster:
 
             metadata = json.loads(metadata_json)
 
-            self.trained = metadata['trained']
-            self.metrics = metadata['metrics']
-            self.use_torch = metadata['use_torch']
+            self.trained = metadata["trained"]
+            self.metrics = metadata["metrics"]
+            self.use_torch = metadata["use_torch"]
 
             # Restore M, converting to tensor if needed
-            M_data = loaded['M']
+            M_data = loaded["M"]
             if self.use_torch:
-                if not hasattr(self, 'device'):
-                    self.device = torch.device('cuda' if torch.cuda.is_available() else
-                                          ('mps' if torch.backends.mps.is_available() else 'cpu'))
+                if not hasattr(self, "device"):
+                    self.device = torch.device(
+                        "cuda"
+                        if torch.cuda.is_available()
+                        else ("mps" if torch.backends.mps.is_available() else "cpu")
+                    )
                 self.M = torch.tensor(M_data, dtype=torch.float32, device=self.device)
             else:
                 self.M = M_data
-        
+
         print(f"Model loaded from {path}")

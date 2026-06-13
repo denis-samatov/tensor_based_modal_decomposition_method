@@ -1,15 +1,16 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
 
 def plot_two_matrices(
     X,
     Y,
     zmin: float = None,
     zmax: float = None,
-    cmap: str = 'viridis',
+    cmap: str = "viridis",
     figsize: tuple = (12, 6),
-    titles: tuple = ('Matrix X', 'Matrix Y'),
-    show_colorbar: bool = True
+    titles: tuple = ("Matrix X", "Matrix Y"),
+    show_colorbar: bool = True,
 ):
     """
     Plot two 2D arrays or tensors side by side with a shared colormap scale.
@@ -37,9 +38,10 @@ def plot_two_matrices(
     -------
     plot_two_matrices(X, Y, zmin=0.1, zmax=1.0, cmap='plasma', figsize=(10, 5), titles=('Input', 'Output'))
     """
+
     def _get_nonzero_min(frame):
         """Get the minimum non-zero value from a tensor or array."""
-        if hasattr(frame, 'numpy'):
+        if hasattr(frame, "numpy"):
             non_zero = frame[frame > 0]  # Only positive values
             return non_zero.min().item() if non_zero.numel() > 0 else None
         else:
@@ -48,7 +50,7 @@ def plot_two_matrices(
 
     def _get_max(frame):
         """Get the maximum value from a tensor or array."""
-        return frame.max().item() if hasattr(frame, 'numpy') else frame.max()
+        return frame.max().item() if hasattr(frame, "numpy") else frame.max()
 
     # Compute shared vmin and vmax across both matrices
     if zmin is not None:
@@ -57,7 +59,7 @@ def plot_two_matrices(
         # Find minimum non-zero value across both matrices
         min_X = _get_nonzero_min(X)
         min_Y = _get_nonzero_min(Y)
-        
+
         # Select the smallest non-zero value between both matrices
         if min_X is not None and min_Y is not None:
             vmin = min(min_X, min_Y)
@@ -68,12 +70,12 @@ def plot_two_matrices(
         else:
             # If no positive values found, default to 0
             vmin = 0
-            
+
     if zmax is not None:
         vmax = zmax
     else:
         vmax = max(_get_max(X), _get_max(Y))
-    
+
     # Ensure vmax > vmin, especially if vmin is 0
     if vmax <= vmin:
         if vmin == 0:
@@ -85,13 +87,13 @@ def plot_two_matrices(
 
     for ax, frame, title in zip(axes, (X, Y), titles):
         # Convert to numpy if it's a tensor
-        array = frame.cpu().numpy() if hasattr(frame, 'cpu') else np.array(frame)
-        
+        array = frame.cpu().numpy() if hasattr(frame, "cpu") else np.array(frame)
+
         im = ax.imshow(array, cmap=cmap, vmin=vmin, vmax=vmax)
-        
+
         if show_colorbar:
             plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-            
+
         ax.set_title(title)
 
     plt.tight_layout()
@@ -116,7 +118,7 @@ def plot_original_reconstructed_diff(
 ):
     """
     Visualise *original*, *reconstructed* matrices and their difference.
-    
+
     Generic function for displaying original and reconstructed matrices and
     their difference. Supports both combined and separate output.
 
@@ -160,14 +162,14 @@ def plot_original_reconstructed_diff(
     --------
     >>> # Combined figure (default)
     >>> plot_original_reconstructed_diff(orig, rec)
-    
+
     >>> # Separate figures with custom labels
     >>> plot_original_reconstructed_diff(
     ...     orig, rec,
     ...     separate_figures=True,
     ...     colorbar_labels=("Pressure, psi", "Pressure, psi", "Pressure diff, psi")
     ... )
-    
+
     >>> # Get figures for saving
     >>> figs = plot_original_reconstructed_diff(orig, rec, separate_figures=True, return_figures=True)
     >>> figs[0].savefig("original.png", dpi=300, bbox_inches='tight')
@@ -224,7 +226,7 @@ def plot_original_reconstructed_diff(
     # Common vmin/vmax for original & reconstructed
     pos_min_orig = _safe_positive_min(orig_np)
     pos_min_rec = _safe_positive_min(rec_np)
-    
+
     if pos_min_orig is not None and pos_min_rec is not None:
         vmin_common = min(pos_min_orig, pos_min_rec)
     elif pos_min_orig is not None:
@@ -235,7 +237,7 @@ def plot_original_reconstructed_diff(
         vmin_common = float(min(orig_np.min(), rec_np.min()))
 
     vmax_common = float(max(orig_np.max(), rec_np.max()))
-    
+
     # Ensure vmax > vmin
     if vmax_common <= vmin_common:
         vmax_common = 1.0 if vmin_common == 0 else vmin_common * 1.1
@@ -255,42 +257,48 @@ def plot_original_reconstructed_diff(
         # Create three separate figures
         panel_width = figsize[0] / 3
         panel_height = figsize[1]
-        
+
         figures = []
         data_configs = [
             (orig_np, common_cmap, vmin_common, vmax_common, titles[0], colorbar_labels[0]),
             (rec_np, common_cmap, vmin_common, vmax_common, titles[1], colorbar_labels[1]),
             (diff_np, diff_cmap, vmin_diff, vmax_diff, titles[2], colorbar_labels[2]),
         ]
-        
+
         for data, cmap, vmin, vmax, title, cbar_label in data_configs:
             fig, ax = plt.subplots(figsize=(panel_width, panel_height))
-            im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal')
-            ax.axis('off')
+            im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
+            ax.axis("off")
             if title:
                 ax.set_title(title, fontsize=colorbar_fontsize + 2)
             if show_colorbar:
                 _add_colorbar(ax, im, label=cbar_label, fontsize=colorbar_fontsize)
             fig.tight_layout()
             figures.append(fig)
-            
+
             if not return_figures:
                 plt.show()
-        
+
         if return_figures:
             return tuple(figures)
-    
+
     else:
         # Combined figure with 3 panels
         fig, axes = plt.subplots(1, 3, figsize=figsize)
         fig.subplots_adjust(wspace=wspace, hspace=hspace)
 
-        im0 = axes[0].imshow(orig_np, cmap=common_cmap, vmin=vmin_common, vmax=vmax_common, aspect='equal')
-        im1 = axes[1].imshow(rec_np, cmap=common_cmap, vmin=vmin_common, vmax=vmax_common, aspect='equal')
-        im2 = axes[2].imshow(diff_np, cmap=diff_cmap, vmin=vmin_diff, vmax=vmax_diff, aspect='equal')
+        im0 = axes[0].imshow(
+            orig_np, cmap=common_cmap, vmin=vmin_common, vmax=vmax_common, aspect="equal"
+        )
+        im1 = axes[1].imshow(
+            rec_np, cmap=common_cmap, vmin=vmin_common, vmax=vmax_common, aspect="equal"
+        )
+        im2 = axes[2].imshow(
+            diff_np, cmap=diff_cmap, vmin=vmin_diff, vmax=vmax_diff, aspect="equal"
+        )
 
         for ax, title in zip(axes, titles):
-            ax.axis('off')
+            ax.axis("off")
             if title:
                 ax.set_title(title, fontsize=colorbar_fontsize + 2)
 
@@ -299,7 +307,7 @@ def plot_original_reconstructed_diff(
                 _add_colorbar(ax, im, label=label, fontsize=colorbar_fontsize)
 
         fig.tight_layout()
-        
+
         if return_figures:
             return fig
         else:

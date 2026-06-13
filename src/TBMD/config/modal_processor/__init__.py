@@ -1,12 +1,15 @@
 """Configuration for modal tensor processing."""
+
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
 import torch
 
 
 class ProcessingStrategy(Enum):
     """Strategy for processing modal tensors."""
+
     SEQUENTIAL = "sequential"
     BATCH = "batch"
     MEMORY_EFFICIENT = "memory_efficient"
@@ -15,7 +18,8 @@ class ProcessingStrategy(Enum):
 @dataclass
 class ModalProcessorConfig:
     """Configuration for modal tensor processing."""
-    device: str = 'cpu'
+
+    device: str = "cpu"
     return_numpy: bool = True
     processing_strategy: ProcessingStrategy = ProcessingStrategy.BATCH
     batch_size: Optional[int] = None
@@ -23,7 +27,7 @@ class ModalProcessorConfig:
     enable_progress_logging: bool = True
     validation_enabled: bool = True
     numerical_precision: torch.dtype = torch.float32
-    
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         if self.batch_size is not None and self.batch_size <= 0:

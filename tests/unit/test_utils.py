@@ -1,13 +1,16 @@
 import unittest
-import torch
+
 import numpy as np
+import torch
+
 from TBMD.core.utils.misc import (
-    to_torch_tensor,
+    build_wells_matrix,
+    build_Y_matrices,
     get_torch_device,
     reconstruct_tensor,
-    build_Y_matrices,
-    build_wells_matrix,
+    to_torch_tensor,
 )
+
 
 class TestUtils(unittest.TestCase):
     def test_to_torch_tensor(self):
@@ -63,6 +66,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(wells_matrix["subject1"][1, 1], 1)
         self.assertEqual(wells_matrix["subject1"][2, 2], 1)
         self.assertEqual(torch.sum(wells_matrix["subject1"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

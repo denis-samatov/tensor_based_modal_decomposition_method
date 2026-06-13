@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib
+
 matplotlib.use("Agg")
+import imageio.v2 as imageio
 import matplotlib.pyplot as plt
 import numpy as np
-import imageio.v2 as imageio
 
 
 def split_train_dev_trajectories(
@@ -100,7 +101,7 @@ def compute_spatial_metrics(target: np.ndarray, pred: np.ndarray) -> dict[str, f
 
     diff = pred_arr - target_arr
     abs_diff = np.abs(diff)
-    mse = float(np.mean(diff ** 2))
+    mse = float(np.mean(diff**2))
     rmse = float(np.sqrt(mse))
     mae = float(np.mean(abs_diff))
     max_abs_err = float(np.max(abs_diff))
@@ -116,7 +117,7 @@ def compute_spatial_metrics(target: np.ndarray, pred: np.ndarray) -> dict[str, f
     diff_2d = diff.reshape(diff.shape[0], -1)
     target_norms = np.linalg.norm(target_2d, axis=1)
     diff_norms = np.linalg.norm(diff_2d, axis=1)
-    per_sample_rmse = np.sqrt(np.mean(diff_2d ** 2, axis=1))
+    per_sample_rmse = np.sqrt(np.mean(diff_2d**2, axis=1))
     per_sample_rel_frob = diff_norms / np.maximum(target_norms, 1e-12)
 
     return {
@@ -211,14 +212,13 @@ def compute_common_horizon_diagnostics(
     target_flat_per_traj = target_common.reshape(n_trajectories, -1)
     diff_flat_per_traj = diff.reshape(n_trajectories, -1)
 
-    per_step_rmse = np.sqrt(np.mean(flat_per_step ** 2, axis=(0, 2)))
+    per_step_rmse = np.sqrt(np.mean(flat_per_step**2, axis=(0, 2)))
     per_step_mae = np.mean(abs_flat_per_step, axis=(0, 2))
     per_step_max_abs_err = np.max(abs_flat_per_step, axis=(0, 2))
-    per_trajectory_rmse = np.sqrt(np.mean(diff_flat_per_traj ** 2, axis=1))
+    per_trajectory_rmse = np.sqrt(np.mean(diff_flat_per_traj**2, axis=1))
     per_trajectory_mae = np.mean(np.abs(diff_flat_per_traj), axis=1)
-    per_trajectory_rel_frob = (
-        np.linalg.norm(diff_flat_per_traj, axis=1)
-        / np.maximum(np.linalg.norm(target_flat_per_traj, axis=1), 1e-12)
+    per_trajectory_rel_frob = np.linalg.norm(diff_flat_per_traj, axis=1) / np.maximum(
+        np.linalg.norm(target_flat_per_traj, axis=1), 1e-12
     )
 
     worst_order = np.argsort(per_trajectory_rmse)[::-1]
@@ -403,7 +403,9 @@ def save_t_plus_one_diagnostics_sheet(
     baseline = np.asarray(baseline_frames, dtype=np.float64)
     corrected = np.asarray(corrected_frames, dtype=np.float64)
     if target.shape != baseline.shape or target.shape != corrected.shape:
-        raise ValueError("target_frames, baseline_frames, and corrected_frames must have identical shapes")
+        raise ValueError(
+            "target_frames, baseline_frames, and corrected_frames must have identical shapes"
+        )
     if target.ndim != 3:
         raise ValueError("Expected frame arrays with shape `(N, H, W)`")
     if target.shape[0] != len(step_indices):

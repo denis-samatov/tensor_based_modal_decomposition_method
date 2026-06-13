@@ -14,18 +14,17 @@ The code supports **NumPy** arrays and **PyTorch** tensors, arbitrary spatial
 dimensions (2-D, 3-D, …) and optional foreground masks.
 """
 
-from typing import Optional, Tuple, Union
-
 import logging
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 from skimage.metrics import structural_similarity as _ssim
 
-
 logger = logging.getLogger(__name__)
 
 ArrayLike = Union[np.ndarray, torch.Tensor]
+
 
 def _to_numpy(a: ArrayLike) -> np.ndarray:
     """Detaches a torch tensor and converts it to a NumPy array.
@@ -40,6 +39,7 @@ def _to_numpy(a: ArrayLike) -> np.ndarray:
         a = a.detach().cpu()
     return np.asarray(a)
 
+
 def _supports_mask() -> bool:
     """Checks if the installed `skimage.ssims` supports the `mask` keyword.
 
@@ -49,6 +49,7 @@ def _supports_mask() -> bool:
     from inspect import signature
 
     return "mask" in signature(_ssim).parameters
+
 
 def compute_metrics(
     A_rec: ArrayLike,
@@ -112,7 +113,7 @@ def compute_metrics(
     err_norm = np.inf if denom == 0 else float(np.sqrt(np.sum(diff_fg**2)) / np.sqrt(denom))
 
     # -- SSIM ---------------------------------------------------------------
-    C1_paper, C2_paper = 0.012, 0.032          # (K₁L)² and (K₂L)² in eq. 41
+    C1_paper, C2_paper = 0.012, 0.032  # (K₁L)² and (K₂L)² in eq. 41
     data_range = float(A_ref.max() - A_ref.min())
     if data_range < 1e-12:
         ssim_val = 1.0 if np.allclose(A_rec, A_ref) else 0.0
@@ -120,7 +121,7 @@ def compute_metrics(
         K1 = np.sqrt(C1_paper) / data_range
         K2 = np.sqrt(C2_paper) / data_range
 
-        if A_ref.ndim == 2:                        # single-channel
+        if A_ref.ndim == 2:  # single-channel
             win_size = min(7, min(A_ref.shape))
             if win_size % 2 == 0:
                 win_size -= 1
@@ -137,7 +138,7 @@ def compute_metrics(
             )
             if not _supports_mask() and mask is not None:
                 logger.warning("SSIM mask ignored: upgrade scikit-image ≥ 0.20 for masked SSIM")
-        else:                                      # channel-last ≥ 3-D
+        else:  # channel-last ≥ 3-D
             ssim_vals = []
             for c in range(A_ref.shape[-1]):
                 this_mask = mask[..., c] if mask.ndim == A_ref.ndim else mask
@@ -168,13 +169,10 @@ def compute_metrics(
     return err_norm, mse, ssim_val, psnr
 
 
-
 # import numpy as np
 # import torch
 # from skimage.metrics import structural_similarity
 # from typing import Union, Tuple, Optional
-
-
 
 
 # def calculate_error_and_ssim(
@@ -242,7 +240,7 @@ def compute_metrics(
 #     # --- Frobenius error on the foreground (according to Equation 40 of the paper) ---
 #     # error_i = ||A_re_i - A_i||_F / ||A_i||_F
 #     # Applied to elements specified by the mask.
-    
+
 #     # Numerator: norm of the difference on the mask
 #     diff_on_mask = A_re[mask] - A[mask]
 #     numerator_error_sq_sum = np.sum(np.square(diff_on_mask))
@@ -289,7 +287,7 @@ def compute_metrics(
 #         # Calculate K1 and K2 for skimage.ssim to match C1_paper and C2_paper
 #         K1 = np.sqrt(C1_paper) / data_range
 #         K2 = np.sqrt(C2_paper) / data_range
-        
+
 #         # Make sure K1 and K2 are not too large if data_range is very small but not zero.
 #         # This can happen if C1_paper, C2_paper are not intended for such scaling.
 #         # However, we follow the formula.
@@ -348,10 +346,10 @@ def compute_metrics(
 #     # PSNR = 20 * log10(MAX_I / sqrt(MSE))
 #     # where MAX_I is the maximum possible pixel value and MSE is Mean Squared Error
 #     # We calculate PSNR only for foreground voxels (using the mask)
-    
+
 #     # Calculate MSE on the masked region (foreground only)
 #     mse_on_mask = float(np.mean(np.square(diff_on_mask)))
-    
+
 #     if mse_on_mask == 0:
 #         # Perfect reconstruction - PSNR is infinite
 #         psnr_value = np.inf
@@ -359,7 +357,7 @@ def compute_metrics(
 #         # Maximum possible pixel value is determined from the data range of the reference image
 #         # We use the global data_range calculated earlier for consistency with SSIM
 #         max_pixel_value = data_range
-        
+
 #         # Handle edge case where data_range is very small
 #         if max_pixel_value < 1e-6:
 #             # If there's no variation in the reference image, PSNR is not meaningful
