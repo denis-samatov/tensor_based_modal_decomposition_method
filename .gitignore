@@ -94,3 +94,14 @@ article/
 findings.md
 progress.md
 task_plan.md
+
+# Prediction of the system's next steps (forecasting reports, evaluations, and notebooks)
+all_models_report.md
+walkthrough.md
+*report*.md
+*eval*.md
+*eval*.json
+*eval*.csv
+notebooks/tutorials/forecast_next_state.ipynb
+notebooks/tutorials/digital_twin.ipynb
+notebooks/experiments/exp_tbmd_4_digital_twin.ipynb
