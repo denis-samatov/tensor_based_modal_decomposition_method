@@ -105,3 +105,18 @@ walkthrough.md
 notebooks/tutorials/forecast_next_state.ipynb
 notebooks/tutorials/digital_twin.ipynb
 notebooks/experiments/exp_tbmd_4_digital_twin.ipynb
+
+# Additional prediction and digital twin files
+docs/examples/brugge_digital_twin_analysis.md
+docs/guides/digital_twin.md
+docs/tutorials/digital_twin_tutorial.md
+examples/02_navier_stokes_optimal_forecasting.py
+examples/digital_twin/
+scripts/evaluation/
+scripts/tuning/*forecasting*
+src/TBMD/config/digital_twin/
+src/TBMD/config/forecaster/
+src/TBMD/core/forecasting/
+src/TBMD/digital_twin/
+src/TBMD/experiments/*forecasting*
+tests/unit/test_digital_twin.py
