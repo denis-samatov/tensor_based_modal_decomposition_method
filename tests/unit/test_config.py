@@ -6,7 +6,7 @@ import torch
 from TBMD.config import (
     BaseConfig,
     DecompositionConfig,
-    DigitalTwinConfig,
+
     GeometryAwareDecompositionConfig,
     ReconstructionConfig,
     SensorPlacementConfig,
@@ -113,23 +113,4 @@ class TestReconstructionConfig:
         assert config.convergence_eps == 1e-3
 
 
-class TestDigitalTwinConfig:
-    """Tests for DigitalTwinConfig."""
 
-    def test_valid_configuration(self):
-        """Test valid configuration."""
-        config = DigitalTwinConfig(n_spatial_modes=40, n_sensors=30, forecaster_type="lstm")
-        assert config.n_spatial_modes == 40
-        assert config.n_sensors == 30
-        assert config.forecaster_type == "lstm"
-
-    def test_train_test_split_validation(self):
-        """Test train/test split validation."""
-        with pytest.raises(ValueError, match="train_test_split"):
-            DigitalTwinConfig(train_test_split=1.5)
-
-    def test_forecaster_config_defaults(self):
-        """Test default forecaster values."""
-        config = DigitalTwinConfig()
-        assert "hidden_size" in config.forecaster_config
-        assert "learning_rate" in config.forecaster_config

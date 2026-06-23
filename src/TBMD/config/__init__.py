@@ -1,92 +1,32 @@
-"""TBMD configuration module."""
+"""
+Configuration objects for TBMD module.
+"""
 
-from .base import BaseConfig
-from .decomposition import DecompositionConfig, GeometryAwareDecompositionConfig
-from .digital_twin import DigitalTwinConfig
-from .forecaster import (
-    ForecasterConfig,
-    LatentModalForecasterConfig,
-    LinearForecasterConfig,
-    LSTMForecasterConfig,
-    MLPForecasterConfig,
-    MultiResolutionTBMDConfig,
-    create_forecaster_config_from_dict,
+from .core import (
+    BaseConfig,
+    TBMDConfig,
+    SensorPlacementConfig,
+    FullPipelineConfig,
 )
-from .modal_processor import ModalProcessorConfig, ProcessingStrategy
-from .reconstruction import (
-    CompressiveSensingConfig,
-    CSConfig,
-    ExtensionCompressiveSensingConfig,
-    GeometryAwareReconstructionConfig,
-    ReconstructionConfig,
-    TensorCSConfig,
+from .factory import (
+    create_tbmd_config_from_dict,
+    create_sensor_placement_config_from_dict,
+    create_pipeline_config_from_dict,
+    create_default_pipeline_config,
 )
-from .sensor_placement import GeometricSensorConfig, SensorPlacementConfig
 
 __all__ = [
     "BaseConfig",
-    "DecompositionConfig",
-    "GeometryAwareDecompositionConfig",
-    "ModalProcessorConfig",
-    "ProcessingStrategy",
+    "TBMDConfig",
     "SensorPlacementConfig",
-    "GeometricSensorConfig",
-    # New CS configs (primary)
-    "CompressiveSensingConfig",
-    "ExtensionCompressiveSensingConfig",
-    "TensorCSConfig",
-    "CSConfig",
-    # Legacy configs
-    "ReconstructionConfig",
-    "GeometryAwareReconstructionConfig",
-    "DigitalTwinConfig",
-    "ForecasterConfig",
-    "LinearForecasterConfig",
-    "MLPForecasterConfig",
-    "LSTMForecasterConfig",
-    "LatentModalForecasterConfig",
-    "MultiResolutionTBMDConfig",
-    "create_forecaster_config_from_dict",
+    "FullPipelineConfig",
+    "create_tbmd_config_from_dict",
+    "create_sensor_placement_config_from_dict",
+    "create_pipeline_config_from_dict",
+    "create_default_pipeline_config",
 ]
 
-
-##########################################################################
-# Deprecated constants for backward compatibility with the legacy API
-##########################################################################
-
-# Default instances used to expose legacy constants
-_base_config = BaseConfig()
-_decomposition_config = DecompositionConfig()
-_sensor_config = SensorPlacementConfig()
-_reconstruction_config = ReconstructionConfig()
-_digital_twin_config = DigitalTwinConfig()
-
-# Base parameters
-SEED = _base_config.seed
-SET_BACKEND = _base_config.backend
-DTYPE = _base_config.dtype
-
-# Sensor configuration
-NUMBER_SENSORS = _sensor_config.n_sensors
-
-# Reconstruction parameters
-MAX_ITERATIONS = _reconstruction_config.max_iterations
-CONVERGENCE_EPS = _reconstruction_config.convergence_eps
-DAMPING_FACTOR = _reconstruction_config.damping_factor
-INITIAL_STEP_SIZE = _reconstruction_config.initial_step_size
-MAX_STEP_SIZE = _reconstruction_config.max_step_size
-
-# Export legacy constants
-__all__.extend(
-    [
-        "SEED",
-        "SET_BACKEND",
-        "DTYPE",
-        "NUMBER_SENSORS",
-        "MAX_ITERATIONS",
-        "CONVERGENCE_EPS",
-        "DAMPING_FACTOR",
-        "INITIAL_STEP_SIZE",
-        "MAX_STEP_SIZE",
-    ]
-)
+# Instantiate default configs for quick access
+_tbmd_config = TBMDConfig()
+_sensor_placement_config = SensorPlacementConfig()
+_full_pipeline_config = FullPipelineConfig()

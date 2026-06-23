@@ -1,9 +1,9 @@
 import torch
 
 
-def test_digital_twin_parity(synthetic_tensor):
+def test_core_orchestration_parity(synthetic_tensor):
     """
-    Verify Digital Twin Pipeline Logic.
+    Verify Core Orchestration Pipeline Logic.
 
     This test serves as an end-to-end smoke test to ensure the Core orchestration
     flows data correctly between HOSVD, QR, and CS.

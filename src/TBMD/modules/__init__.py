@@ -35,4 +35,3 @@ from TBMD.core.sensor_placement.geometry_aware import (  # noqa: F401,E402
     GeometryAwareTensorQR,
 )
 from TBMD.core.sensor_placement.tensor_qr_factorization import *  # noqa: F401,F403,E402
-from TBMD.digital_twin import *  # noqa: F401,F403,E402
