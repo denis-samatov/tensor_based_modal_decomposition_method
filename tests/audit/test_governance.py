@@ -47,14 +47,15 @@ def test_documentation_entry_points_exist():
         "CHANGELOG.md",
         "SECURITY.md",
         ".env.example",
-        "docs/README.md",
-        "docs/guides/installation.md",
-        "docs/guides/quick_start.md",
-        "docs/guides/configuration.md",
-        "docs/guides/repository_structure.md",
-        "docs/guides/testing.md",
-        "docs/guides/data_and_models.md",
-        "docs/api/api_reference.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        "docs/product/overview.md",
+        "docs/architecture/overview.md",
+        "docs/setup/local-development.md",
+        "docs/interfaces/python-api.md",
+        "docs/development/contribution-guide.md",
+        "docs/research-system/reconstruction-pipeline.md",
     ]
 
     missing = [path for path in expected if not (PROJECT_ROOT / path).is_file()]

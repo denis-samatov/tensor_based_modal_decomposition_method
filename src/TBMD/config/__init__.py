@@ -2,31 +2,37 @@
 Configuration objects for TBMD module.
 """
 
-from .core import (
-    BaseConfig,
-    TBMDConfig,
-    SensorPlacementConfig,
-    FullPipelineConfig,
+from .base import BaseConfig
+from .decomposition import DecompositionConfig, GeometryAwareDecompositionConfig
+from .sensor_placement import SensorPlacementConfig, GeometricSensorConfig
+from .reconstruction import (
+    ReconstructionConfig, 
+    CompressiveSensingConfig, 
+    ExtensionCompressiveSensingConfig, 
+    GeometryAwareReconstructionConfig
 )
-from .factory import (
-    create_tbmd_config_from_dict,
-    create_sensor_placement_config_from_dict,
-    create_pipeline_config_from_dict,
-    create_default_pipeline_config,
-)
+from .digital_twin import DigitalTwinConfig
+from .experiments import ExperimentConfig
+from .modal_processor import ModalProcessorConfig
 
 __all__ = [
     "BaseConfig",
-    "TBMDConfig",
+    "DecompositionConfig",
+    "GeometryAwareDecompositionConfig",
     "SensorPlacementConfig",
-    "FullPipelineConfig",
-    "create_tbmd_config_from_dict",
-    "create_sensor_placement_config_from_dict",
-    "create_pipeline_config_from_dict",
-    "create_default_pipeline_config",
+    "GeometricSensorConfig",
+    "ReconstructionConfig",
+    "CompressiveSensingConfig",
+    "ExtensionCompressiveSensingConfig",
+    "GeometryAwareReconstructionConfig",
+    "DigitalTwinConfig",
+    "ExperimentConfig",
+    "ModalProcessorConfig"
 ]
 
 # Instantiate default configs for quick access
-_tbmd_config = TBMDConfig()
+_decomposition_config = DecompositionConfig()
 _sensor_placement_config = SensorPlacementConfig()
-_full_pipeline_config = FullPipelineConfig()
+_reconstruction_config = ReconstructionConfig()
+_digital_twin_config = DigitalTwinConfig()
+_experiment_config = ExperimentConfig()

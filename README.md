@@ -1,154 +1,78 @@
 # Tensor-Based Modal Decomposition Method
 
-## Overview
+A Python research library for reduced-order modeling of spatiotemporal tensor data. 
 
-Tensor-Based Modal Decomposition Method (TBMD) is a Python research library for reduced-order modeling of spatiotemporal tensor data. The repository includes implementations for Tucker/HOSVD decomposition, modal tensor processing, sensor placement, field reconstruction from sparse measurements, geometry-aware variants, and experimental digital twin workflows.
+## What this project does
+Tensor-Based Modal Decomposition Method (TBMD) compresses high-dimensional spatiotemporal data (such as computational fluid dynamics or reservoir-modeling datasets) into a compact modal representation. It uses these representations to select optimal sensor placements, reconstruct full fields from sparse measurements, and build digital twin pipelines for forecasting future states.
 
-The code is aimed at scientific computing and reservoir-modeling experiments. It should be treated as a research and engineering codebase rather than a validated production simulator.
+## Who this is for
+- **ML/AI Engineers & Data Scientists**: For building and orchestrating digital twin forecasting pipelines.
+- **Scientific Computing Researchers**: For experimenting with tensor decompositions (Tucker/HOSVD) and geometry-aware representations.
+- **Developers**: For extending and integrating the core mathematical components into larger simulation workflows.
 
-## Features
+## Core capabilities
+- **Tucker/HOSVD decomposition** for spatiotemporal tensor data.
+- **Modal tensor processing** utilities for building reduced bases.
+- **Tensor QR-based sensor placement** to find the most informative measurement locations.
+- **Compressive sensing reconstruction** with ADMM-based solvers.
+- **Geometry-aware variants** for decomposition, reconstruction, and sensor placement on irregular grids.
+- **Digital twin orchestration** that unites decomposition, sensor placement, reconstruction, and forecasting.
 
-- Tucker/HOSVD decomposition for tensor data.
-- Modal tensor processing utilities for building reduced bases.
-- Tensor QR-based sensor placement.
-- Compressive sensing reconstruction with ADMM-based solvers.
-- Geometry-aware decomposition, reconstruction, and sensor placement helpers.
-- Digital twin orchestration that combines decomposition, sensor placement, reconstruction, and forecasting components.
-- Navier-Stokes forecasting experiments and model comparison scripts.
-- Pytest-based unit and audit tests.
+## Architecture at a glance
+The library is composed of modular components built primarily on PyTorch. 
+Data flows from `(x, y, time)` tensors through a `Decomposer` to extract modal bases, which are then passed to a `Sensor Placer` to find optimal measurement locations, and optionally into a `Digital Twin` orchestrator which trains a forecaster (e.g., Linear, MLP, LSTM) to predict future states. 
 
-## Project Structure
+For more details, see the [Architecture Overview](docs/architecture/overview.md).
 
-```text
-tensor-based-modal-decomposition-method/
-├── src/TBMD/              # Python package source code
-│   ├── config/            # Dataclass configuration objects
-│   ├── core/              # Decomposition, forecasting, reconstruction, geometry, and data utilities
-│   ├── digital_twin/      # Digital twin orchestration layer
-│   ├── experiments/       # Experiment-specific model registries and runners
-│   ├── modules/           # Compatibility layer for legacy module paths
-│   └── visualization/     # Plotting helpers
-├── examples/              # Runnable examples grouped by topic
-├── scripts/               # Evaluation, tuning, and diagnostic scripts
-├── tests/                 # Unit and audit tests
-├── docs/                  # User and developer documentation
-├── data/                  # Local datasets; ignored by git
-└── results/               # Generated outputs; ignored by git
-```
-
-Generated plots, sweep summaries, checkpoints, and model-evaluation outputs are produced under ignored paths such as `results/` and `scripts/plots/`. They are not part of the tracked source tree.
-
-## Installation
-
-Use Python 3.10 or newer.
-
+## Quick start
+1. Clone the repository:
 ```bash
 git clone https://github.com/denis-samatov/tensor_based_modal_decomposition_method.git
 cd tensor_based_modal_decomposition_method
-
+```
+2. Install as an editable package with development dependencies:
+```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
-
-If editable installation is not needed, the pinned dependency file can be used instead:
-
+3. Run a basic decomposition script:
 ```bash
-python -m pip install -r requirements.txt
+python examples/basic/01_tucker_decomposition.py
 ```
-
-See the [installation guide](docs/guides/installation.md) for verification commands and dependency notes.
 
 ## Configuration
-
-The core package does not require secrets or external service credentials. Runtime options are primarily passed through dataclass configuration objects in `TBMD.config`.
-
-An optional `.env.example` file is provided to document local paths and logging preferences. Keep local `.env` files out of git.
-
-## Usage
-
-Minimal Tucker decomposition example:
-
-```python
-import torch
-
-from TBMD.config import DecompositionConfig
-from TBMD.core.decomposition.hosvd import TuckerDecomposer
-
-data = torch.randn(64, 64, 20)
-config = DecompositionConfig(ranks=[16, 16, 8], verbose=True)
-
-decomposer = TuckerDecomposer(tensors=data, config=config)
-decomposer.decompose()
-decomposer.reconstruct()
-
-core = decomposer.cores
-factors = decomposer.factors
-reconstructed = decomposer.reconstructed_tensors
-```
-
-Digital twin example:
-
-```python
-from TBMD.config import DigitalTwinConfig
-from TBMD.digital_twin.digital_twin import DigitalTwin
-
-config = DigitalTwinConfig(
-    n_spatial_modes=20,
-    n_temporal_modes=10,
-    n_sensors=15,
-    forecaster_type="linear",
-)
-
-twin = DigitalTwin(config)
-summary = twin.train(historical_data, normalize=False)
-forecast = twin.predict(current_state, n_steps=5)
-```
-
-More examples are available under `examples/` and `docs/guides/quick_start.md`.
+Configuration is managed strictly through Python dataclasses located in `TBMD.config`, rather than environment variables or external files. See the [Configuration Guide](docs/setup/configuration.md) for details.
 
 ## Testing
-
-Run the default test suite:
-
+To verify the installation and run unit tests:
 ```bash
 pytest
 ```
-
-Useful targeted checks:
-
+To run targeted repository hygiene and architecture checks:
 ```bash
-pytest tests/unit -q
 pytest tests/audit -q
-python -m compileall src tests examples scripts
 ```
+For more information, see the [Testing Guide](docs/development/testing.md).
 
-Some experiment scripts require local datasets under `data/` and are not suitable as lightweight CI checks.
+### Map of documentation
 
-## Documentation
+- **Product & Concepts**: [`docs/product/overview.md`](docs/product/overview.md)
+- **Architecture**: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- **Mathematical & Research Pipeline**: [`docs/research-system/reconstruction-pipeline.md`](docs/research-system/reconstruction-pipeline.md)
+- **Interfaces & Python Usage**: [`docs/interfaces/python-api.md`](docs/interfaces/python-api.md)
+- **Installation & Setup**: [`docs/setup/local-development.md`](docs/setup/local-development.md)
+- **Running Experiments**: [`docs/operations/runbook.md`](docs/operations/runbook.md)
+- **Contributing & Code Style**: [`docs/development/contribution-guide.md`](docs/development/contribution-guide.md)
+- **Operations & Runbooks**: [`docs/operations/runbook.md`](docs/operations/runbook.md)
 
-- [Documentation index](docs/README.md)
-- [Installation guide](docs/guides/installation.md)
-- [Quick start guide](docs/guides/quick_start.md)
-- [API reference](docs/api/api_reference.md)
-- [Configuration guide](docs/guides/configuration.md)
-- [Repository structure](docs/guides/repository_structure.md)
-- [Testing guide](docs/guides/testing.md)
-- [Model and data guide](docs/guides/data_and_models.md)
 
-## Security and Privacy
+## Known limitations
+This project is an experimental research codebase. Claims regarding accuracy, performance, or "production-readiness" require explicit verification. Local datasets and generated artifacts must not be tracked in version control. See [Limitations](docs/product/limitations.md).
 
-Do not commit secrets, credentials, private datasets, generated model artifacts, or local environment files. The repository ignores `.env`, virtual environments, caches, local datasets, and generated results by default.
+## Contributing
+We welcome improvements! Please review the [Contribution Guidelines](CONTRIBUTING.md) before opening a Pull Request.
 
-Report security concerns using the process in `SECURITY.md`.
-
-## Roadmap / TODO
-
-- Add continuous integration for tests and packaging.
-- Add a lightweight documentation link checker.
-- Define a reproducible benchmark protocol for any public accuracy or performance claims.
-
-## License
-
+## License / ownership
 MIT License. See `LICENSE`.
