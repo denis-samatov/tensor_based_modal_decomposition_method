@@ -113,7 +113,7 @@ docs/tutorials/digital_twin_tutorial.md
 examples/02_navier_stokes_optimal_forecasting.py
 examples/digital_twin/
 scripts/evaluation/
-scripts/tuning/*forecasting*
+scripts/tuning/
 src/TBMD/config/digital_twin/
 src/TBMD/config/forecaster/
 src/TBMD/core/forecasting/
