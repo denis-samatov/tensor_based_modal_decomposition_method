@@ -120,3 +120,8 @@ src/TBMD/core/forecasting/
 src/TBMD/digital_twin/
 src/TBMD/experiments/*forecasting*
 tests/unit/test_digital_twin.py
+
+# Agent files
+GEMINI.md
+AGENTS.md
+CLAUDE.md
