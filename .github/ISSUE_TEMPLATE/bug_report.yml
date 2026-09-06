@@ -1,0 +1,25 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproducible example
+      description: Prefer synthetic data that can be shared publicly.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, package version or commit, CPU/GPU, and relevant dependencies.
+    validations:
+      required: true
