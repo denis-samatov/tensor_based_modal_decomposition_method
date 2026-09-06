@@ -1,0 +1,18 @@
+name: Feature request
+description: Propose a scoped algorithm, interface, or documentation improvement
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Research or engineering problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change and validation
+      description: Explain how the change should be evaluated and what evidence would show success.
+    validations:
+      required: true
