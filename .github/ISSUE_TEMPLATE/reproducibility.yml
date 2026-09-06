@@ -1,0 +1,26 @@
+name: Reproducibility problem
+description: Report a mismatch in a documented experiment or reference output
+title: "repro: "
+labels: ["reproducibility"]
+body:
+  - type: textarea
+    id: target
+    attributes:
+      label: Experiment or command
+      description: Link the documentation section and provide the exact command.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Observed result
+      description: Include sanitized logs and numeric output.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and data
+      description: OS, Python/package versions, hardware, random seed, and whether public synthetic or local Brugge data was used.
+    validations:
+      required: true
